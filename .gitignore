@@ -1,2 +1,9 @@
+.pio/
+.vscode/
+.DS_Store
+*.bin
+*.elf
+*.map
+
 # secrets
 config_private.h
