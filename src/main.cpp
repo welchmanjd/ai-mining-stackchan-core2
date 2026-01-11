@@ -422,9 +422,10 @@ void setup() {
   cfg_m5.clear_display = true;
 
   cfg_m5.internal_imu = false;
-  cfg_m5.internal_mic = false;
+  cfg_m5.internal_mic = true;   // ★録音に必要
   cfg_m5.internal_spk = true;
   cfg_m5.internal_rtc = true;
+
 
   mc_logf("[MAIN] call M5.begin()");
   M5.begin(cfg_m5);

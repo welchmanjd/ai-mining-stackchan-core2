@@ -104,6 +104,23 @@
   #define MC_AI_COUNTDOWN_UPDATE_MS 250
 #endif
 
+// ---- Recording params (PCM16 mono) ----
+#ifndef MC_AI_REC_SAMPLE_RATE
+  #define MC_AI_REC_SAMPLE_RATE 16000
+#endif
+
+#ifndef MC_AI_REC_MAX_SECONDS
+  // LISTEN上限に合わせる（10秒）
+  #define MC_AI_REC_MAX_SECONDS MC_AI_LISTEN_MAX_SECONDS
+#endif
+
+// 任意：最後に録った音声を /ai_last.wav に保存（LittleFS）
+// 0:保存しない / 1:保存する
+#ifndef MC_AI_REC_SAVE_LAST_WAV
+  #define MC_AI_REC_SAVE_LAST_WAV 0
+#endif
+
+
 // ---- Cooldown ----
 #ifndef MC_AI_COOLDOWN_MS
   #define MC_AI_COOLDOWN_MS 2000

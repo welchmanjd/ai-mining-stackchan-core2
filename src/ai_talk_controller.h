@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include "ai_interface.h"
+#include "audio_recorder.h"  // ★追加
 
 // forward decl
 class Orchestrator;
@@ -82,4 +83,8 @@ private:
 
   // Orchestrator向け rid
   uint32_t nextRid_ = 1;
+
+  // ★録音（LISTENINGの“本物”）
+  AudioRecorder recorder_;
+  bool lastRecOk_ = false;
 };
