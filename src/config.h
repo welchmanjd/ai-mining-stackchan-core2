@@ -2,7 +2,20 @@
 #pragma once
 #include <Arduino.h>
 
-// ★ここがポイント：配布ビルドでは config_private.h を読まない
+// =========================================================
+// config.h
+// - マジックナンバー排除のための「固定定数」置き場
+// - AI関連（タッチ操作/時間/制限/エラーメッセージ）はここ
+// - user_config.h：見た目/UX/セリフなど（秘密なし）
+// - config_private.h：秘密（キー、Wi-Fi 等）
+// =========================================================
+
+// ★ユーザーが触ってOKな設定（秘密なし）
+#if __has_include("user_config.h")
+  #include "user_config.h"
+#endif
+
+// ★配布ビルドでは config_private.h を読まない（秘密が混ざるのを防ぐ）
 #if !defined(MC_DISABLE_CONFIG_PRIVATE)
   #if __has_include("config_private.h")
     #include "config_private.h"
@@ -11,27 +24,204 @@
 
 #include "mc_config_store.h"
 
+// ---------------------------------------------------------
+// 互換/保険：user_config.h が無い場合のデフォルト
+// （ここは “ユーザー設定値” だが、ビルドが崩れないために残す）
+// ---------------------------------------------------------
 #ifndef MC_DISPLAY_SLEEP_SECONDS
-#define MC_DISPLAY_SLEEP_SECONDS 600
+  #define MC_DISPLAY_SLEEP_SECONDS 600
 #endif
 
 #ifndef MC_TTS_ACTIVE_THREADS_DURING_TTS
-#define MC_TTS_ACTIVE_THREADS_DURING_TTS 0
+  #define MC_TTS_ACTIVE_THREADS_DURING_TTS 0
 #endif
 
 #ifndef MC_ATTENTION_TEXT
-#define MC_ATTENTION_TEXT "Hi"
+  #define MC_ATTENTION_TEXT "Hi"
 #endif
 
-// ---- CPU frequency (MHz) ----
-// setCpuFrequencyMhz() が受け付ける代表値: 80 / 160 / 240
-// config_private.h で #define MC_CPU_FREQ_MHZ 240 などにすると上書き可能
+#ifndef MC_SPK_VOLUME
+  #define MC_SPK_VOLUME 160
+#endif
+
 #ifndef MC_CPU_FREQ_MHZ
   #define MC_CPU_FREQ_MHZ 240
 #endif
 
+#ifndef MC_AZ_TTS_VOICE
+  #define MC_AZ_TTS_VOICE "ja-JP-AoiNeural"
+#endif
+
+#ifndef MC_SPEECH_SHARE_ACCEPTED
+  #define MC_SPEECH_SHARE_ACCEPTED "シェア獲得したよ！"
+#endif
+
+#ifndef MC_SPEECH_HELLO
+  #define MC_SPEECH_HELLO "こんにちはマイニングスタックチャンです"
+#endif
+
+// ---------------------------------------------------------
+// ===== AI TALK (Lv2) : fixed constants (touch/time/limits) =====
+// ---------------------------------------------------------
+#ifndef MC_AI_TALK_ENABLED
+  #define MC_AI_TALK_ENABLED 1
+#endif
+
+// 右上のヒント文字（見た目寄りなので user_config.h で上書き可）
+#ifndef MC_AI_IDLE_HINT_TEXT
+  #define MC_AI_IDLE_HINT_TEXT "AI"
+#endif
+
+// 実装テスト用（user_config.h で上書き可）
+#ifndef MC_AI_STT_DEBUG_SHOW_TEXT
+  #define MC_AI_STT_DEBUG_SHOW_TEXT 0
+#endif
+
+// ---- Trigger / touch area ----
+// 上1/3タップ（240px高なら80px）
+#ifndef MC_AI_TAP_AREA_TOP_HEIGHT_PX
+  #define MC_AI_TAP_AREA_TOP_HEIGHT_PX 80
+#endif
+
+#ifndef MC_AI_TAP_DEBOUNCE_MS
+  #define MC_AI_TAP_DEBOUNCE_MS 150
+#endif
+
+// ---- Recording (toggle) ----
+#ifndef MC_AI_LISTEN_MAX_SECONDS
+  #define MC_AI_LISTEN_MAX_SECONDS 10
+#endif
+
+#ifndef MC_AI_LISTEN_MIN_SECONDS
+  #define MC_AI_LISTEN_MIN_SECONDS 3
+#endif
+
+#ifndef MC_AI_LISTEN_CANCEL_WINDOW_SEC
+  #define MC_AI_LISTEN_CANCEL_WINDOW_SEC 3
+#endif
+
+#ifndef MC_AI_COUNTDOWN_UPDATE_MS
+  #define MC_AI_COUNTDOWN_UPDATE_MS 250
+#endif
+
+// ---- Cooldown ----
+#ifndef MC_AI_COOLDOWN_MS
+  #define MC_AI_COOLDOWN_MS 2000
+#endif
+
+#ifndef MC_AI_COOLDOWN_ERROR_EXTRA_MS
+  #define MC_AI_COOLDOWN_ERROR_EXTRA_MS 1000
+#endif
+
+// ---- Timeouts (stage / overall) ----
+#ifndef MC_AI_STT_TIMEOUT_MS
+  #define MC_AI_STT_TIMEOUT_MS 8000
+#endif
+
+#ifndef MC_AI_LLM_TIMEOUT_MS
+  #define MC_AI_LLM_TIMEOUT_MS 10000
+#endif
+
+#ifndef MC_AI_TTS_TIMEOUT_MS
+  #define MC_AI_TTS_TIMEOUT_MS 10000
+#endif
+
+#ifndef MC_AI_OVERALL_DEADLINE_MS
+  #define MC_AI_OVERALL_DEADLINE_MS 20000
+#endif
+
+// ---- Rate / safety limits ----
+#ifndef MC_AI_MAX_TALKS_PER_MIN
+  #define MC_AI_MAX_TALKS_PER_MIN 6
+#endif
+
+#ifndef MC_AI_MAX_INPUT_CHARS
+  #define MC_AI_MAX_INPUT_CHARS 200
+#endif
+
+#ifndef MC_AI_TTS_MAX_CHARS
+  #define MC_AI_TTS_MAX_CHARS 120
+#endif
+
+// ---- AI UI short texts（長文は出さない方針なので短文のみ）----
+#ifndef MC_AI_TEXT_LISTENING
+  #define MC_AI_TEXT_LISTENING "聞いています"
+#endif
+
+#ifndef MC_AI_TEXT_THINKING
+  #define MC_AI_TEXT_THINKING  "考え中"
+#endif
+
+#ifndef MC_AI_TEXT_CANCEL_HINT
+  #define MC_AI_TEXT_CANCEL_HINT "タップでキャンセルできるよ"
+#endif
+
+#ifndef MC_AI_TEXT_COOLDOWN
+  #define MC_AI_TEXT_COOLDOWN "......."
+#endif
+
+#ifndef MC_AI_TEXT_FALLBACK
+  #define MC_AI_TEXT_FALLBACK "わかりません"
+#endif
+
+// ---- Error messages (short, searchable; no codes) ----
+#ifndef MC_AI_ERR_NET_UNSTABLE
+  #define MC_AI_ERR_NET_UNSTABLE "Wi-Fi/ネットが不安定"
+#endif
+#ifndef MC_AI_ERR_BUSY_TRY_LATER
+  #define MC_AI_ERR_BUSY_TRY_LATER "混雑中。少し待ってね"
+#endif
+#ifndef MC_AI_ERR_TEMP_FAIL_TRY_AGAIN
+  #define MC_AI_ERR_TEMP_FAIL_TRY_AGAIN "一時的に失敗。もう一回"
+#endif
+
+#ifndef MC_AI_ERR_SPEECH_KEY_CHECK
+  #define MC_AI_ERR_SPEECH_KEY_CHECK "Speechキーを確認してね"
+#endif
+#ifndef MC_AI_ERR_SPEECH_REGION_CHECK
+  #define MC_AI_ERR_SPEECH_REGION_CHECK "Speech地域(リージョン)を確認"
+#endif
+#ifndef MC_AI_ERR_SPEECH_QUOTA_MAYBE
+  #define MC_AI_ERR_SPEECH_QUOTA_MAYBE "Speech利用上限(クォータ)かも"
+#endif
+
+#ifndef MC_AI_ERR_OPENAI_KEY_CHECK
+  #define MC_AI_ERR_OPENAI_KEY_CHECK "OpenAIキーを確認してね"
+#endif
+#ifndef MC_AI_ERR_INPUT_TOO_LONG
+  #define MC_AI_ERR_INPUT_TOO_LONG "入力が長いかも。短くしてね"
+#endif
+
+#ifndef MC_AI_ERR_MIC_TOO_QUIET
+  #define MC_AI_ERR_MIC_TOO_QUIET "声が聞こえない。近づいてね"
+#endif
+#ifndef MC_AI_ERR_AUDIO_OUT_FAIL
+  #define MC_AI_ERR_AUDIO_OUT_FAIL "音が出ないみたい"
+#endif
+
+// ---- Sounds ----
+#ifndef MC_AI_BEEP_FREQ_HZ
+  #define MC_AI_BEEP_FREQ_HZ 880
+#endif
+#ifndef MC_AI_BEEP_DUR_MS
+  #define MC_AI_BEEP_DUR_MS 80
+#endif
+#ifndef MC_AI_ERROR_BEEP_FREQ_HZ
+  #define MC_AI_ERROR_BEEP_FREQ_HZ 220
+#endif
+#ifndef MC_AI_ERROR_BEEP_DUR_MS
+  #define MC_AI_ERROR_BEEP_DUR_MS 200
+#endif
+
+// ---- OpenAI (LLM) model name（秘密は config_private.h）----
+#ifndef MC_OPENAI_MODEL
+  #define MC_OPENAI_MODEL "gpt-5-nano"
+#endif
+
+// ---------------------------------------------------------
 // ★命名を Web/JSON（index.html / mc_config_store）に合わせる
 //   duco_miner_key / az_speech_region / az_speech_key / az_tts_voice など
+// ---------------------------------------------------------
 struct AppConfig {
   const char* wifi_ssid;
   const char* wifi_pass;
@@ -80,7 +270,7 @@ inline const AppConfig& appConfig() {
 
     // app
     "Mining-Stackchan-Core2", // app_name
-    "0.681",                   // app_version
+    "0.681",                  // app_version
 
     // attention
     mcCfgAttentionText(),
