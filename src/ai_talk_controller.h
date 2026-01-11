@@ -2,59 +2,84 @@
 #include <Arduino.h>
 #include "ai_interface.h"
 
+// forward decl
+class Orchestrator;
+
 class AiTalkController {
 public:
-  void begin();
-  void tick();
-  void onTap();                 // 画面上1/3タップ
-  bool isBusy() const;          // Idle以外ならtrue
-  AiUiOverlay getOverlay() const;
-  void injectText(const String& text); // Serial :say 用（LISTENING/THINKINGを飛ばす）
+  enum class AiState : uint8_t {
+    Idle = 0,
+    Listening,
+    Thinking,
+    Speaking,
+    PostSpeakBlank,
+    Cooldown,
+  };
+
+  // orch を渡す（本体統合用）。sandbox は nullptr のままでOK
+  void begin(Orchestrator* orch = nullptr);
+
+  // sandbox friendly（タップ座標なし＝常に「AI領域タップ」として扱う）
+  bool onTap();
+
+  // 本体統合用：上1/3のみAIが消費する（それ以外は false を返す）
+  bool onTap(int x, int y, int screenH);
+
+  // sandbox用：入力注入（本体統合フェーズ1では使わない）
+  void injectText(const String& text);
+
+  // tick（本体統合：毎ループ呼ぶ）
+  void tick() { tick(millis()); }
+  void tick(uint32_t nowMs);
+
+  // TTS完了通知（本体統合：Orchestrator ok のタイミングで呼ぶ）
+  void onTtsDone(uint32_t ttsId) { onTtsDone(ttsId, millis()); }
+  void onTtsDone(uint32_t ttsId, uint32_t nowMs);
+
+  bool isBusy() const { return state_ != AiState::Idle; }
+  AiState state() const { return state_; }
+
+  AiUiOverlay getOverlay() const { return overlay_; }
+
+  // 吹き出し更新要求（必ず main 側で UIMining::setStackchanSpeech() へ）
+  bool consumeBubbleUpdate(String* outText);
 
 private:
-  // ---- 固定仕様（ms）----
-  static constexpr uint32_t kListeningMaxMs      = 10 * 1000; // LISTENING最大10秒
-  static constexpr uint32_t kListeningCancelable = 3 * 1000;  // 開始3秒以内のみキャンセル
-  static constexpr uint32_t kThinkingMockMs      = 1 * 1000;  // モック返答生成タイミング
-  static constexpr uint32_t kCooldownMs          = 2 * 1000;  // COOLDOWN 2秒
-  static constexpr uint32_t kCooldownErrExtraMs  = 1 * 1000;  // エラー時 +1秒
-  static constexpr uint32_t kSpeakingShowMs      = 1200;      // 「喋ってる扱い」表示
-  static constexpr uint32_t kSpeakingBlankMs     = 500;       // 0.5秒 空吹き出し
-  // “枠”だけ用意（サンドボックスでは実処理しない）
-  static constexpr uint32_t kSttTimeoutMs        = 8 * 1000;
-  static constexpr uint32_t kAiTimeoutMs         = 10 * 1000;
-  static constexpr uint32_t kTtsTimeoutMs        = 10 * 1000;
-  static constexpr uint32_t kOverallTimeoutMs    = 20 * 1000;
+  // ---- transitions ----
+  void enterIdle_(uint32_t nowMs, const char* reason);
+  void enterListening_(uint32_t nowMs);
+  void enterThinking_(uint32_t nowMs);
+  void enterSpeaking_(uint32_t nowMs);
+  void enterPostSpeakBlank_(uint32_t nowMs);
+  void enterCooldown_(uint32_t nowMs, bool error, const char* reason);
 
-  static constexpr size_t   kInputLimitChars     = 200;
-  static constexpr size_t   kTtsLimitChars       = 120;
+  void updateOverlay_(uint32_t nowMs);
 
-  // ---- 状態 ----
-  AiState   state_ = AiState::Idle;
-  uint32_t  stateStartMs_ = 0;
-  uint32_t  convoStartMs_ = 0;   // 全体20s監視用（Idleでは無効）
-  bool      error_ = false;
+  static String clampBytes_(const String& s, size_t maxBytes);
 
-  // Speaking内のサブフェーズ（応答表示→空吹き出し）
-  bool      speakingBlankPhase_ = false;
-  uint32_t  speakingPhaseStartMs_ = 0;
+private:
+  Orchestrator* orch_ = nullptr;
 
-  // テキスト
-  String    inputText_;   // LISTENING→THINKING用（モック）
-  String    replyText_;   // THINKING生成 or injectText
+  AiState  state_ = AiState::Idle;
 
-  // overlay（毎tickで更新）
+  uint32_t listenStartMs_   = 0;
+  uint32_t thinkStartMs_    = 0;
+  uint32_t speakStartMs_    = 0;
+  uint32_t blankStartMs_    = 0;
+  uint32_t cooldownStartMs_ = 0;
+  uint32_t cooldownDurMs_   = 0;
+
+  uint32_t expectTtsId_ = 0;
+
+  String inputText_;
+  String replyText_;
+
+  // bubble updates (main側がsetStackchanSpeechする)
+  bool   bubbleDirty_ = false;
+  String bubbleText_;
+
   AiUiOverlay overlay_;
 
-  // ---- 内部 ----
-  void transitionTo_(AiState next);
-  void setErrorAndCooldown_();
-  uint32_t nowMs_() const { return millis(); }
-  uint32_t elapsedStateMs_(uint32_t now) const { return now - stateStartMs_; }
-  uint32_t elapsedConvoMs_(uint32_t now) const { return (convoStartMs_ == 0) ? 0 : (now - convoStartMs_); }
-
-  String stateName_(AiState s) const;
-  uint32_t remainingMs_(uint32_t now) const;  // 状態に応じた残り（表示用）
-  int remainingSecCeil_(uint32_t now) const;
-  String clampLen_(const String& s, size_t maxChars) const;
+  // Orchestrator向け rid
+  uint32_t nextRid_ = 1;
 };

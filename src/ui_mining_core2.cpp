@@ -444,6 +444,33 @@ void UIMining::drawStackchanScreen(const PanelData& p) {
 
   d.setClipRect(0, 0, W, H);
   avatar_.draw();
+
+  // ---- AI overlay ----
+  if (aiOverlay_.active) {
+    // 左上：line1 / line2
+    M5.Display.setTextDatum(textdatum_t::top_left);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setTextSize(1);
+
+    if (aiOverlay_.line1.length() > 0) {
+      M5.Display.drawString(aiOverlay_.line1, 4, 4);
+    }
+    if (aiOverlay_.line2.length() > 0) {
+      M5.Display.drawString(aiOverlay_.line2, 4, 4 + 12);
+    }
+
+    // 右上：hint（例: "AI" や ":say こんにちは"）
+    if (aiOverlay_.hint.length() > 0) {
+      M5.Display.setTextDatum(textdatum_t::top_right);
+      M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+      M5.Display.setTextSize(1);
+      M5.Display.drawString(aiOverlay_.hint, M5.Display.width() - 4, 4);
+    }
+  }
+
+
+
+
   d.clearClipRect();
 }
 
@@ -476,6 +503,11 @@ void UIMining::setStackchanSpeech(const String& text) {
   stackchan_speech_pending_ = true;
   // 吹き出しの描き換え時に背景をクリアするためのフラグ
   stackchan_needs_clear_ = true;
+}
+
+
+void UIMining::setAiOverlay(const AiUiOverlay& ov) {
+  aiOverlay_ = ov;
 }
 
 

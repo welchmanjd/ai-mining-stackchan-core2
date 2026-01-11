@@ -24,6 +24,8 @@
 #include "azure_tts.h"
 #include "stackchan_behavior.h"
 #include "orchestrator.h"
+#include "ai_talk_controller.h"
+
 #include "runtime_features.h"
 
 // Azure TTS
@@ -247,6 +249,9 @@ static void pollSetupSerial() {
 
 static StackchanBehavior g_behavior;
 static Orchestrator g_orch;
+static AiTalkController g_ai;
+
+
 static uint32_t g_ttsInflightId = 0;
 static uint32_t g_ttsInflightRid = 0;
 static String   g_ttsInflightSpeechText;
@@ -307,23 +312,24 @@ static uint32_t s_zeroSince = 0;
 
 // ---- TTS中のマイニング制御（捨てない pause 版） ----
 // ポイント：スレッド数を 0 にしない（JOBを捨てない）
-// 再生中だけ「pause」して、終わったら再開する
+// 再生中（TTS）とAI busy中は「pause」して、終わったら再開する
 static bool s_pausedByTts = false;
 
-static void applyMiningPolicyForTts(bool ttsBusy) {
+static void applyMiningPolicyForTts(bool ttsBusy, bool aiBusy) {
   (void)ttsBusy;
 
   const bool speaking = M5.Speaker.isPlaying();
-  const bool wantPause = speaking;
+  const bool wantPause = speaking || aiBusy;
 
   if (wantPause != s_pausedByTts) {
-    mc_logf("[TTS] mining pause: %d -> %d (speaking=%d)",
-            (int)s_pausedByTts, (int)wantPause, (int)speaking);
+    mc_logf("[TTS] mining pause: %d -> %d (speaking=%d aiBusy=%d)",
+            (int)s_pausedByTts, (int)wantPause, (int)speaking, (int)aiBusy);
 
     setMiningPaused(wantPause);
     s_pausedByTts = wantPause;
   }
 }
+
 
 
 
@@ -441,6 +447,10 @@ void setup() {
   g_tts.begin();
   g_orch.init();
 
+  // AI controller init（Orchestrator を渡す）
+  g_ai.begin(&g_orch);
+
+
   // --- 画面の初期状態 ---
   M5.Display.setBrightness(DISPLAY_ACTIVE_BRIGHTNESS);
   M5.Display.fillScreen(BLACK);
@@ -477,6 +487,12 @@ void loop() {
   pollSetupSerial();
 
   const uint32_t now = (uint32_t)millis();
+
+  // AI state machine tick（毎ループ）
+  g_ai.tick(now);
+  // UIへAI overlayを渡す（描画はUIMining側）
+  UIMining::instance().setAiOverlay(g_ai.getOverlay());
+
   const RuntimeFeatures features = getRuntimeFeatures();
 
   // Orchestrator tick (timeout recovery)
@@ -522,6 +538,9 @@ void loop() {
     bool desync = false;
     const bool ok = g_orch.onTtsDone(gotId, &desync);
     if (ok) {
+      // AI側のSPEAKING→COOLDOWN同期（AIの発話でなくても安全に無視される）
+      g_ai.onTtsDone(gotId);
+
       LOG_EVT_INFO("EVT_TTS_DONE", "rid=%lu tts_id=%lu",
                    (unsigned long)g_ttsInflightRid, (unsigned long)gotId);
 
@@ -551,7 +570,8 @@ void loop() {
   }
 
   g_behavior.setTtsSpeaking(ttsBusyNow);
-  applyMiningPolicyForTts(ttsBusyNow);
+  applyMiningPolicyForTts(ttsBusyNow, g_ai.isBusy());
+
 
   // pending があれば空きタイミングで1件だけ実行
   if (!g_tts.isBusy() && g_ttsInflightId == 0 && g_orch.hasPendingSpeak()) {
@@ -698,15 +718,44 @@ void loop() {
     mc_logf("[MAIN] BtnA pressed, mode=%d", (int)g_mode);
   }
 
-  // --- Attention mode: tap in Stackchan screen ---
-  if ((g_mode == MODE_STACKCHAN) && touchDown) {
+  bool aiConsumedTap = false;
+  if (g_mode == MODE_STACKCHAN && touchDown) {
+    // 上1/3タップはAIが最優先で処理（処理したらAttentionへ流さない）
+    const int screenH = M5.Display.height();
+    aiConsumedTap = g_ai.onTap(touchX, touchY, screenH);
+    if (aiConsumedTap) {
+      mc_logf("[ai] tap consumed by AI (%d,%d)", touchX, touchY);
+    }
+  }
+
+  // AI busy中は Attention を完全抑止：すでにAttention中なら即座に終了（保険）
+  if (g_mode == MODE_STACKCHAN && g_ai.isBusy() && g_attentionActive) {
+    mc_logf("[ATTN] force exit (aiBusy=1)");
+
+    g_attentionActive = false;
+    g_attentionUntilMs = 0;
+
+    if (g_savedYieldValid) setMiningYieldProfile(g_savedYield);
+    else setMiningYieldProfile(MiningYieldNormal());
+
+    ui.triggerAttention(0);
+  }
+
+
+// --- Attention mode: tap in Stackchan screen ---
+// AI busy中は Attention を完全抑止（タップがAIに消費されないケースもあるため入口でガード）
+if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
+  // すでにAttention中なら「再入」はさせない（ログ二重化防止）
+  if (g_attentionActive) {
+    // 何もしない（タイムアウトで抜ける or force-exitで抜ける）
+  } else if (g_ai.isBusy()) {
+    mc_logf("[ATTN] suppressed (aiBusy=1)");
+  } else {
     const uint32_t dur = 3000;
     mc_logf("[ATTN] enter");
 
-    if (!g_attentionActive) {
-      g_savedYield = getMiningYieldProfile();
-      g_savedYieldValid = true;
-    }
+    g_savedYield = getMiningYieldProfile();
+    g_savedYieldValid = true;
 
     g_attentionActive = true;
     g_attentionUntilMs = now + dur;
@@ -731,6 +780,9 @@ void loop() {
                    (int)g_mode, g_attentionActive ? 1 : 0);
     }
   }
+}
+
+
 
   // Attention timeout
   if (g_attentionActive && (int32_t)(g_attentionUntilMs - now) <= 0) {
@@ -781,11 +833,20 @@ void loop() {
     g_behavior.update(data, now);
 
     StackchanReaction reaction;
-    if (g_behavior.popReaction(&reaction)) {
-      const bool allowSpeak = features.ttsEnabled;
-      if (!allowSpeak && reaction.speak) {
-        reaction.speak = false;
+    bool gotReaction = false;
+    if (g_mode == MODE_STACKCHAN && g_ai.isBusy()) {
+      // AI busy中はBehavior（日常セリフ）を発生源で止める
+      static uint32_t s_lastLogMs = 0;
+      if (now - s_lastLogMs > 1000) {
+        mc_logf("[ai] suppress Behavior while busy (state=%d)", (int)g_ai.state());
+        s_lastLogMs = now;
       }
+      gotReaction = false;
+    } else {
+      gotReaction = g_behavior.popReaction(&reaction);
+    }
+    if (gotReaction) {
+
 
       LOG_EVT_INFO("EVT_PRESENT_POP",
                    "rid=%lu type=%d prio=%d speak=%d busy=%d mode=%d attn=%d",

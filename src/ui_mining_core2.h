@@ -23,6 +23,7 @@
 #include <WiFi.h>
 #include <M5GFX.h>
 #include <math.h>
+#include "ai_interface.h"
 
 class UIMining {
 public:
@@ -131,10 +132,14 @@ public:
   void setStackchanSpeech(const String& text);
   void setStackchanExpression(m5avatar::Expression exp);
 
+  // AI overlay（左上：状態＋残秒、右上：AIヒント）
+  void setAiOverlay(const AiUiOverlay& ov);
 private:
 
 
 private:
+  AiUiOverlay aiOverlay_{};
+  
   // コンストラクタは外から触らせない（instance() からのみ）
   UIMining();
 

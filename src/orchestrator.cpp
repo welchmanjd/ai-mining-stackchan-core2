@@ -172,17 +172,22 @@ bool Orchestrator::tick(uint32_t nowMs) {
   if (state_ == AppState::ThinkWait && !timeoutLogged_) {
     if (thinkWaitSinceMs_ != 0 && (uint32_t)(nowMs - thinkWaitSinceMs_) >= kThinkWaitTimeoutMs) {
       const size_t cleared = pending_.size();
+      const AppState from = state_;
+
       pending_.clear();
       expectSpeakId_ = 0;
       expectRid_ = 0;
       mismatchCount_ = 0;
       state_ = AppState::Idle;
+
       timeoutLogged_ = true;
       didTimeout = true;
+
       LOG_EVT_INFO("EVT_ORCH_TIMEOUT",
-                   "state=%d elapsed_ms=%lu action=clear_pending_idle cleared=%u",
-                   (int)state_, (unsigned long)(nowMs - thinkWaitSinceMs_),
+                   "from=%d elapsed_ms=%lu action=clear_pending_idle cleared=%u",
+                   (int)from, (unsigned long)(nowMs - thinkWaitSinceMs_),
                    (unsigned)cleared);
+
     }
   }
 

@@ -1,294 +1,338 @@
 #include "ai_talk_controller.h"
+#include "logging.h"
+#include "orchestrator.h"
 
-void AiTalkController::begin() {
-  state_ = AiState::Idle;
-  stateStartMs_ = nowMs_();
-  convoStartMs_ = 0;
-  error_ = false;
-  speakingBlankPhase_ = false;
-  speakingPhaseStartMs_ = 0;
-  inputText_ = "";
-  replyText_ = "";
-  overlay_ = AiUiOverlay{};
-  tick(); // 初期overlay生成
+// ---- timings ----
+static constexpr uint32_t kListeningTimeoutMs      = 10000;
+static constexpr uint32_t kListeningCancelWindowMs = 3000;
+static constexpr uint32_t kThinkingMockMs          = 1000;
+static constexpr uint32_t kPostSpeakBlankMs        = 500;
+static constexpr uint32_t kCooldownMs              = 2000;
+static constexpr uint32_t kErrorExtraMs            = 1000;
+
+// TTS done が来ないときの安全タイムアウト
+static constexpr uint32_t kTtsHardTimeoutMs        = 20000;
+
+// orch が無い（sandbox等）ときの擬似発話時間
+static constexpr uint32_t kSimulatedSpeakMs        = 2000;
+
+String AiTalkController::clampBytes_(const String& s, size_t maxBytes) {
+  if (s.length() <= maxBytes) return s;
+  return s.substring(0, (unsigned)maxBytes);
 }
 
-bool AiTalkController::isBusy() const {
-  return state_ != AiState::Idle;
+void AiTalkController::begin(Orchestrator* orch) {
+  orch_ = orch;
+  enterIdle_(millis(), "begin");
 }
 
-AiUiOverlay AiTalkController::getOverlay() const {
-  return overlay_;
+bool AiTalkController::consumeBubbleUpdate(String* outText) {
+  if (!outText) return false;
+  if (!bubbleDirty_) return false;
+  *outText = bubbleText_;
+  bubbleDirty_ = false;
+  return true;
 }
 
-void AiTalkController::onTap() {
-  const uint32_t now = nowMs_();
+bool AiTalkController::onTap(int /*x*/, int y, int screenH) {
+  if (screenH > 0) {
+    if (y >= (screenH / 3)) return false;  // 上1/3以外はAIが消費しない
+  }
+  return onTap();
+}
 
-  // THINKING/SPEAKING/COOLDOWN はタップ無視
-  if (state_ == AiState::Thinking || state_ == AiState::Speaking || state_ == AiState::Cooldown) return;
+bool AiTalkController::onTap() {
+  const uint32_t now = millis();
+
+  // Busy中は「無視」だが、Attentionなどへ流さないため tap を消費する
+  if (state_ == AiState::Thinking ||
+      state_ == AiState::Speaking ||
+      state_ == AiState::PostSpeakBlank ||
+      state_ == AiState::Cooldown) {
+    return true;
+  }
 
   if (state_ == AiState::Idle) {
-    // 会話開始
-    convoStartMs_ = now;
-    error_ = false;
-    inputText_ = "";
-    replyText_ = "";
-    transitionTo_(AiState::Listening);
-    return;
+    enterListening_(now);
+    return true;
   }
 
   if (state_ == AiState::Listening) {
-    const uint32_t e = elapsedStateMs_(now);
-
-    // 開始3秒以内はキャンセル（破棄してIDLE）
-    if (e <= kListeningCancelable) {
-      transitionTo_(AiState::Idle);
-      convoStartMs_ = 0;
-      inputText_ = "";
-      replyText_ = "";
-      error_ = false;
-      return;
+    const uint32_t elapsed = now - listenStartMs_;
+    if (elapsed <= kListeningCancelWindowMs) {
+      enterIdle_(now, "tap_cancel");
     }
-
-    // 3秒以降は「話し終えた」扱いで THINKING へ
-    transitionTo_(AiState::Thinking);
-    return;
+    // 3秒以降の再タップは無視（ただし消費）
+    return true;
   }
+
+  return true;
 }
 
 void AiTalkController::injectText(const String& text) {
-  Serial.printf("[ai] injectText len=%u\n", (unsigned)text.length());
+  // 本体統合フェーズ1では基本使わない（秘密保護のためフルログ禁止）
+  if (state_ != AiState::Listening) return;
+  if (!text.length()) return;
 
-  // LISTENING/THINKINGを飛ばしてSPEAKING相当
-  const uint32_t now = nowMs_();
-  if (convoStartMs_ == 0) convoStartMs_ = now;
-  error_ = false;
-
-  // 入力200で切る → TTS 120で切る
-  const String in200 = clampLen_(text, kInputLimitChars);
-  replyText_ = clampLen_(in200, kTtsLimitChars);
-
-  // 直ちにSPEAKINGへ
-  transitionTo_(AiState::Speaking);
+  inputText_ = clampBytes_(text, 200);
+  // ログは長さのみ
+  mc_logf("[ai] injectText len=%u", (unsigned)inputText_.length());
 }
 
-void AiTalkController::tick() {
-  const uint32_t now = nowMs_();
-
-  // 全体タイムアウト枠（20s）：超えたらエラー扱いでCOOLDOWNへ
-  if (state_ != AiState::Idle && convoStartMs_ != 0) {
-    if (elapsedConvoMs_(now) > kOverallTimeoutMs) {
-      setErrorAndCooldown_();
-    }
+void AiTalkController::onTtsDone(uint32_t ttsId, uint32_t nowMs) {
+  // SPEAKING中に自分のttsIdが完了したら、空吹き出しへ
+  if (state_ == AiState::Speaking && expectTtsId_ != 0 && ttsId == expectTtsId_) {
+    expectTtsId_ = 0;
+    enterPostSpeakBlank_(nowMs);
   }
+}
 
+void AiTalkController::tick(uint32_t nowMs) {
   switch (state_) {
-    case AiState::Idle: {
-      // 何もしない
-      break;
-    }
+    case AiState::Idle:
+      overlay_.active = false;
+      return;
 
     case AiState::Listening: {
-      const uint32_t e = elapsedStateMs_(now);
-
-      // 10秒で自動的に THINKING
-      if (e >= kListeningMaxMs) {
-        transitionTo_(AiState::Thinking);
+      const uint32_t elapsed = nowMs - listenStartMs_;
+      if (elapsed >= kListeningTimeoutMs) {
+        enterThinking_(nowMs);
+      } else {
+        updateOverlay_(nowMs);
       }
-      break;
+      return;
     }
 
     case AiState::Thinking: {
-      const uint32_t e = elapsedStateMs_(now);
+      const uint32_t elapsed = nowMs - thinkStartMs_;
+      if (elapsed >= kThinkingMockMs) {
+        // ---- dummy reply (<=120 bytes) ----
+        replyText_ = "テストだよ。AI会話モードの配線確認中だよ。";
+        replyText_ = clampBytes_(replyText_, 120);
 
-      // AIタイムアウト枠（10s）
-      if (e > kAiTimeoutMs) {
-        replyText_ = "（AI timeout）";
-        setErrorAndCooldown_(); // そのままCOOLDOWNへ（SPEAKING省略でもOKだが、仕様上SPEAKINGを経由したいなら下の2行に変更）
-        break;
+        // bubble show要求（必ず main 側が setStackchanSpeech()）
+        bubbleText_  = replyText_;
+        bubbleDirty_ = true;
+
+        // Orchestratorへ投入（speakAsync直叩き禁止）
+        bool enqueued = false;
+        if (orch_) {
+          const uint32_t rid = (uint32_t)100000 + (nextRid_++);
+          if (nextRid_ == 0) nextRid_ = 1;
+
+          auto cmd = orch_->makeSpeakStartCmd(
+              rid, replyText_,
+              OrchPrio::High,
+              Orchestrator::OrchKind::AiSpeak
+          );
+
+          if (cmd.valid) {
+            orch_->enqueueSpeakPending(cmd);
+            expectTtsId_ = cmd.ttsId;
+            enqueued = true;
+
+            LOG_EVT_INFO("EVT_AI_ENQUEUE_SPEAK",
+                         "rid=%lu tts_id=%lu len=%u",
+                         (unsigned long)rid,
+                         (unsigned long)cmd.ttsId,
+                         (unsigned)replyText_.length());
+          }
+        }
+
+        // 失敗/tts無しでも状態機械は進める（speak時間は擬似）
+        (void)enqueued;
+        enterSpeaking_(nowMs);
+      } else {
+        updateOverlay_(nowMs);
       }
-
-      // モック：1秒後に返答生成→SPEAKING
-      if (e >= kThinkingMockMs) {
-        // LISTENINGで音声が無いのでモック入力
-        if (inputText_.isEmpty()) inputText_ = "（音声入力モック）";
-        inputText_ = clampLen_(inputText_, kInputLimitChars);
-
-        String r = "（モック返答）了解: " + inputText_;
-        replyText_ = clampLen_(r, kTtsLimitChars);
-
-        transitionTo_(AiState::Speaking);
-      }
-      break;
+      return;
     }
 
     case AiState::Speaking: {
-      // TTSはしない。UI上で「喋ってる扱い」→0.5秒空吹き出し→COOLDOWN
-      if (!speakingBlankPhase_) {
-        const uint32_t e = now - speakingPhaseStartMs_;
-        if (e >= kSpeakingShowMs) {
-          speakingBlankPhase_ = true;
-          speakingPhaseStartMs_ = now;
+      // TTSあり：done待ち。TTS無し：擬似時間で進める
+      if (expectTtsId_ == 0) {
+        const uint32_t elapsed = nowMs - speakStartMs_;
+        if (elapsed >= kSimulatedSpeakMs) {
+          enterPostSpeakBlank_(nowMs);
+        } else {
+          updateOverlay_(nowMs);
         }
       } else {
-        const uint32_t e = now - speakingPhaseStartMs_;
-        if (e >= kSpeakingBlankMs) {
-          transitionTo_(AiState::Cooldown);
+        const uint32_t elapsed = nowMs - speakStartMs_;
+        if (elapsed >= kTtsHardTimeoutMs) {
+          // doneが来ない → エラー扱いでcooldown延長
+          enterCooldown_(nowMs, true, "tts_timeout");
+        } else {
+          updateOverlay_(nowMs);
         }
       }
+      return;
+    }
 
-      // TTSタイムアウト枠（10s）も一応監視（枠だけ）
-      if (elapsedStateMs_(now) > kTtsTimeoutMs) {
-        setErrorAndCooldown_();
+    case AiState::PostSpeakBlank: {
+      const uint32_t elapsed = nowMs - blankStartMs_;
+      if (elapsed >= kPostSpeakBlankMs) {
+        enterCooldown_(nowMs, false, "post_blank_done");
+      } else {
+        updateOverlay_(nowMs);
       }
-      break;
+      return;
     }
 
     case AiState::Cooldown: {
-      const uint32_t base = kCooldownMs + (error_ ? kCooldownErrExtraMs : 0);
-      if (elapsedStateMs_(now) >= base) {
-        transitionTo_(AiState::Idle);
-        convoStartMs_ = 0;
-        error_ = false;
-      }
-      break;
-    }
-  }
-
-  // ---- overlay更新（毎tick）----
-  overlay_.active = true;
-  overlay_.state = state_;
-
-  const int remainSec = remainingSecCeil_(now);
-  overlay_.line1 = stateName_(state_) + " " + String(remainSec) + "s";
-
-  // 2行目＆ヒント
-  switch (state_) {
-    case AiState::Idle:
-      overlay_.line2 = "Tap top 1/3 to start";
-      overlay_.hint  = ":say こんにちは";
-      break;
-
-    case AiState::Listening: {
-      const uint32_t e = elapsedStateMs_(now);
-      if (e <= kListeningCancelable) {
-        overlay_.line2 = "Listening... (tap to cancel <=3s)";
+      const uint32_t elapsed = nowMs - cooldownStartMs_;
+      if (elapsed >= cooldownDurMs_) {
+        enterIdle_(nowMs, "cooldown_done");
       } else {
-        overlay_.line2 = "Listening... (tap to end)";
+        updateOverlay_(nowMs);
       }
-      overlay_.hint = "";
-      break;
+      return;
     }
 
-    case AiState::Thinking:
-      overlay_.line2 = "Thinking... (mock)";
-      overlay_.hint = "";
-      break;
-
-    case AiState::Speaking:
-      if (!speakingBlankPhase_) {
-        overlay_.line2 = replyText_;
-      } else {
-        overlay_.line2 = ""; // 空吹き出し
-      }
-      overlay_.hint = "";
-      break;
-
-    case AiState::Cooldown:
-      overlay_.line2 = error_ ? "Cooldown (error)" : "Cooldown";
-      overlay_.hint = "";
-      break;
-  }
-}
-
-void AiTalkController::transitionTo_(AiState next) {
-  // state transition log (no secrets)
-  Serial.printf("[ai] %s -> %s\n", stateName_(state_).c_str(), stateName_(next).c_str());
-
-  const uint32_t now = nowMs_();
-  state_ = next;
-  stateStartMs_ = now;
-
-  if (next == AiState::Speaking) {
-    speakingBlankPhase_ = false;
-    speakingPhaseStartMs_ = now;
-
-    // replyText_ が空なら最低限の文を用意
-    if (replyText_.isEmpty()) replyText_ = "（喋りモック）";
-    replyText_ = clampLen_(replyText_, kTtsLimitChars);
-  }
-
-  if (next == AiState::Thinking) {
-    // LISTENINGから来た場合のモック入力（後で生成）
-    if (inputText_.isEmpty()) inputText_ = "（音声入力モック）";
-    inputText_ = clampLen_(inputText_, kInputLimitChars);
-  }
-
-  if (next == AiState::Idle) {
-    // 表示用
-    replyText_ = "";
-    inputText_ = "";
-    speakingBlankPhase_ = false;
-    speakingPhaseStartMs_ = 0;
-  }
-}
-
-void AiTalkController::setErrorAndCooldown_() {
-  error_ = true;
-  transitionTo_(AiState::Cooldown);
-}
-
-String AiTalkController::stateName_(AiState s) const {
-  switch (s) {
-    case AiState::Idle:      return "IDLE";
-    case AiState::Listening: return "LISTENING";
-    case AiState::Thinking:  return "THINKING";
-    case AiState::Speaking:  return "SPEAKING";
-    case AiState::Cooldown:  return "COOLDOWN";
-  }
-  return "UNKNOWN";
-}
-
-uint32_t AiTalkController::remainingMs_(uint32_t now) const {
-  switch (state_) {
-    case AiState::Listening: {
-      const uint32_t e = elapsedStateMs_(now);
-      return (e >= kListeningMaxMs) ? 0 : (kListeningMaxMs - e);
-    }
-    case AiState::Thinking: {
-      const uint32_t e = elapsedStateMs_(now);
-      // 表示はAI枠10s（実際は1sで完了する想定）
-      return (e >= kAiTimeoutMs) ? 0 : (kAiTimeoutMs - e);
-    }
-    case AiState::Speaking: {
-      // 表示は TTS枠10s でもいいが、ここは実モック長に合わせる
-      // （見た目の残秒としては、今のフェーズ残りを返す）
-      if (!speakingBlankPhase_) {
-        const uint32_t e = now - speakingPhaseStartMs_;
-        return (e >= kSpeakingShowMs) ? 0 : (kSpeakingShowMs - e);
-      } else {
-        const uint32_t e = now - speakingPhaseStartMs_;
-        return (e >= kSpeakingBlankMs) ? 0 : (kSpeakingBlankMs - e);
-      }
-    }
-    case AiState::Cooldown: {
-      const uint32_t base = kCooldownMs + (error_ ? kCooldownErrExtraMs : 0);
-      const uint32_t e = elapsedStateMs_(now);
-      return (e >= base) ? 0 : (base - e);
-    }
-    case AiState::Idle:
     default:
-      return 0;
+      enterIdle_(nowMs, "unknown");
+      return;
   }
 }
 
-int AiTalkController::remainingSecCeil_(uint32_t now) const {
-  const uint32_t ms = remainingMs_(now);
-  // ceil(ms/1000)
-  return (ms == 0) ? 0 : (int)((ms + 999) / 1000);
+void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
+  state_ = AiState::Idle;
+
+  overlay_ = AiUiOverlay();
+  overlay_.active = false;
+
+  // bubble clear（main側がsetStackchanSpeech("")）
+  bubbleText_  = "";
+  bubbleDirty_ = true;
+
+  inputText_ = "";
+  replyText_ = "";
+  expectTtsId_ = 0;
+
+  LOG_EVT_INFO("EVT_AI_STATE",
+               "state=IDLE reason=%s", reason ? reason : "-");
+  (void)nowMs;
 }
 
-String AiTalkController::clampLen_(const String& s, size_t maxChars) const {
-  if (s.length() <= maxChars) return s;
-  return s.substring(0, (int)maxChars);
+void AiTalkController::enterListening_(uint32_t nowMs) {
+  state_ = AiState::Listening;
+  listenStartMs_ = nowMs;
+
+  inputText_ = "";
+  replyText_ = "";
+  expectTtsId_ = 0;
+
+  // 開始時に吹き出し消す（Behaviorの残りを消す）
+  bubbleText_  = "";
+  bubbleDirty_ = true;
+
+  overlay_ = AiUiOverlay();
+  overlay_.active = true;
+  overlay_.hint = "AI";
+
+  LOG_EVT_INFO("EVT_AI_STATE", "state=LISTENING");
+  updateOverlay_(nowMs);
+}
+
+void AiTalkController::enterThinking_(uint32_t nowMs) {
+  state_ = AiState::Thinking;
+  thinkStartMs_ = nowMs;
+
+  overlay_.active = true;
+  overlay_.hint = "AI";
+
+  LOG_EVT_INFO("EVT_AI_STATE", "state=THINKING");
+  updateOverlay_(nowMs);
+}
+
+void AiTalkController::enterSpeaking_(uint32_t nowMs) {
+  state_ = AiState::Speaking;
+  speakStartMs_ = nowMs;
+
+  overlay_.active = true;
+  overlay_.hint = "AI";
+
+  LOG_EVT_INFO("EVT_AI_STATE", "state=SPEAKING");
+  updateOverlay_(nowMs);
+}
+
+void AiTalkController::enterPostSpeakBlank_(uint32_t nowMs) {
+  state_ = AiState::PostSpeakBlank;
+  blankStartMs_ = nowMs;
+
+  // 0.5秒 空吹き出し（main側がsetStackchanSpeech("")）
+  bubbleText_  = "";
+  bubbleDirty_ = true;
+
+  overlay_.active = true;
+  overlay_.hint = "AI";
+
+  LOG_EVT_INFO("EVT_AI_STATE", "state=POST_BLANK");
+  updateOverlay_(nowMs);
+}
+
+void AiTalkController::enterCooldown_(uint32_t nowMs, bool error, const char* reason) {
+  state_ = AiState::Cooldown;
+  cooldownStartMs_ = nowMs;
+  cooldownDurMs_ = kCooldownMs + (error ? kErrorExtraMs : 0);
+
+  overlay_.active = true;
+  overlay_.hint = "AI";
+
+  LOG_EVT_INFO("EVT_AI_STATE",
+               "state=COOLDOWN error=%d reason=%s",
+               error ? 1 : 0, reason ? reason : "-");
+
+  updateOverlay_(nowMs);
+}
+
+void AiTalkController::updateOverlay_(uint32_t nowMs) {
+  if (state_ == AiState::Idle) {
+    overlay_.active = false;
+    return;
+  }
+
+  overlay_.active = true;
+  if (!overlay_.hint.length()) overlay_.hint = "AI";
+
+  auto ceilSec = [](uint32_t remainMs) -> int {
+    return (int)((remainMs + 999) / 1000);
+  };
+
+  String s;
+  switch (state_) {
+    case AiState::Listening: {
+      const uint32_t elapsed = nowMs - listenStartMs_;
+      const uint32_t remain  = (elapsed >= kListeningTimeoutMs) ? 0 : (kListeningTimeoutMs - elapsed);
+      s = "LISTEN " + String(ceilSec(remain)) + "s";
+      break;
+    }
+    case AiState::Thinking: {
+      const uint32_t elapsed = nowMs - thinkStartMs_;
+      const uint32_t remain  = (elapsed >= kThinkingMockMs) ? 0 : (kThinkingMockMs - elapsed);
+      s = "THINK " + String(ceilSec(remain)) + "s";
+      break;
+    }
+    case AiState::Speaking:
+      s = "SPEAK";
+      break;
+    case AiState::PostSpeakBlank: {
+      const uint32_t elapsed = nowMs - blankStartMs_;
+      const uint32_t remain  = (elapsed >= kPostSpeakBlankMs) ? 0 : (kPostSpeakBlankMs - elapsed);
+      s = "BLANK " + String(ceilSec(remain)) + "s";
+      break;
+    }
+    case AiState::Cooldown: {
+      const uint32_t elapsed = nowMs - cooldownStartMs_;
+      const uint32_t remain  = (elapsed >= cooldownDurMs_) ? 0 : (cooldownDurMs_ - elapsed);
+      s = "COOL " + String(ceilSec(remain)) + "s";
+      break;
+    }
+    default:
+      s = "AI";
+      break;
+  }
+
+  overlay_.line1 = s;
+  overlay_.line2 = "";
 }
