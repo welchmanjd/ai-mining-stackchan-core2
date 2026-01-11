@@ -69,6 +69,58 @@ void AudioRecorder::restoreSpeakerAfterRec_() {
   }
 }
 
+bool AudioRecorder::ensureMicBegun_() {
+  if (micBegun_) return true;
+
+  // Mic begin（M5Unified）
+  bool ok = M5.Mic.begin();
+  micBegun_ = ok;
+
+  Serial.printf("[%s] mic begin ok=%d sr=%u\n",
+                kTag, ok ? 1 : 0, (unsigned)sampleRate_);
+
+  return ok;
+}
+
+void AudioRecorder::endMic_() {
+  // isEnabled() でもよいが、micBegun_ の方が意図が明確
+  if (!micBegun_) return;
+
+  M5.Mic.end();
+  micBegun_ = false;
+
+  Serial.printf("[%s] mic end\n", kTag);
+
+  // I2S解放→次のSpeaker beginがコケるのを避ける保険
+  delay(5);
+}
+
+
+bool AudioRecorder::startMicForRec_() {
+  // 念のためクリーンにしてから開始
+  if (M5.Mic.isEnabled()) {
+    M5.Mic.end();
+    delay(5);
+  }
+
+  // サンプルレートは record(...) でも渡せるが、明示しておくと安定しやすい
+  M5.Mic.setSampleRate(sampleRate_);
+
+  bool ok = M5.Mic.begin();
+  Serial.printf("[%s] mic begin ok=%d sr=%u\n", kTag, ok ? 1 : 0, (unsigned)sampleRate_);
+  return ok;
+}
+
+void AudioRecorder::stopMicAfterRec_() {
+  if (M5.Mic.isEnabled()) {
+    M5.Mic.end();
+    delay(5);
+    Serial.printf("[%s] mic end\n", kTag);
+  }
+}
+
+
+
 bool AudioRecorder::allocBuffer_() {
   if (pcm_) return true;
 
@@ -119,13 +171,21 @@ bool AudioRecorder::start(uint32_t nowMs) {
   if (!initialized_) begin();
   if (recording_) return false;
 
-  stopSpeakerForRec_();  // ★録音前にSpeakerを止めてI2Sをクリア
+  stopSpeakerForRec_();  // 録音前にSpeakerを止めてI2Sを空ける
+
+  // ★Mic を必ず begin（録音セッション毎に確実化）
+  if (!ensureMicBegun_()) {
+    restoreSpeakerAfterRec_();
+    return false;
+  }
 
   if (!allocBuffer_()) {
+    endMic_();                 // ★失敗時も解放
     restoreSpeakerAfterRec_();
     return false;
   }
   if (!startTask_()) {
+    endMic_();                 // ★失敗時も解放
     restoreSpeakerAfterRec_();
     return false;
   }
@@ -139,12 +199,12 @@ bool AudioRecorder::start(uint32_t nowMs) {
   stopMs_ = 0;
   recording_ = true;
 
-  // taskに開始通知
   xTaskNotifyGive(task_);
   Serial.printf("[%s] start now=%u\n", kTag, (unsigned)nowMs);
   Serial.printf("[%s] start ok=1\n", kTag);
   return true;
 }
+
 
 void AudioRecorder::requestStop_(bool cancel) {
   if (!initialized_ || !task_) return;
@@ -197,7 +257,8 @@ bool AudioRecorder::stop(uint32_t nowMs) {
 
   stopMs_ = nowMs;
 
-  // ★録音後にSpeakerを復帰
+  // ★順序が重要：Mic -> end、（少し待つ）、Speaker -> begin
+  endMic_();
   restoreSpeakerAfterRec_();
 
   Serial.printf("[%s] stop done ok=%d samples=%u peak=%d\n",
@@ -207,9 +268,11 @@ bool AudioRecorder::stop(uint32_t nowMs) {
   return ok;
 }
 
+
 void AudioRecorder::cancel() {
   if (!recording_) {
     freeBuffer_();
+    endMic_();                 // ★ここも解放
     restoreSpeakerAfterRec_();
     Serial.printf("[%s] cancel done (buffer freed)\n", kTag);
     return;
@@ -221,11 +284,13 @@ void AudioRecorder::cancel() {
 
   freeBuffer_();
 
-  // ★録音後にSpeakerを復帰
+  // ★順序：Mic end → Speaker復帰
+  endMic_();
   restoreSpeakerAfterRec_();
 
   Serial.printf("[%s] cancel done (buffer freed)\n", kTag);
 }
+
 
 uint32_t AudioRecorder::durationMs() const {
   if (sampleRate_ == 0) return 0;
@@ -287,14 +352,24 @@ void AudioRecorder::taskLoop_() {
       constexpr size_t kChunk = 256;
       int16_t tmp[kChunk];
 
-      // ★ここが重要：sampleRate指定版を優先して呼ぶ
-      auto ret = M5.Mic.record(tmp, kChunk, sampleRate_, false);
-      size_t got = retToSamples_(ret, kChunk);
-
-      // もし「bytes」を返す実装なら補正（512 bytes -> 256 samples）
-      if (got > kChunk) {
-        got >>= 1;
+      // ★重要：M5Unifiedのrecord()は「録音要求→完了待ち」の使い方が安定。
+      //   完了前に tmp を読むと、ゴミ/ノイズになり得る。
+      bool submitted = M5.Mic.record(tmp, kChunk, sampleRate_, false);
+      if (!submitted) {
+        vTaskDelay(pdMS_TO_TICKS(2));
+        continue;
       }
+
+      // 完了待ち（stop/cancel/abortも見て早めに抜ける）
+      while (M5.Mic.isRecording()) {
+        if (forceAbort_ || stopReq_ || cancelReq_) break;
+        vTaskDelay(pdMS_TO_TICKS(1));
+      }
+      if (forceAbort_ || stopReq_ || cancelReq_) {
+        continue;
+      }
+
+      size_t got = kChunk;
 
       if (got > 0) {
         const size_t space = (capturedSamples_ < maxSamples_) ? (maxSamples_ - capturedSamples_) : 0;
@@ -311,6 +386,7 @@ void AudioRecorder::taskLoop_() {
           }
         }
       }
+
 
       // バッファ満杯 or 時間満了
       const uint32_t elapsedMs = millis() - startMs_;

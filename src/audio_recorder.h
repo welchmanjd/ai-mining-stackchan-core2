@@ -39,9 +39,20 @@ private:
   void stopSpeakerForRec_();
   void restoreSpeakerAfterRec_();
 
+  bool startMicForRec_();
+  void stopMicAfterRec_();
+
+
   static void taskEntry_(void* arg);
   void taskLoop_();
 
+// audio_recorder.h の AudioRecorder class 内（private: に追加）
+
+  bool ensureMicBegun_();
+  void endMic_();
+  bool micBegun_ = false;
+
+  
 private:
   // 設定
   uint32_t sampleRate_ = 16000;

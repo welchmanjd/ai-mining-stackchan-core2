@@ -54,7 +54,7 @@ static bool readChunkedBody_(WiFiClient* s, uint8_t** outBuf, size_t* outLen, ui
   *outBuf = nullptr;
   *outLen = 0;
 
-  const size_t kCapMax = 256 * 1024;
+  const size_t kCapMax = 512 * 1024;
   size_t cap = 8192;
   size_t used = 0;
   uint8_t* buf = (uint8_t*)malloc(cap);
@@ -160,7 +160,7 @@ static bool dechunkMemory_(const uint8_t* in, size_t inLen, uint8_t** outBuf, si
   *outLen = 0;
   if (!in || inLen == 0) return false;
 
-  const size_t kCapMax = 256 * 1024;
+  const size_t kCapMax = 512 * 1024;
   size_t cap = 8192;
   size_t used = 0;
   uint8_t* buf = (uint8_t*)malloc(cap);
@@ -544,30 +544,47 @@ void AzureTts::poll() {
       return;
     }
 
-    // play
-    state_ = Playing;
+    // If speaker is still playing something else, wait here.
+    if (M5.Speaker.isPlaying()) {
+      return;
+    }
 
     bool ok = false;
     if (wav_ && wavLen_ > 0) {
-      // 1) If it's WAV PCM, parse "data" chunk and play raw correctly
+      // Parse for diagnostics (and fallback)
       WavPcmInfo_ info;
-      if (parseWavPcm_(wav_, wavLen_, &info)) {
-        ok = M5.Speaker.playRaw((const int16_t*)info.pcm, info.pcmBytes / 2, info.sampleRate, false, 1);
+      const bool isWav = parseWavPcm_(wav_, wavLen_, &info);
+
+      if (isWav) {
+        // Rough duration estimate: pcmBytes / (sampleRate * 2 bytes) * 1000ms
+        uint32_t durMs = 0;
+        if (info.sampleRate > 0 && info.pcmBytes > 0) {
+          durMs = (uint32_t)(((uint64_t)info.pcmBytes * 1000ULL) /
+                             ((uint64_t)info.sampleRate * 2ULL));
+        }
+        M5.Log.printf("[TTS] play WAV: wav=%uB pcm=%uB sr=%luHz dur~%lums\n",
+                      (unsigned)wavLen_, (unsigned)info.pcmBytes,
+                      (unsigned long)info.sampleRate, (unsigned long)durMs);
+
+        // Preferred: playWav() streams/decodes correctly (avoids truncation that can happen with a single playRaw call).
+        ok = M5.Speaker.playWav(wav_, (uint32_t)wavLen_, 1, 0, true);
         if (!ok) {
-          M5.Log.printf("[TTS] playRaw(WAV data) failed (sr=%lu bytes=%u)\n",
-                        (unsigned long)info.sampleRate, (unsigned)info.pcmBytes);
+          M5.Log.printf("[TTS] playWav failed -> fallback playRaw\n");
+          ok = M5.Speaker.playRaw((const int16_t*)info.pcm,
+                                  info.pcmBytes / 2,
+                                  info.sampleRate,
+                                  false,
+                                  1);
         }
       } else {
-        // 2) Not a WAV we can parse -> log head bytes and fall back (will be noise if compressed)
         M5.Log.printf("[TTS] WAV parse failed -> fallback playRaw as-is\n");
         logHeadBytes_(wav_, wavLen_);
         ok = M5.Speaker.playRaw((const int16_t*)wav_, wavLen_ / 2, 16000, false, 1);
       }
     }
 
-
     if (!ok) {
-      M5.Log.printf("[TTS] playRaw failed\n");
+      M5.Log.printf("[TTS] play failed (wav=%uB)\n", (unsigned)wavLen_);
       free(wav_);
       wav_ = nullptr;
       wavLen_ = 0;
@@ -575,7 +592,11 @@ void AzureTts::poll() {
       doneSpeakId_ = currentSpeakId_;
       return;
     }
+
+    // play
+    state_ = Playing;
   }
+
 
   if (state_ == Playing) {
     if (!M5.Speaker.isPlaying()) {
@@ -783,6 +804,8 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   }
 
   int code = https_.POST((uint8_t*)ssml.c_str(), ssml.length());
+  last_.httpCode = code;
+
   if (code != 200) {
     String body = https_.getString();
     M5.Log.printf("[TTS] HTTP %d\n", code);
@@ -793,6 +816,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
     disable_keepalive_until_ms_ = millis() + 5000;
     return false;
   }
+
 
   // read body (chunked or content-length)
   WiFiClient* stream = https_.getStreamPtr();
@@ -835,6 +859,9 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
     // ★ extra safety: if chunk markers still leaked, salvage them
     salvageChunkedLeakIfNeeded_(&buf, &used);
 
+    M5.Log.printf("[TTS] rx wav bytes=%u (chunked keepAlive=%d)\n",
+                  (unsigned)used, useKeepAlive ? 1 : 0);
+
     *outBuf = buf;
     *outLen = used;
     return true;
@@ -873,6 +900,10 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   size_t outN = got;
   salvageChunkedLeakIfNeeded_(&buf, &outN);
 
+  // ★ 受信したWAVサイズログ（content-length）
+  M5.Log.printf("[TTS] rx wav bytes=%u (keepAlive=%d)\n",
+                (unsigned)outN, useKeepAlive ? 1 : 0);
+
   *outBuf = buf;
   *outLen = outN;
   return true;
@@ -899,6 +930,9 @@ void AzureTts::taskBody() {
     last_.fetchMs = millis() - t0;
     last_.ok = ok;
     last_.bytes = (uint32_t)len;
+    M5.Log.printf("[TTS] fetch done ok=%d http=%d bytes=%lu took=%lums\n",
+                  ok ? 1 : 0, last_.httpCode, (unsigned long)len, (unsigned long)last_.fetchMs);
+
 
     if (!ok || !buf || !len) {
       if (buf) free(buf);
