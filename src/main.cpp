@@ -491,8 +491,19 @@ void loop() {
 
   // AI state machine tick（毎ループ）
   g_ai.tick(now);
-  // UIへAI overlayを渡す（描画はUIMining側）
-  UIMining::instance().setAiOverlay(g_ai.getOverlay());
+
+  // ★overlayは毎ループ送らない（上部文字のチラつき対策）
+  // 200msごと、またはAI state変化時のみ送る
+  static uint32_t s_lastOverlayPushMs = 0;
+  static uint8_t  s_lastAiState = 255;
+
+  const uint8_t st = (uint8_t)g_ai.state();
+  if ((st != s_lastAiState) || (now - s_lastOverlayPushMs >= 200)) {
+    UIMining::instance().setAiOverlay(g_ai.getOverlay());
+    s_lastOverlayPushMs = now;
+    s_lastAiState = st;
+  }
+
 
   const RuntimeFeatures features = getRuntimeFeatures();
 

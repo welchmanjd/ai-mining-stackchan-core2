@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include "ai_interface.h"
 #include "audio_recorder.h"  // ★追加
+#include "azure_stt.h"       // ★追加
+#include "config.h"          // ★追加（MC_AI_* 定数）
 
 // forward decl
 class Orchestrator;
@@ -87,4 +89,13 @@ private:
   // ★録音（LISTENINGの“本物”）
   AudioRecorder recorder_;
   bool lastRecOk_ = false;
+
+  // ---- STT result ----
+  String lastUserText_;     // STT結果（最大200文字に丸め）
+  bool   lastSttOk_ = false;
+  int    lastSttStatus_ = 0;
+
+  // cooldown延長用
+  bool   errorFlag_ = false;
+
 };

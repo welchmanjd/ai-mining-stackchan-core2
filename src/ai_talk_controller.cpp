@@ -2,13 +2,16 @@
 #include "logging.h"
 #include "orchestrator.h"
 
+#include "config.h"
+
 // ---- timings ----
-static constexpr uint32_t kListeningTimeoutMs      = 10000;
-static constexpr uint32_t kListeningCancelWindowMs = 3000;
-static constexpr uint32_t kThinkingMockMs          = 1000;
+static constexpr uint32_t kListeningTimeoutMs      = (uint32_t)MC_AI_LISTEN_MAX_SECONDS * 1000UL;
+static constexpr uint32_t kListeningCancelWindowMs = (uint32_t)MC_AI_LISTEN_CANCEL_WINDOW_SEC * 1000UL;
+static constexpr uint32_t kThinkingMockMs          = 1000; // 返答モック生成の最短待ち（STT後）
 static constexpr uint32_t kPostSpeakBlankMs        = 500;
-static constexpr uint32_t kCooldownMs              = 2000;
-static constexpr uint32_t kErrorExtraMs            = 1000;
+static constexpr uint32_t kCooldownMs              = (uint32_t)MC_AI_COOLDOWN_MS;
+static constexpr uint32_t kErrorExtraMs            = (uint32_t)MC_AI_COOLDOWN_ERROR_EXTRA_MS;
+
 
 // TTS done が来ないときの安全タイムアウト
 static constexpr uint32_t kTtsHardTimeoutMs        = 20000;
@@ -23,8 +26,14 @@ String AiTalkController::clampBytes_(const String& s, size_t maxBytes) {
 
 void AiTalkController::begin(Orchestrator* orch) {
   orch_ = orch;
+
+  // 録音機能初期化（失敗してもAI全体は死なない。LISTEN開始時にエラー扱いへ）
+  const bool recOk = recorder_.begin();
+  mc_logf("[REC] begin ok=%d", recOk ? 1 : 0);
+
   enterIdle_(millis(), "begin");
 }
+
 
 bool AiTalkController::consumeBubbleUpdate(String* outText) {
   if (!outText) return false;
@@ -60,11 +69,13 @@ bool AiTalkController::onTap() {
   if (state_ == AiState::Listening) {
     const uint32_t elapsed = now - listenStartMs_;
     if (elapsed <= kListeningCancelWindowMs) {
+      recorder_.cancel();
       enterIdle_(now, "tap_cancel");
     }
     // 3秒以降の再タップは無視（ただし消費）
     return true;
   }
+
 
   return true;
 }
@@ -96,6 +107,22 @@ void AiTalkController::tick(uint32_t nowMs) {
     case AiState::Listening: {
       const uint32_t elapsed = nowMs - listenStartMs_;
       if (elapsed >= kListeningTimeoutMs) {
+        // 10秒で確定停止 → THINKING
+        lastRecOk_ = recorder_.stop(nowMs);
+
+        // stopがTIMEOUTでも、サンプルが取れているなら続行させる（救済）
+        const uint32_t durMs = recorder_.durationMs();
+        const size_t samples = recorder_.samples();
+        if (!lastRecOk_ && samples >= (size_t)(MC_AI_REC_SAMPLE_RATE * 0.2f)) { // 0.2秒以上
+          mc_logf("[REC] stop not ok but samples=%u, continue as ok", (unsigned)samples);
+          lastRecOk_ = true;
+        }
+
+        mc_logf("[REC] stop ok=%d dur=%lums samples=%u",
+                lastRecOk_ ? 1 : 0,
+                (unsigned long)durMs,
+                (unsigned)samples);
+
         enterThinking_(nowMs);
       } else {
         updateOverlay_(nowMs);
@@ -103,12 +130,20 @@ void AiTalkController::tick(uint32_t nowMs) {
       return;
     }
 
+
+
     case AiState::Thinking: {
       const uint32_t elapsed = nowMs - thinkStartMs_;
       if (elapsed >= kThinkingMockMs) {
-        // ---- dummy reply (<=120 bytes) ----
-        replyText_ = "テストだよ。AI会話モードの配線確認中だよ。";
-        replyText_ = clampBytes_(replyText_, 120);
+        if (lastSttOk_) {
+          // UI/吹き出しは短く
+          String head = lastUserText_;
+          if (head.length() > 24) head = head.substring(0, 24) + "…";
+          replyText_ = "こう言った？ " + head;
+        } else {
+          replyText_ = "もう一回言ってみて";
+        }
+        replyText_ = clampBytes_(replyText_, MC_AI_TTS_MAX_CHARS);
 
         // bubble show要求（必ず main 側が setStackchanSpeech()）
         bubbleText_  = replyText_;
@@ -172,7 +207,7 @@ void AiTalkController::tick(uint32_t nowMs) {
     case AiState::PostSpeakBlank: {
       const uint32_t elapsed = nowMs - blankStartMs_;
       if (elapsed >= kPostSpeakBlankMs) {
-        enterCooldown_(nowMs, false, "post_blank_done");
+        enterCooldown_(nowMs, errorFlag_, "post_blank_done");
       } else {
         updateOverlay_(nowMs);
       }
@@ -195,30 +230,99 @@ void AiTalkController::tick(uint32_t nowMs) {
   }
 }
 
+void AiTalkController::enterThinking_(uint32_t nowMs) {
+  state_ = AiState::Thinking;
+
+  overlay_.active = true;
+  overlay_.hint = MC_AI_IDLE_HINT_TEXT;
+
+  // ---- STT（8秒枠）----
+  lastUserText_ = "";
+  lastSttOk_ = false;
+  lastSttStatus_ = 0;
+  errorFlag_ = false;
+
+  if (!lastRecOk_ || recorder_.samples() == 0) {
+    lastSttOk_ = false;
+    lastSttStatus_ = 0;
+    lastUserText_ = MC_AI_ERR_MIC_TOO_QUIET;
+    errorFlag_ = true;
+    mc_logf("[STT] skip (rec not ok)");
+  } else {
+    const uint32_t sttT0 = millis();
+    auto stt = AzureStt::transcribePcm16Mono(
+        recorder_.data(),
+        recorder_.samples(),
+        MC_AI_REC_SAMPLE_RATE,
+        MC_AI_STT_TIMEOUT_MS
+    );
+    const uint32_t sttMs = millis() - sttT0;
+
+    lastSttOk_ = stt.ok;
+    lastSttStatus_ = stt.status;
+
+    if (stt.ok) {
+      lastUserText_ = clampBytes_(stt.text, MC_AI_MAX_INPUT_CHARS);
+    } else {
+      lastUserText_ = stt.err.length() ? stt.err : String(MC_AI_ERR_TEMP_FAIL_TRY_AGAIN);
+      errorFlag_ = true;
+    }
+
+    // 秘密/全文ログ禁止：先頭だけ
+    String head = lastUserText_;
+    if (head.length() > 30) head = head.substring(0, 30);
+    mc_logf("[STT] done ok=%d http=%d took=%lums text_len=%u head=\"%s\"",
+            lastSttOk_ ? 1 : 0,
+            lastSttStatus_,
+            (unsigned long)sttMs,
+            (unsigned)lastUserText_.length(),
+            head.c_str());
+  }
+
+  // STT完了後に THINK タイマー開始（tick上の残秒表示を自然に）
+  thinkStartMs_ = millis();
+
+  LOG_EVT_INFO("EVT_AI_STATE", "state=THINKING");
+  updateOverlay_(thinkStartMs_);
+}
+
 void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
+  // 録音中の可能性があるので保険でキャンセル
+  recorder_.cancel();
+
   state_ = AiState::Idle;
-
-  overlay_ = AiUiOverlay();
-  overlay_.active = false;
-
-  // bubble clear（main側がsetStackchanSpeech("")）
-  bubbleText_  = "";
-  bubbleDirty_ = true;
 
   inputText_ = "";
   replyText_ = "";
+
+  // TTS待ちの解除
   expectTtsId_ = 0;
 
+  // overlay消す
+  overlay_ = AiUiOverlay();
+  overlay_.active = false;
+
+  // cooldown延長フラグもリセット
+  errorFlag_ = false;
+
   LOG_EVT_INFO("EVT_AI_STATE",
-               "state=IDLE reason=%s", reason ? reason : "-");
-  (void)nowMs;
+               "state=IDLE reason=%s",
+               reason ? reason : "-");
+
+  (void)nowMs; // 現状は未使用（将来の拡張用）
 }
+
 
 void AiTalkController::enterListening_(uint32_t nowMs) {
   state_ = AiState::Listening;
   listenStartMs_ = nowMs;
 
   inputText_ = "";
+  lastUserText_ = "";
+  lastSttOk_ = false;
+  lastSttStatus_ = 0;
+  errorFlag_ = false;
+
   replyText_ = "";
   expectTtsId_ = 0;
 
@@ -228,22 +332,18 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
 
   overlay_ = AiUiOverlay();
   overlay_.active = true;
-  overlay_.hint = "AI";
+  overlay_.hint = MC_AI_IDLE_HINT_TEXT;
+
+  // 録音スタート
+  lastRecOk_ = recorder_.start(nowMs);
+  mc_logf("[REC] start ok=%d", lastRecOk_ ? 1 : 0);
 
   LOG_EVT_INFO("EVT_AI_STATE", "state=LISTENING");
   updateOverlay_(nowMs);
 }
 
-void AiTalkController::enterThinking_(uint32_t nowMs) {
-  state_ = AiState::Thinking;
-  thinkStartMs_ = nowMs;
 
-  overlay_.active = true;
-  overlay_.hint = "AI";
 
-  LOG_EVT_INFO("EVT_AI_STATE", "state=THINKING");
-  updateOverlay_(nowMs);
-}
 
 void AiTalkController::enterSpeaking_(uint32_t nowMs) {
   state_ = AiState::Speaking;
@@ -308,10 +408,19 @@ void AiTalkController::updateOverlay_(uint32_t nowMs) {
       break;
     }
     case AiState::Thinking: {
-      const uint32_t elapsed = nowMs - thinkStartMs_;
-      const uint32_t remain  = (elapsed >= kThinkingMockMs) ? 0 : (kThinkingMockMs - elapsed);
-      s = "THINK " + String(ceilSec(remain)) + "s";
-      break;
+      // STT結果の短い表示（DoD）
+      if (lastSttOk_) {
+        overlay_.line1 = "STT: OK";
+        String head = lastUserText_;
+        if (head.length() > 40) head = head.substring(0, 40) + "…";
+        overlay_.line2 = head;
+      } else {
+        overlay_.line1 = "STT: ERR";
+        String head = lastUserText_;
+        if (head.length() > 40) head = head.substring(0, 40) + "…";
+        overlay_.line2 = head;
+      }
+      return;
     }
     case AiState::Speaking:
       s = "SPEAK";

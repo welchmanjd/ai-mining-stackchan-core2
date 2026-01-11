@@ -36,6 +36,9 @@ private:
   void requestStop_(bool cancel);
   bool waitTaskDone_(uint32_t timeoutMs);
 
+  void stopSpeakerForRec_();
+  void restoreSpeakerAfterRec_();
+
   static void taskEntry_(void* arg);
   void taskLoop_();
 
@@ -54,9 +57,17 @@ private:
   volatile bool recording_ = false;
   volatile bool stopReq_ = false;
   volatile bool cancelReq_ = false;
+  volatile bool forceAbort_ = false;
 
   uint32_t startMs_ = 0;
   uint32_t stopMs_  = 0;
+
+  // debug（録音の実態が取れているか確認用）
+  volatile int peakAbs_ = 0;
+
+  // speaker復帰用
+  uint8_t savedSpkVolume_ = 128;
+  bool savedSpkVolumeValid_ = false;
 
   // task
   TaskHandle_t task_ = nullptr;
