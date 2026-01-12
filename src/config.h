@@ -252,6 +252,24 @@
   #define MC_OPENAI_MODEL "gpt-5-nano"
 #endif
 
+// ---- OpenAI Responses API endpoint（秘密なし：必要なら config_private.h で上書き可）----
+#ifndef MC_OPENAI_ENDPOINT
+  #define MC_OPENAI_ENDPOINT "https://api.openai.com/v1/responses"
+#endif
+
+// ---- OpenAI LLM tuning (experiment) ----
+#ifndef MC_OPENAI_MAX_OUTPUT_TOKENS
+  #define MC_OPENAI_MAX_OUTPUT_TOKENS 1024
+#endif
+
+#ifndef MC_OPENAI_REASONING_EFFORT
+  #define MC_OPENAI_REASONING_EFFORT "low"   // low/medium/high
+#endif
+
+#ifndef MC_OPENAI_LOG_USAGE
+  #define MC_OPENAI_LOG_USAGE 1
+#endif
+
 // ---------------------------------------------------------
 // ★命名を Web/JSON（index.html / mc_config_store）に合わせる
 //   duco_miner_key / az_speech_region / az_speech_key / az_tts_voice など

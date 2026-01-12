@@ -26,3 +26,7 @@
 
 // ---- OpenAI (LLM secret) ----
 #define MC_OPENAI_API_KEY "your-openai-api-key"
+
+// 任意：モデル/エンドポイント上書き（通常は不要）
+// #define MC_OPENAI_MODEL "gpt-5-nano"
+// #define MC_OPENAI_ENDPOINT "https://api.openai.com/v1/responses"

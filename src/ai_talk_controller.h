@@ -96,7 +96,19 @@ private:
   bool   lastSttOk_ = false;
   int    lastSttStatus_ = 0;
 
+  // ---- LLM result ----
+  bool     replyReady_ = false;
+  bool     lastLlmOk_ = false;
+  int      lastLlmHttp_ = 0;
+  uint32_t lastLlmTookMs_ = 0;
+  String   lastLlmErr_;      // 短いエラー（全文禁止）
+  String   lastLlmTextHead_; // 先頭だけ（全文禁止）
+
+  // overall deadline base (THINKING入り時刻)
+  uint32_t overallStartMs_ = 0;
+
   // cooldown延長用
   bool   errorFlag_ = false;
+
 
 };

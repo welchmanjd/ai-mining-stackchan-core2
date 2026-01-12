@@ -1,16 +1,22 @@
 #include "ai_talk_controller.h"
 #include "logging.h"
 #include "orchestrator.h"
+#include "openai_llm.h"
 #include <M5Unified.h>
 #include "config.h"
 
 // ---- timings ----
 static constexpr uint32_t kListeningTimeoutMs      = (uint32_t)MC_AI_LISTEN_MAX_SECONDS * 1000UL;
 static constexpr uint32_t kListeningCancelWindowMs = (uint32_t)MC_AI_LISTEN_CANCEL_WINDOW_SEC * 1000UL;
-static constexpr uint32_t kThinkingMockMs          = 1000; // 返答モック生成の最短待ち（STT後）
+static constexpr uint32_t kThinkingMockMs          = 200;  // 最低限の「考え中」表示（ブロッキング後でも0にしない）
 static constexpr uint32_t kPostSpeakBlankMs        = 500;
 static constexpr uint32_t kCooldownMs              = (uint32_t)MC_AI_COOLDOWN_MS;
 static constexpr uint32_t kErrorExtraMs            = (uint32_t)MC_AI_COOLDOWN_ERROR_EXTRA_MS;
+
+// STT+LLM 全体上限（ms）
+static constexpr uint32_t kTotalThinkBudgetMs      = 20000;
+static constexpr uint32_t kBudgetMarginMs          = 250;
+
 
 
 // TTS done が来ないときの安全タイムアウト（ネット遅延 + 音声再生を含む）
@@ -195,42 +201,14 @@ void AiTalkController::tick(uint32_t nowMs) {
 
     }
 
-
-
     case AiState::Thinking: {
       const uint32_t elapsed = nowMs - thinkStartMs_;
-      if (elapsed >= kThinkingMockMs) {
-        if (lastSttOk_) {
-          // ---- UI（短い） ----
-          String uiHead = lastUserText_;
-          const bool cut = (uiHead.length() > 24);
-          uiHead = clampBytes_(uiHead, 24);
-          if (cut) uiHead += "…";
-
-          const String uiReply = String("こう言った？ ") + uiHead;
-
-          // ---- TTS（長い：全文）----
-          // UIと同じく「こう言った？」は付けつつ、中身はSTT全文を読む
-          String ttsReply = String("こう言った？ ") + lastUserText_;
-          ttsReply = clampBytes_(ttsReply, MC_AI_TTS_MAX_CHARS);
-
-          // TTS用
-          replyText_ = ttsReply;
-
-          // 吹き出し用
-          bubbleText_ = uiReply;
-
-        } else {
-          replyText_  = "もう一回言ってみて";
-          bubbleText_ = replyText_;
-        }
-
-        // 念のため（TTS側は上でclamp済みだが保険）
+      if (replyReady_ && elapsed >= kThinkingMockMs) {
+        // 念のため（保険）
         replyText_ = clampBytes_(replyText_, MC_AI_TTS_MAX_CHARS);
 
         // bubble show要求（必ず main 側が setStackchanSpeech()）
         bubbleDirty_ = true;
-
 
         // Orchestratorへ投入（speakAsync直叩き禁止）
         bool enqueued = false;
@@ -331,6 +309,9 @@ void AiTalkController::tick(uint32_t nowMs) {
 void AiTalkController::enterThinking_(uint32_t nowMs) {
   state_ = AiState::Thinking;
 
+  // STT+LLM 全体タイムアウト基準
+  overallStartMs_ = nowMs;
+
   overlay_.active = true;
   overlay_.hint = MC_AI_IDLE_HINT_TEXT;
 
@@ -340,6 +321,14 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
   lastSttStatus_ = 0;
   errorFlag_ = false;
 
+  // ---- LLM ----
+  replyReady_ = false;
+  lastLlmOk_ = false;
+  lastLlmHttp_ = 0;
+  lastLlmTookMs_ = 0;
+  lastLlmErr_ = "";
+  lastLlmTextHead_ = "";
+
   if (!lastRecOk_ || recorder_.samples() == 0) {
     lastSttOk_ = false;
     lastSttStatus_ = 0;
@@ -348,11 +337,20 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
     mc_logf("[STT] skip (rec not ok)");
   } else {
     const uint32_t sttT0 = millis();
+
+    // 20s枠から残りを見つつ STT の上限を決める（通常は 8s のまま）
+    uint32_t sttTimeout = (uint32_t)MC_AI_STT_TIMEOUT_MS;
+    const uint32_t elapsed0 = millis() - overallStartMs_;
+    if (elapsed0 + kBudgetMarginMs < kTotalThinkBudgetMs) {
+      const uint32_t remain = kTotalThinkBudgetMs - elapsed0 - kBudgetMarginMs;
+      if (remain < sttTimeout) sttTimeout = remain;
+    }
+
     auto stt = AzureStt::transcribePcm16Mono(
         recorder_.data(),
         recorder_.samples(),
         MC_AI_REC_SAMPLE_RATE,
-        MC_AI_STT_TIMEOUT_MS
+        sttTimeout
     );
     const uint32_t sttMs = millis() - sttT0;
 
@@ -377,12 +375,110 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
             head.c_str());
   }
 
-  // STT完了後に THINK タイマー開始（tick上の残秒表示を自然に）
+  // ---- LLM（10秒枠、ただし全体20秒を超えない）----
+  if (lastSttOk_) {
+    const uint32_t elapsed = millis() - overallStartMs_;
+    uint32_t llmTimeout = 0;
+    if (elapsed + kBudgetMarginMs < kTotalThinkBudgetMs) {
+      llmTimeout = kTotalThinkBudgetMs - elapsed - kBudgetMarginMs;
+      if (llmTimeout > (uint32_t)MC_AI_LLM_TIMEOUT_MS) llmTimeout = (uint32_t)MC_AI_LLM_TIMEOUT_MS;
+    }
+
+    if (llmTimeout < 200) {
+      // もう予算が無い
+      lastLlmOk_ = false;
+      lastLlmErr_ = "LLM timeout";
+      errorFlag_ = true;
+      replyText_ = String(MC_AI_TEXT_FALLBACK);
+      bubbleText_ = replyText_;
+      mc_logf("[AI] LLM skipped (budget) elapsed=%lums", (unsigned long)elapsed);
+    } else {
+      const auto llm = OpenAiLlm::generateReply(lastUserText_, llmTimeout);
+      lastLlmOk_ = llm.ok;
+      lastLlmHttp_ = llm.http;
+      lastLlmTookMs_ = llm.tookMs;
+
+      if (llm.ok) {
+        replyText_ = llm.text;
+        replyText_ = clampBytes_(replyText_, MC_AI_TTS_MAX_CHARS);
+        bubbleText_ = replyText_;
+
+        // 先頭だけ（overlay用）
+        lastLlmTextHead_ = clampBytes_(replyText_, 40);
+        if (replyText_.length() > lastLlmTextHead_.length()) lastLlmTextHead_ += "…";
+      } else {
+        // 失敗時フォールバック + cooldown +1秒
+        errorFlag_ = true;
+        lastLlmErr_ = llm.err;
+        if (lastLlmErr_.length() > 40) lastLlmErr_ = lastLlmErr_.substring(0, 40) + "…";
+        replyText_ = String(MC_AI_TEXT_FALLBACK);
+        bubbleText_ = replyText_;
+      }
+
+      mc_logf("[AI] LLM http=%d ok=%d took=%lums outLen=%u",
+              lastLlmHttp_,
+              lastLlmOk_ ? 1 : 0,
+              (unsigned long)lastLlmTookMs_,
+              (unsigned)replyText_.length());
+    }
+  } else {
+    // STT失敗：LLMは呼ばない
+    errorFlag_ = true;
+    lastLlmErr_ = "STT failed";
+    replyText_ = clampBytes_(lastUserText_, MC_AI_TTS_MAX_CHARS);
+    bubbleText_ = replyText_;
+  }
+
+  replyReady_ = true;
+
+  // THINK タイマー開始（tick上の“短い考え中”表示用）
   thinkStartMs_ = millis();
 
   LOG_EVT_INFO("EVT_AI_STATE", "state=THINKING");
   updateOverlay_(thinkStartMs_);
 }
+
+void AiTalkController::enterListening_(uint32_t nowMs) {
+  state_ = AiState::Listening;
+  listenStartMs_ = nowMs;
+
+  overallStartMs_ = 0;
+
+  inputText_ = "";
+  lastUserText_ = "";
+  lastSttOk_ = false;
+  lastSttStatus_ = 0;
+  errorFlag_ = false;
+
+  // LLM state reset
+  replyReady_ = false;
+  lastLlmOk_ = false;
+  lastLlmHttp_ = 0;
+  lastLlmTookMs_ = 0;
+  lastLlmErr_ = "";
+  lastLlmTextHead_ = "";
+
+  replyText_ = "";
+  expectTtsId_ = 0;
+
+  // 開始時に吹き出し消す（Behaviorの残りを消す）
+  bubbleText_  = "";
+  bubbleDirty_ = true;
+
+  overlay_ = AiUiOverlay();
+  overlay_.active = true;
+  overlay_.hint = MC_AI_IDLE_HINT_TEXT;
+
+  // 録音スタート
+  lastRecOk_ = recorder_.start(nowMs);
+  mc_logf("[REC] start ok=%d", lastRecOk_ ? 1 : 0);
+
+  LOG_EVT_INFO("EVT_AI_STATE", "state=LISTENING");
+  updateOverlay_(nowMs);
+}
+
+
+
 
 void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   // 録音中の可能性があるので保険でキャンセル
@@ -410,37 +506,6 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
 
   (void)nowMs; // 現状は未使用（将来の拡張用）
 }
-
-
-void AiTalkController::enterListening_(uint32_t nowMs) {
-  state_ = AiState::Listening;
-  listenStartMs_ = nowMs;
-
-  inputText_ = "";
-  lastUserText_ = "";
-  lastSttOk_ = false;
-  lastSttStatus_ = 0;
-  errorFlag_ = false;
-
-  replyText_ = "";
-  expectTtsId_ = 0;
-
-  // 開始時に吹き出し消す（Behaviorの残りを消す）
-  bubbleText_  = "";
-  bubbleDirty_ = true;
-
-  overlay_ = AiUiOverlay();
-  overlay_.active = true;
-  overlay_.hint = MC_AI_IDLE_HINT_TEXT;
-
-  // 録音スタート
-  lastRecOk_ = recorder_.start(nowMs);
-  mc_logf("[REC] start ok=%d", lastRecOk_ ? 1 : 0);
-
-  LOG_EVT_INFO("EVT_AI_STATE", "state=LISTENING");
-  updateOverlay_(nowMs);
-}
-
 
 
 
@@ -517,20 +582,26 @@ void AiTalkController::updateOverlay_(uint32_t nowMs) {
       break;
     }
     case AiState::Thinking: {
-      // STT結果の短い表示（DoD）
-      if (lastSttOk_) {
-        overlay_.line1 = "STT: OK";
-        String head = lastUserText_;
-        if (head.length() > 40) head = head.substring(0, 40) + "…";
-        overlay_.line2 = head;
-      } else {
+      // THINKING 中の表示：
+      // - STT失敗なら STTERR を表示
+      // - STT成功なら LLM結果（成功/失敗）を表示
+      if (!lastSttOk_) {
         overlay_.line1 = "STT: ERR";
         String head = lastUserText_;
         if (head.length() > 40) head = head.substring(0, 40) + "…";
         overlay_.line2 = head;
+        return;
       }
+
+      overlay_.line1 = lastLlmOk_ ? "LLM: OK" : "LLM: ERR";
+
+      String head = lastLlmOk_ ? lastLlmTextHead_ : lastLlmErr_;
+      if (!head.length()) head = "...";
+      if (head.length() > 40) head = head.substring(0, 40) + "…";
+      overlay_.line2 = head;
       return;
     }
+
     case AiState::Speaking:
       s = "SPEAK";
       break;
