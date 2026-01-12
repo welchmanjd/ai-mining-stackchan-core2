@@ -492,6 +492,11 @@ void AzureTts::taskEntry(void* pv) {
 }
 
 bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voice) {
+  M5.Log.printf("[TTS] speakAsync id=%lu text_bytes=%u head=\"%s\"\n",
+              (unsigned long)speakId,
+              (unsigned)text.length(),
+              text.substring(0, 60).c_str());
+
   if (state_ != Idle) return false;
   if (WiFi.status() != WL_CONNECTED) {
     M5.Log.printf("[TTS] WiFi not connected\n");

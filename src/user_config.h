@@ -9,7 +9,7 @@
 
 // ---- Display sleep (seconds) ----
 // 画面だけOFFにして、マイニングは継続
-#define MC_DISPLAY_SLEEP_SECONDS 600
+#define MC_DISPLAY_SLEEP_SECONDS 60
 
 // ---- CPU frequency (MHz) ----
 // setCpuFrequencyMhz() の代表値: 80 / 160 / 240

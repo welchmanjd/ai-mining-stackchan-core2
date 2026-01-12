@@ -67,8 +67,9 @@ private:
 
   uint32_t listenStartMs_   = 0;
   uint32_t thinkStartMs_    = 0;
-  uint32_t speakStartMs_    = 0;
-  uint32_t blankStartMs_    = 0;
+  uint32_t speakStartMs_ = 0;
+  uint32_t speakHardTimeoutMs_ = 0; // TTS done待ちの上限（動的に計算）
+  uint32_t blankStartMs_ = 0;
   uint32_t cooldownStartMs_ = 0;
   uint32_t cooldownDurMs_   = 0;
 

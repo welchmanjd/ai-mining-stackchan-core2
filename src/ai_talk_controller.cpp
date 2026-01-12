@@ -1,7 +1,7 @@
 #include "ai_talk_controller.h"
 #include "logging.h"
 #include "orchestrator.h"
-
+#include <M5Unified.h>
 #include "config.h"
 
 // ---- timings ----
@@ -13,16 +13,72 @@ static constexpr uint32_t kCooldownMs              = (uint32_t)MC_AI_COOLDOWN_MS
 static constexpr uint32_t kErrorExtraMs            = (uint32_t)MC_AI_COOLDOWN_ERROR_EXTRA_MS;
 
 
-// TTS done が来ないときの安全タイムアウト
-static constexpr uint32_t kTtsHardTimeoutMs        = 20000;
+// TTS done が来ないときの安全タイムアウト（ネット遅延 + 音声再生を含む）
+// 固定20sだと、TTS取得が遅いときに tts_timeout になって状態だけ先に進んでしまう。
+// 返答テキストのバイト数に応じて動的に延長する。
+static uint32_t calcTtsHardTimeoutMs_(size_t textBytes) {
+  uint32_t t = (uint32_t)MC_AI_TTS_HARD_TIMEOUT_BASE_MS +
+               (uint32_t)(textBytes * (size_t)MC_AI_TTS_HARD_TIMEOUT_PER_BYTE_MS);
+  const uint32_t tMin = (uint32_t)MC_AI_TTS_HARD_TIMEOUT_MIN_MS;
+  const uint32_t tMax = (uint32_t)MC_AI_TTS_HARD_TIMEOUT_MAX_MS;
+  if (t < tMin) t = tMin;
+  if (t > tMax) t = tMax;
+  return t;
+}
 
 // orch が無い（sandbox等）ときの擬似発話時間
 static constexpr uint32_t kSimulatedSpeakMs        = 2000;
 
-String AiTalkController::clampBytes_(const String& s, size_t maxBytes) {
-  if (s.length() <= maxBytes) return s;
-  return s.substring(0, (unsigned)maxBytes);
+
+static String utf8SafeClamp_(const String& s, size_t maxBytes) {
+  const size_t L = s.length();
+  if (L <= maxBytes) return s;
+
+  const char* p = s.c_str();
+  size_t cut = maxBytes;
+
+  // cut がUTF-8の継続バイト(10xxxxxx)に刺さっていたら手前へ戻す
+  while (cut > 0 && (((uint8_t)p[cut] & 0xC0) == 0x80)) {
+    cut--;
+  }
+  return s.substring(0, (unsigned)cut);
 }
+
+// UTF-8を壊さずに maxBytes 以内へ丸める（バイト上限は維持）
+static size_t utf8SeqLen_(uint8_t c) {
+  if (c < 0x80) return 1;
+  if ((c & 0xE0) == 0xC0) return 2;
+  if ((c & 0xF0) == 0xE0) return 3;
+  if ((c & 0xF8) == 0xF0) return 4;
+  return 1; // 不正先頭は1扱い
+}
+
+String AiTalkController::clampBytes_(const String& s, size_t maxBytes) {
+  const size_t n = s.length(); // bytes
+  if (n <= maxBytes) return s;
+  if (maxBytes == 0) return "";
+
+  size_t i = 0;
+  while (i < n && i < maxBytes) {
+    const uint8_t c = (uint8_t)s[i];
+    const size_t L = utf8SeqLen_(c);
+    if (i + L > maxBytes) break;
+
+    // continuation bytes validate (tolerant)
+    bool ok = true;
+    for (size_t k = 1; k < L; k++) {
+      if (i + k >= n) { ok = false; break; }
+      const uint8_t cc = (uint8_t)s[i + k];
+      if ((cc & 0xC0) != 0x80) { ok = false; break; }
+    }
+    if (!ok) break;
+
+    i += L;
+  }
+  return s.substring(0, (unsigned)i);
+}
+
+
 
 void AiTalkController::begin(Orchestrator* orch) {
   orch_ = orch;
@@ -110,6 +166,14 @@ void AiTalkController::tick(uint32_t nowMs) {
         // 10秒で確定停止 → THINKING
         lastRecOk_ = recorder_.stop(nowMs);
 
+        // ★重要：Mic(I2S)が掴みっぱなしだと、直後のTTSで Speaker のI2S初期化が失敗して音が壊れることがある。
+        // stop()が「録音停止」だけで Mic.end() していない実装でもここで確実に解放する。
+        if (M5.Mic.isEnabled()) {
+          mc_logf("[REC] mic still enabled after stop -> end (release I2S)");
+          M5.Mic.end();
+          delay(10);
+        }
+
         // stopがTIMEOUTでも、サンプルが取れているなら続行させる（救済）
         const uint32_t durMs = recorder_.durationMs();
         const size_t samples = recorder_.samples();
@@ -128,6 +192,7 @@ void AiTalkController::tick(uint32_t nowMs) {
         updateOverlay_(nowMs);
       }
       return;
+
     }
 
 
@@ -136,18 +201,36 @@ void AiTalkController::tick(uint32_t nowMs) {
       const uint32_t elapsed = nowMs - thinkStartMs_;
       if (elapsed >= kThinkingMockMs) {
         if (lastSttOk_) {
-          // UI/吹き出しは短く
-          String head = lastUserText_;
-          if (head.length() > 24) head = head.substring(0, 24) + "…";
-          replyText_ = "こう言った？ " + head;
+          // ---- UI（短い） ----
+          String uiHead = lastUserText_;
+          const bool cut = (uiHead.length() > 24);
+          uiHead = clampBytes_(uiHead, 24);
+          if (cut) uiHead += "…";
+
+          const String uiReply = String("こう言った？ ") + uiHead;
+
+          // ---- TTS（長い：全文）----
+          // UIと同じく「こう言った？」は付けつつ、中身はSTT全文を読む
+          String ttsReply = String("こう言った？ ") + lastUserText_;
+          ttsReply = clampBytes_(ttsReply, MC_AI_TTS_MAX_CHARS);
+
+          // TTS用
+          replyText_ = ttsReply;
+
+          // 吹き出し用
+          bubbleText_ = uiReply;
+
         } else {
-          replyText_ = "もう一回言ってみて";
+          replyText_  = "もう一回言ってみて";
+          bubbleText_ = replyText_;
         }
+
+        // 念のため（TTS側は上でclamp済みだが保険）
         replyText_ = clampBytes_(replyText_, MC_AI_TTS_MAX_CHARS);
 
         // bubble show要求（必ず main 側が setStackchanSpeech()）
-        bubbleText_  = replyText_;
         bubbleDirty_ = true;
+
 
         // Orchestratorへ投入（speakAsync直叩き禁止）
         bool enqueued = false;
@@ -194,14 +277,29 @@ void AiTalkController::tick(uint32_t nowMs) {
         }
       } else {
         const uint32_t elapsed = nowMs - speakStartMs_;
-        if (elapsed >= kTtsHardTimeoutMs) {
-          // doneが来ない → エラー扱いでcooldown延長
+
+        // enterSpeaking_で計算済みだが、万一0ならここでも計算しておく
+        if (speakHardTimeoutMs_ == 0) {
+          speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
+          mc_logf("[ai] tts hard timeout(late calc)=%lums (len=%u)",
+                  (unsigned long)speakHardTimeoutMs_,
+                  (unsigned)replyText_.length());
+        }
+
+        if (elapsed >= speakHardTimeoutMs_) {
+          // doneが来ない（/遅すぎる） → エラー扱いでcooldown延長
+          mc_logf("[ai] tts timeout elapsed=%lums limit=%lums (expect=%lu)",
+                  (unsigned long)elapsed,
+                  (unsigned long)speakHardTimeoutMs_,
+                  (unsigned long)expectTtsId_);
+          expectTtsId_ = 0;        // 遅延doneは無視する（次に引きずらない）
           enterCooldown_(nowMs, true, "tts_timeout");
         } else {
           updateOverlay_(nowMs);
         }
       }
       return;
+
     }
 
     case AiState::PostSpeakBlank: {
@@ -297,6 +395,7 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
 
   // TTS待ちの解除
   expectTtsId_ = 0;
+  speakHardTimeoutMs_ = 0;
 
   // overlay消す
   overlay_ = AiUiOverlay();
@@ -349,12 +448,22 @@ void AiTalkController::enterSpeaking_(uint32_t nowMs) {
   state_ = AiState::Speaking;
   speakStartMs_ = nowMs;
 
+  // TTSありの場合のみ、done待ち上限を動的に計算
+  speakHardTimeoutMs_ = 0;
+  if (expectTtsId_ != 0) {
+    speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
+    mc_logf("[ai] tts hard timeout=%lums (len=%u)",
+            (unsigned long)speakHardTimeoutMs_,
+            (unsigned)replyText_.length());
+  }
+
   overlay_.active = true;
   overlay_.hint = "AI";
 
   LOG_EVT_INFO("EVT_AI_STATE", "state=SPEAKING");
   updateOverlay_(nowMs);
 }
+
 
 void AiTalkController::enterPostSpeakBlank_(uint32_t nowMs) {
   state_ = AiState::PostSpeakBlank;

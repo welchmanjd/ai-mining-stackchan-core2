@@ -161,6 +161,22 @@
   #define MC_AI_TTS_MAX_CHARS 120
 #endif
 
+// ---- AI: TTS done hard timeout (ms) ----
+// TTS取得(ネット遅延) + 音声再生が終わるまで待つ上限。
+// ここが短いと、音が鳴っているのに AI 側が tts_timeout で先に進んでしまう。
+#ifndef MC_AI_TTS_HARD_TIMEOUT_BASE_MS
+  #define MC_AI_TTS_HARD_TIMEOUT_BASE_MS 25000
+#endif
+#ifndef MC_AI_TTS_HARD_TIMEOUT_PER_BYTE_MS
+  #define MC_AI_TTS_HARD_TIMEOUT_PER_BYTE_MS 90
+#endif
+#ifndef MC_AI_TTS_HARD_TIMEOUT_MIN_MS
+  #define MC_AI_TTS_HARD_TIMEOUT_MIN_MS 20000
+#endif
+#ifndef MC_AI_TTS_HARD_TIMEOUT_MAX_MS
+  #define MC_AI_TTS_HARD_TIMEOUT_MAX_MS 60000
+#endif
+
 // ---- AI UI short texts（長文は出さない方針なので短文のみ）----
 #ifndef MC_AI_TEXT_LISTENING
   #define MC_AI_TEXT_LISTENING "聞いています"
