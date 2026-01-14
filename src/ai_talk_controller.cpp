@@ -431,6 +431,16 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
 }
 
 void AiTalkController::enterListening_(uint32_t nowMs) {
+  // 録音開始に失敗したら、busy扱い（LISTENING）へ入らない。
+  // 例：TTS再生中などで I2S owner=Speaker のとき。
+  lastRecOk_ = recorder_.start(nowMs);
+  mc_logf("[REC] start ok=%d", lastRecOk_ ? 1 : 0);
+  if (!lastRecOk_) {
+    // tap は消費してよいが、state は Idle のままにする。
+    mc_logf("[ai] listen start failed -> stay IDLE");
+    return;
+  }
+
   state_ = AiState::Listening;
   listenStartMs_ = nowMs;
 
@@ -461,14 +471,9 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
   overlay_.active = true;
   overlay_.hint = MC_AI_IDLE_HINT_TEXT;
 
-  // 録音スタート
-  lastRecOk_ = recorder_.start(nowMs);
-  mc_logf("[REC] start ok=%d", lastRecOk_ ? 1 : 0);
-
   LOG_EVT_INFO("EVT_AI_STATE", "state=LISTENING");
   updateOverlay_(nowMs);
 }
-
 
 
 
