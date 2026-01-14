@@ -1,11 +1,20 @@
 #include "audio_recorder.h"
 #include "logging.h"
+#include "i2s_manager.h"
 
 #include <M5Unified.h>
 #include <LittleFS.h>
 #include <type_traits>
 
 static const char* kTag = "REC";
+
+static void waitMicIdle_(uint32_t timeoutMs) {
+  const uint32_t t0 = millis();
+  while (M5.Mic.isRecording()) {
+    if ((millis() - t0) >= timeoutMs) break;
+    delay(1);
+  }
+}
 
 // WAVヘッダ生成（PCM16 mono）
 static void writeWavHeader_(File& f, uint32_t sampleRate, uint32_t dataBytes) {
@@ -37,13 +46,12 @@ static void writeWavHeader_(File& f, uint32_t sampleRate, uint32_t dataBytes) {
 // recordの返り値が bool / size_t / bytes の差異を吸収して「サンプル数」に揃える
 template <typename R>
 static size_t retToSamples_(R ret, size_t requestedSamples) {
-  if constexpr (std::is_same<R, bool>::value) {
+  // ※C++17の if constexpr を使わない（toolchainがC++11/14でも通す）
+  if (std::is_same<R, bool>::value) {
     return ret ? requestedSamples : 0;
-  } else {
-    return (size_t)ret;
   }
+  return (size_t)ret;
 }
-
 bool AudioRecorder::begin() {
   initialized_ = true;
   Serial.printf("[%s] begin ok=1\n", kTag);
@@ -86,6 +94,12 @@ void AudioRecorder::endMic_() {
   // isEnabled() でもよいが、micBegun_ の方が意図が明確
   if (!micBegun_) return;
 
+  // 念のため：lock未取得で呼ばれても排他が効くようにする（通常は録音中にlock済み）
+  bool tempLock = false;
+  if (!i2sLocked_) {
+    tempLock = I2SManager::instance().lockForMic("REC.endMic", 2000);
+  }
+
   M5.Mic.end();
   micBegun_ = false;
 
@@ -93,6 +107,10 @@ void AudioRecorder::endMic_() {
 
   // I2S解放→次のSpeaker beginがコケるのを避ける保険
   delay(5);
+
+  if (tempLock) {
+    I2SManager::instance().unlock("REC.endMic");
+  }
 }
 
 
@@ -171,17 +189,34 @@ bool AudioRecorder::start(uint32_t nowMs) {
   if (!initialized_) begin();
   if (recording_) return false;
 
+  // I2S owner: Mic（録音中はSpeakerのI2S利用をブロック）
+  if (!i2sLocked_) {
+    if (!I2SManager::instance().lockForMic("REC.start", 2000)) {
+      Serial.printf("[%s] I2S lockForMic failed\n", kTag);
+      return false;
+    }
+    i2sLocked_ = true;
+  }
+
   stopSpeakerForRec_();  // 録音前にSpeakerを止めてI2Sを空ける
 
   // ★Mic を必ず begin（録音セッション毎に確実化）
   if (!ensureMicBegun_()) {
     restoreSpeakerAfterRec_();
+    if (i2sLocked_) {
+      I2SManager::instance().unlock("REC.start.fail");
+      i2sLocked_ = false;
+    }
     return false;
   }
 
   if (!allocBuffer_()) {
     endMic_();                 // ★失敗時も解放
     restoreSpeakerAfterRec_();
+    if (i2sLocked_) {
+      I2SManager::instance().unlock("REC.start.fail");
+      i2sLocked_ = false;
+    }
     return false;
   }
   if (!startTask_()) {
@@ -257,9 +292,20 @@ bool AudioRecorder::stop(uint32_t nowMs) {
 
   stopMs_ = nowMs;
 
+  // stopReqでタスクが止まっても、I2S内部がまだ録音中の可能性があるので少し待つ
+  waitMicIdle_(200);
+  Serial.printf("[%s] stop finalize mic: rec=%d en=%d\n", kTag,
+                M5.Mic.isRecording() ? 1 : 0,
+                M5.Mic.isEnabled() ? 1 : 0);
+
   // ★順序が重要：Mic -> end、（少し待つ）、Speaker -> begin
   endMic_();
   restoreSpeakerAfterRec_();
+
+  if (i2sLocked_) {
+    I2SManager::instance().unlock("REC.stop");
+    i2sLocked_ = false;
+  }
 
   Serial.printf("[%s] stop done ok=%d samples=%u peak=%d\n",
                 kTag, ok ? 1 : 0, (unsigned)capturedSamples_, (int)peakAbs_);
@@ -272,8 +318,13 @@ bool AudioRecorder::stop(uint32_t nowMs) {
 void AudioRecorder::cancel() {
   if (!recording_) {
     freeBuffer_();
+    waitMicIdle_(100);
     endMic_();                 // ★ここも解放
     restoreSpeakerAfterRec_();
+    if (i2sLocked_) {
+      I2SManager::instance().unlock("REC.cancel(idle)");
+      i2sLocked_ = false;
+    }
     Serial.printf("[%s] cancel done (buffer freed)\n", kTag);
     return;
   }
@@ -284,9 +335,19 @@ void AudioRecorder::cancel() {
 
   freeBuffer_();
 
+  waitMicIdle_(200);
+  Serial.printf("[%s] cancel finalize mic: rec=%d en=%d\n", kTag,
+                M5.Mic.isRecording() ? 1 : 0,
+                M5.Mic.isEnabled() ? 1 : 0);
+
   // ★順序：Mic end → Speaker復帰
   endMic_();
   restoreSpeakerAfterRec_();
+
+  if (i2sLocked_) {
+    I2SManager::instance().unlock("REC.cancel");
+    i2sLocked_ = false;
+  }
 
   Serial.printf("[%s] cancel done (buffer freed)\n", kTag);
 }

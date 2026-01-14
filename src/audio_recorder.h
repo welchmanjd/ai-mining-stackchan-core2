@@ -70,6 +70,9 @@ private:
   volatile bool cancelReq_ = false;
   volatile bool forceAbort_ = false;
 
+  // I2S lock を録音セッション中保持しているか（Mic owner を握る）
+  bool i2sLocked_ = false;
+ 
   uint32_t startMs_ = 0;
   uint32_t stopMs_  = 0;
 

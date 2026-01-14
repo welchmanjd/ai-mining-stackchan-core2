@@ -120,4 +120,7 @@ private:
 
   uint32_t seq_ = 0;
   LastResult last_;
+
+  bool i2sLocked_ = false;   // ★追加
+
 };

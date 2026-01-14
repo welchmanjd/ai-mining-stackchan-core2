@@ -5,7 +5,7 @@
 
 #include <M5Unified.h>
 #include <WiFi.h>
-
+#include "i2s_manager.h"
 
 // ---------- helpers ----------
 static String trimCopy_(const String& s) {
@@ -540,7 +540,12 @@ void AzureTts::poll() {
   }
 
   if (state_ == Ready) {
+    // 念のため：Readyで再生しない設定なら即終了（lock残りがあれば解放）
     if (!playbackEnabled_) {
+      if (i2sLocked_) {
+        I2SManager::instance().unlock("TTS.disabled");
+        i2sLocked_ = false;
+      }
       free(wav_);
       wav_ = nullptr;
       wavLen_ = 0;
@@ -552,6 +557,27 @@ void AzureTts::poll() {
     // If speaker is still playing something else, wait here.
     if (M5.Speaker.isPlaying()) {
       return;
+    }
+
+    // ---- I2S owner: Speaker（再生中はMic側 begin/end をブロック） ----
+    if (!i2sLocked_) {
+      if (!I2SManager::instance().lockForSpeaker("TTS.play", 4000)) {
+        M5.Log.printf("[TTS] I2S lockForSpeaker failed\n");
+        free(wav_);
+        wav_ = nullptr;
+        wavLen_ = 0;
+        state_ = Idle;
+        doneSpeakId_ = currentSpeakId_;
+        return;
+      }
+      i2sLocked_ = true;
+    }
+
+    // Speaker が end() 済みのケース（録音の都合など）に備える
+    if (!M5.Speaker.isEnabled()) {
+      M5.Log.printf("[TTS] speaker not enabled -> begin\n");
+      M5.Speaker.begin();
+      // volume は begin() で setVolume 済み想定。必要なら begin() 側で設定しておく。
     }
 
     bool ok = false;
@@ -571,7 +597,7 @@ void AzureTts::poll() {
                       (unsigned)wavLen_, (unsigned)info.pcmBytes,
                       (unsigned long)info.sampleRate, (unsigned long)durMs);
 
-        // Preferred: playWav() streams/decodes correctly (avoids truncation that can happen with a single playRaw call).
+        // Preferred: playWav()
         ok = M5.Speaker.playWav(wav_, (uint32_t)wavLen_, 1, 0, true);
         if (!ok) {
           M5.Log.printf("[TTS] playWav failed -> fallback playRaw\n");
@@ -595,13 +621,18 @@ void AzureTts::poll() {
       wavLen_ = 0;
       state_ = Idle;
       doneSpeakId_ = currentSpeakId_;
+
+      // ★失敗でも必ず unlock
+      if (i2sLocked_) {
+        I2SManager::instance().unlock("TTS.play_fail");
+        i2sLocked_ = false;
+      }
       return;
     }
 
-    // play
+    // play started
     state_ = Playing;
   }
-
 
   if (state_ == Playing) {
     if (!M5.Speaker.isPlaying()) {
@@ -610,9 +641,16 @@ void AzureTts::poll() {
       wavLen_ = 0;
       state_ = Idle;
       doneSpeakId_ = currentSpeakId_;
+
+      // ★再生終了で unlock
+      if (i2sLocked_) {
+        I2SManager::instance().unlock("TTS.done");
+        i2sLocked_ = false;
+      }
     }
   }
 }
+
 
 // ---------- token / fetch ----------
 

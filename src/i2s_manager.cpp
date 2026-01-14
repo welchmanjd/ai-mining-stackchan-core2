@@ -1,0 +1,128 @@
+#include "i2s_manager.h"
+#include "logging.h"
+
+I2SManager& I2SManager::instance() {
+  static I2SManager g;
+  return g;
+}
+
+I2SManager::I2SManager() {
+  mutex_ = xSemaphoreCreateRecursiveMutex();
+  if (!mutex_) {
+    mc_logf("[I2S] ERROR: create mutex failed");
+  } else {
+    mc_logf("[I2S] mutex created");
+  }
+}
+
+const char* I2SManager::ownerStr_(Owner o) const {
+  switch (o) {
+    case None:    return "None";
+    case Mic:     return "Mic";
+    case Speaker: return "Speaker";
+    default:      return "?";
+  }
+}
+
+bool I2SManager::lockForMic(const char* callsite, uint32_t timeoutMs) {
+  return lock_(Mic, callsite, timeoutMs);
+}
+
+bool I2SManager::lockForSpeaker(const char* callsite, uint32_t timeoutMs) {
+  return lock_(Speaker, callsite, timeoutMs);
+}
+
+bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
+  if (!mutex_) return false;
+
+  const uint32_t t0 = millis();
+  const TickType_t ticks = (timeoutMs == 0) ? 0 : pdMS_TO_TICKS(timeoutMs);
+
+  const Owner snapOwner = owner_;
+  const char* snapSite = owner_callsite_;
+  const uint32_t snapSince = owner_since_ms_;
+
+  const BaseType_t ok = xSemaphoreTakeRecursive(mutex_, ticks);
+  const uint32_t waited = millis() - t0;
+
+  if (ok != pdTRUE) {
+    const uint32_t heldMs = (snapOwner == None) ? 0 : (millis() - snapSince);
+    mc_logf("[I2S] lock FAIL want=%s waited=%lums cur=%s held=%lums curSite=%s reqSite=%s",
+            ownerStr_(want),
+            (unsigned long)waited,
+            ownerStr_(snapOwner),
+            (unsigned long)heldMs,
+            snapSite ? snapSite : "",
+            callsite ? callsite : "");
+    LOG_EVT_INFO("I2S_OWNER", "lock_fail want=%s waited=%lums cur=%s held=%lums",
+                 ownerStr_(want),
+                 (unsigned long)waited,
+                 ownerStr_(snapOwner),
+                 (unsigned long)heldMs);
+    return false;
+  }
+
+  // first acquire => owner transition
+  if (depth_ == 0) {
+    const Owner prev = owner_;
+    const uint32_t prevHeldMs = (prev == None) ? 0 : (millis() - owner_since_ms_);
+
+    owner_ = want;
+    owner_callsite_ = callsite ? callsite : "";
+    owner_since_ms_ = millis();
+
+    mc_logf("[I2S] owner %s -> %s waited=%lums prevHeld=%lums site=%s",
+            ownerStr_(prev),
+            ownerStr_(want),
+            (unsigned long)waited,
+            (unsigned long)prevHeldMs,
+            owner_callsite_);
+
+    LOG_EVT_INFO("I2S_OWNER", "owner %s->%s waited=%lums prevHeld=%lums site=%s",
+                 ownerStr_(prev),
+                 ownerStr_(want),
+                 (unsigned long)waited,
+                 (unsigned long)prevHeldMs,
+                 owner_callsite_);
+  } else {
+    mc_logf("[I2S] lock reenter owner=%s depth=%lu waited=%lums site=%s",
+            ownerStr_(owner_),
+            (unsigned long)depth_,
+            (unsigned long)waited,
+            callsite ? callsite : "");
+  }
+
+  depth_++;
+  return true;
+}
+
+void I2SManager::unlock(const char* callsite) {
+  if (!mutex_) return;
+
+  if (depth_ == 0) {
+    mc_logf("[I2S] unlock WARN depth=0 site=%s", callsite ? callsite : "");
+    return;
+  }
+
+  depth_--;
+
+  if (depth_ == 0) {
+    const Owner prev = owner_;
+    const uint32_t heldMs = (prev == None) ? 0 : (millis() - owner_since_ms_);
+
+    owner_ = None;
+    owner_callsite_ = "";
+    owner_since_ms_ = 0;
+
+    mc_logf("[I2S] owner %s -> None held=%lums unlockSite=%s",
+            ownerStr_(prev),
+            (unsigned long)heldMs,
+            callsite ? callsite : "");
+    LOG_EVT_INFO("I2S_OWNER", "owner %s->None held=%lums unlockSite=%s",
+                 ownerStr_(prev),
+                 (unsigned long)heldMs,
+                 callsite ? callsite : "");
+  }
+
+  xSemaphoreGiveRecursive(mutex_);
+}

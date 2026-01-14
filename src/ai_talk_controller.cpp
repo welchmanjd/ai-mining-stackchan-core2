@@ -172,14 +172,6 @@ void AiTalkController::tick(uint32_t nowMs) {
         // 10秒で確定停止 → THINKING
         lastRecOk_ = recorder_.stop(nowMs);
 
-        // ★重要：Mic(I2S)が掴みっぱなしだと、直後のTTSで Speaker のI2S初期化が失敗して音が壊れることがある。
-        // stop()が「録音停止」だけで Mic.end() していない実装でもここで確実に解放する。
-        if (M5.Mic.isEnabled()) {
-          mc_logf("[REC] mic still enabled after stop -> end (release I2S)");
-          M5.Mic.end();
-          delay(10);
-        }
-
         // stopがTIMEOUTでも、サンプルが取れているなら続行させる（救済）
         const uint32_t durMs = recorder_.durationMs();
         const size_t samples = recorder_.samples();
