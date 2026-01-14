@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <freertos/task.h>
 
 // Mic/Speaker の I2S begin/end を一本化するための排他
 class I2SManager {
@@ -30,5 +31,7 @@ private:
   volatile Owner owner_ = None;
   const char* owner_callsite_ = "";
   uint32_t owner_since_ms_ = 0;
+  TaskHandle_t owner_task_ = nullptr;
   uint32_t depth_ = 0;
+
 };

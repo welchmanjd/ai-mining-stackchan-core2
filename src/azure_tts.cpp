@@ -438,6 +438,7 @@ void AzureTts::begin(uint8_t volume) {
                 (unsigned)endpoint_.length());
 
   // audio
+  defaultVolume_ = volume;
   M5.Speaker.setVolume(volume);
 
   // HTTPS
@@ -579,6 +580,22 @@ void AzureTts::poll() {
     if (!M5.Speaker.isEnabled()) {
       M5.Log.printf("[TTS] speaker not enabled -> begin\n");
       M5.Speaker.begin();
+    }
+
+    // ---- ensure volume (prevent silent) ----
+    {
+      const int vol = (int)M5.Speaker.getVolume();
+      M5.Log.printf("[TTS] spk state: enabled=%d playing=%d vol=%d defaultVol=%d\n",
+                    M5.Speaker.isEnabled() ? 1 : 0,
+                    M5.Speaker.isPlaying() ? 1 : 0,
+                    vol,
+                    (int)defaultVolume_);
+
+      // 無音の典型：volume=0 が残っている
+      if (vol == 0 && defaultVolume_ > 0) {
+        M5.Log.printf("[TTS] spk vol=0 -> restore %d\n", (int)defaultVolume_);
+        M5.Speaker.setVolume(defaultVolume_);
+      }
     }
 
     bool ok = false;

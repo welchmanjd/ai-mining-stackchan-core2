@@ -82,6 +82,9 @@ private:
   // speaker復帰用
   uint8_t savedSpkVolume_ = 128;
   bool savedSpkVolumeValid_ = false;
+  bool speakerEndedByRec_ = false;   // 今回の録音のために end() したか
+  bool speakerSoftMuted_ = false;   // stop()+volume0 のソフト切替をしたか
+
 
   // task
   TaskHandle_t task_ = nullptr;

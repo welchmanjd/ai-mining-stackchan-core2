@@ -1,6 +1,7 @@
 // src/azure_tts.h
 #pragma once
 #include <Arduino.h>
+#include "config.h"
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 
@@ -11,7 +12,7 @@
 // ★重要：設定は config_private の MC_AZ_* だけでなく、mc_config_store(LittleFS)の値も使う
 class AzureTts {
 public:
-  void begin(uint8_t volume = 180);
+  void begin(uint8_t volume = MC_SPK_VOLUME);
 
   bool speakAsync(const String& text, uint32_t speakId, const char* voice = nullptr);
   bool speakAsync(const String& text, const char* voice = nullptr) { return speakAsync(text, 0, voice); }
@@ -122,5 +123,7 @@ private:
   LastResult last_;
 
   bool i2sLocked_ = false;   // ★追加
+
+  uint8_t defaultVolume_ = MC_SPK_VOLUME;
 
 };

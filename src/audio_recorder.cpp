@@ -1,12 +1,42 @@
 #include "audio_recorder.h"
 #include "logging.h"
 #include "i2s_manager.h"
+#include "config.h"
+
 
 #include <M5Unified.h>
 #include <LittleFS.h>
 #include <type_traits>
 
+// Arduino-ESP32 ships ESP-IDF's I2S driver headers.
+// We use these *only* to force-uninstall stale drivers after switching Mic <-> Speaker.
+#include <driver/i2s.h>
+#include <esp_err.h>
+
 static const char* kTag = "REC";
+
+// Force-uninstall I2S driver instances to avoid noisy logs like:
+//   "E ... I2S: register I2S object to platform failed"
+// and to reduce the chance of intermittent silence after Mic <-> Speaker switching.
+static void __attribute__((unused)) forceUninstallI2S_(const char* reason) {
+  // まず I2S1 を試す（最近のログではこちらが「入っている」ことが多い）
+  esp_err_t e1 = i2s_driver_uninstall(I2S_NUM_1);
+
+  // I2S1 が「入ってない」場合だけ I2S0 を試す
+  esp_err_t e0 = ESP_ERR_INVALID_STATE;
+  if (e1 == ESP_ERR_INVALID_STATE) {
+    e0 = i2s_driver_uninstall(I2S_NUM_0);
+  }
+
+  Serial.printf("[%s] i2s uninstall: p1=%d(%s) p0=%d(%s) reason=%s\n",
+                kTag,
+                (int)e1, esp_err_to_name(e1),
+                (int)e0, esp_err_to_name(e0),
+                reason ? reason : "-");
+}
+
+
+
 
 static void waitMicIdle_(uint32_t timeoutMs) {
   const uint32_t t0 = millis();
@@ -70,6 +100,8 @@ void AudioRecorder::stopSpeakerForRec_() {
   }
 }
 
+
+
 void AudioRecorder::restoreSpeakerAfterRec_() {
   if (!savedSpkVolumeValid_) return;
 
@@ -81,6 +113,10 @@ void AudioRecorder::restoreSpeakerAfterRec_() {
 
     // 念のため：残骸が残ってると register failed になり得るので end を叩いてから begin
     M5.Speaker.end();
+
+    // Some builds leave an I2S driver registered even after end(); force-uninstall.
+    forceUninstallI2S_("restoreSpeakerAfterRec");
+
     delay(10);
 
     M5.Speaker.begin();
@@ -100,19 +136,38 @@ void AudioRecorder::restoreSpeakerAfterRec_() {
 }
 
 
-
 bool AudioRecorder::ensureMicBegun_() {
+
   if (micBegun_) return true;
 
-  // Mic begin（M5Unified）
-  bool ok = M5.Mic.begin();
-  micBegun_ = ok;
+  // サンプルレートを先に明示
+  M5.Mic.setSampleRate(sampleRate_);
 
+  // まずは通常 begin（Speakerはソフト停止/ミュート済みの想定）
+  bool ok = M5.Mic.begin();
   Serial.printf("[%s] mic begin ok=%d sr=%u\n",
                 kTag, ok ? 1 : 0, (unsigned)sampleRate_);
+  micBegun_ = ok;
+
+  if (ok) return true;
+
+  // フォールバック：Speaker を end() してからリトライ（begin/end多発を避けつつ、環境差に対応）
+  if (!speakerEndedByRec_ && M5.Speaker.isEnabled()) {
+    Serial.printf("[%s] mic begin failed -> fallback speaker.end and retry\n", kTag);
+    M5.Speaker.end();
+    speakerEndedByRec_ = true;
+    speakerSoftMuted_ = false;
+    delay(20);
+
+    ok = M5.Mic.begin();
+    Serial.printf("[%s] mic begin(retry) ok=%d sr=%u\n",
+                  kTag, ok ? 1 : 0, (unsigned)sampleRate_);
+    micBegun_ = ok;
+  }
 
   return ok;
 }
+
 
 void AudioRecorder::endMic_() {
   if (!micBegun_) return;
@@ -140,6 +195,12 @@ void AudioRecorder::endMic_() {
     M5.Mic.end();
     delay(20);
   }
+
+  // ★重要：Speakerが元々無効だったケースでも、Mic側のI2Sドライバ残骸を確実に消す
+  // これをやらないと、次の Speaker.begin / play で
+  //   "register I2S object to platform failed"
+  // が出ることがある。
+  forceUninstallI2S_("endMic");
 
   micBegun_ = false;
 
