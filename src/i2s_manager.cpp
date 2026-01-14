@@ -32,12 +32,15 @@ bool I2SManager::lockForSpeaker(const char* callsite, uint32_t timeoutMs) {
   return lock_(Speaker, callsite, timeoutMs);
 }
 
+
+
 bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
   if (!mutex_) return false;
 
   const uint32_t t0 = millis();
   const TickType_t ticks = (timeoutMs == 0) ? 0 : pdMS_TO_TICKS(timeoutMs);
 
+  // タイムアウトログ用：ブロック前のスナップショット
   const Owner snapOwner = owner_;
   const char* snapSite = owner_callsite_;
   const uint32_t snapSince = owner_since_ms_;
@@ -59,6 +62,31 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
                  (unsigned long)waited,
                  ownerStr_(snapOwner),
                  (unsigned long)heldMs);
+    return false;
+  }
+
+  // ---- Phase1の核心：owner整合性ルール ----
+  // depth_>0（＝同一タスクでrecursive acquireできた）場合、
+  // ownerが違うなら「reenter禁止」で失敗にする。
+  if (depth_ > 0 && owner_ != want) {
+    const uint32_t heldMs = (owner_ == None) ? 0 : (millis() - owner_since_ms_);
+    mc_logf("[I2S] lock DENY reenter_mismatch cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
+            ownerStr_(owner_),
+            ownerStr_(want),
+            (unsigned long)depth_,
+            (unsigned long)waited,
+            (unsigned long)heldMs,
+            owner_callsite_ ? owner_callsite_ : "",
+            callsite ? callsite : "");
+    LOG_EVT_INFO("I2S_OWNER", "deny_reenter cur=%s want=%s depth=%lu waited=%lums held=%lums",
+                 ownerStr_(owner_),
+                 ownerStr_(want),
+                 (unsigned long)depth_,
+                 (unsigned long)waited,
+                 (unsigned long)heldMs);
+
+    // recursive take を取り消す
+    xSemaphoreGiveRecursive(mutex_);
     return false;
   }
 
@@ -85,16 +113,20 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
                  (unsigned long)prevHeldMs,
                  owner_callsite_);
   } else {
-    mc_logf("[I2S] lock reenter owner=%s depth=%lu waited=%lums site=%s",
+    // 同ownerの再入のみ許可
+    mc_logf("[I2S] lock reenter owner=%s depth=%lu waited=%lums reqSite=%s ownerSite=%s",
             ownerStr_(owner_),
             (unsigned long)depth_,
             (unsigned long)waited,
-            callsite ? callsite : "");
+            callsite ? callsite : "",
+            owner_callsite_ ? owner_callsite_ : "");
   }
 
   depth_++;
   return true;
 }
+
+
 
 void I2SManager::unlock(const char* callsite) {
   if (!mutex_) return;

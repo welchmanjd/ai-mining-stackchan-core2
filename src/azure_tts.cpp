@@ -533,22 +533,18 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
 }
 
 void AzureTts::poll() {
-  // session reset is performed only when idle
-  if (state_ == Idle && sessionResetPending_) {
-    resetSession_();
-    sessionResetPending_ = false;
+  if (state_ == Idle) return;
+
+  // waiting fetch
+  if (state_ == Fetching) {
+    // fetch task が完了したら state_ を Ready にして wav_ をセットする想定
+    return;
   }
 
+  // ready to play
   if (state_ == Ready) {
-    // 念のため：Readyで再生しない設定なら即終了（lock残りがあれば解放）
-    if (!playbackEnabled_) {
-      if (i2sLocked_) {
-        I2SManager::instance().unlock("TTS.disabled");
-        i2sLocked_ = false;
-      }
-      free(wav_);
-      wav_ = nullptr;
-      wavLen_ = 0;
+    if (!wav_ || wavLen_ == 0) {
+      // nothing to play
       state_ = Idle;
       doneSpeakId_ = currentSpeakId_;
       return;
@@ -562,7 +558,13 @@ void AzureTts::poll() {
     // ---- I2S owner: Speaker（再生中はMic側 begin/end をブロック） ----
     if (!i2sLocked_) {
       if (!I2SManager::instance().lockForSpeaker("TTS.play", 4000)) {
-        M5.Log.printf("[TTS] I2S lockForSpeaker failed\n");
+        I2SManager& m = I2SManager::instance();
+        M5.Log.printf("[TTS] I2S lockForSpeaker failed -> drop speakId=%lu wav=%uB owner=%u depth=%lu ownerSite=%s\n",
+                      (unsigned long)currentSpeakId_,
+                      (unsigned)wavLen_,
+                      (unsigned)m.owner(),
+                      (unsigned long)m.depth(),
+                      m.ownerCallsite() ? m.ownerCallsite() : "");
         free(wav_);
         wav_ = nullptr;
         wavLen_ = 0;
@@ -570,47 +572,23 @@ void AzureTts::poll() {
         doneSpeakId_ = currentSpeakId_;
         return;
       }
-      i2sLocked_ = true;
+      i2sLocked_ = true;  // ★重要：lock成功したら必ず立てる（unlockの条件になる）
     }
 
     // Speaker が end() 済みのケース（録音の都合など）に備える
     if (!M5.Speaker.isEnabled()) {
       M5.Log.printf("[TTS] speaker not enabled -> begin\n");
       M5.Speaker.begin();
-      // volume は begin() で setVolume 済み想定。必要なら begin() 側で設定しておく。
     }
 
     bool ok = false;
     if (wav_ && wavLen_ > 0) {
-      // Parse for diagnostics (and fallback)
-      WavPcmInfo_ info;
-      const bool isWav = parseWavPcm_(wav_, wavLen_, &info);
-
-      if (isWav) {
-        // Rough duration estimate: pcmBytes / (sampleRate * 2 bytes) * 1000ms
-        uint32_t durMs = 0;
-        if (info.sampleRate > 0 && info.pcmBytes > 0) {
-          durMs = (uint32_t)(((uint64_t)info.pcmBytes * 1000ULL) /
-                             ((uint64_t)info.sampleRate * 2ULL));
-        }
-        M5.Log.printf("[TTS] play WAV: wav=%uB pcm=%uB sr=%luHz dur~%lums\n",
-                      (unsigned)wavLen_, (unsigned)info.pcmBytes,
-                      (unsigned long)info.sampleRate, (unsigned long)durMs);
-
-        // Preferred: playWav()
-        ok = M5.Speaker.playWav(wav_, (uint32_t)wavLen_, 1, 0, true);
-        if (!ok) {
-          M5.Log.printf("[TTS] playWav failed -> fallback playRaw\n");
-          ok = M5.Speaker.playRaw((const int16_t*)info.pcm,
-                                  info.pcmBytes / 2,
-                                  info.sampleRate,
-                                  false,
-                                  1);
-        }
-      } else {
-        M5.Log.printf("[TTS] WAV parse failed -> fallback playRaw as-is\n");
-        logHeadBytes_(wav_, wavLen_);
-        ok = M5.Speaker.playRaw((const int16_t*)wav_, wavLen_ / 2, 16000, false, 1);
+      // play wav
+      ok = M5.Speaker.playWav(wav_, wavLen_);
+      if (ok) {
+        M5.Log.printf("[TTS] play WAV: wav=%uB pcm=%uB sr=16000Hz dur~%lums\n",
+                      (unsigned)wavLen_, (unsigned)(wavLen_ >= 44 ? (wavLen_ - 44) : 0),
+                      (unsigned long)((wavLen_ >= 44 ? (wavLen_ - 44) : 0) / 32)); // rough
       }
     }
 

@@ -71,11 +71,35 @@ void AudioRecorder::stopSpeakerForRec_() {
 }
 
 void AudioRecorder::restoreSpeakerAfterRec_() {
-  if (savedSpkVolumeValid_) {
+  if (!savedSpkVolumeValid_) return;
+
+  // Mic -> Speaker 切り替えの直後はI2Sがまだ不安定な場合があるので少し待つ
+  delay(20);
+
+  if (!M5.Speaker.isEnabled()) {
+    Serial.printf("[%s] speaker begin (restore)\n", kTag);
+
+    // 念のため：残骸が残ってると register failed になり得るので end を叩いてから begin
+    M5.Speaker.end();
+    delay(10);
+
     M5.Speaker.begin();
-    M5.Speaker.setVolume(savedSpkVolume_);
+    delay(10);
+
+    if (!M5.Speaker.isEnabled()) {
+      Serial.printf("[%s] speaker begin failed -> leave disabled (TTS will begin later)\n", kTag);
+      savedSpkVolumeValid_ = false;
+      return;
+    }
   }
+
+  M5.Speaker.setVolume(savedSpkVolume_);
+  savedSpkVolumeValid_ = false;
+
+  Serial.printf("[%s] speaker restored vol=%d\n", kTag, (int)savedSpkVolume_);
 }
+
+
 
 bool AudioRecorder::ensureMicBegun_() {
   if (micBegun_) return true;
@@ -91,27 +115,39 @@ bool AudioRecorder::ensureMicBegun_() {
 }
 
 void AudioRecorder::endMic_() {
-  // isEnabled() でもよいが、micBegun_ の方が意図が明確
   if (!micBegun_) return;
 
-  // 念のため：lock未取得で呼ばれても排他が効くようにする（通常は録音中にlock済み）
+  // I2S lock is expected to be held by REC
   bool tempLock = false;
   if (!i2sLocked_) {
-    tempLock = I2SManager::instance().lockForMic("REC.endMic", 2000);
+    if (I2SManager::instance().lockForMic("REC.endMic", 2000)) {
+      tempLock = true;
+    }
   }
 
-  M5.Mic.end();
-  micBegun_ = false;
+  // まず録音が完全に止まるのを待つ
+  waitMicIdle_(200);
 
   Serial.printf("[%s] mic end\n", kTag);
+  M5.Mic.end();
 
-  // I2S解放→次のSpeaker beginがコケるのを避ける保険
-  delay(5);
+  // end直後に少し待つ（I2Sドライバ解放待ち）
+  delay(20);
+
+  // 念のため：まだenabled扱いならもう一回 end を試す
+  if (M5.Mic.isEnabled()) {
+    Serial.printf("[%s] mic still enabled after end -> retry\n", kTag);
+    M5.Mic.end();
+    delay(20);
+  }
+
+  micBegun_ = false;
 
   if (tempLock) {
     I2SManager::instance().unlock("REC.endMic");
   }
 }
+
 
 
 bool AudioRecorder::startMicForRec_() {
@@ -192,11 +228,17 @@ bool AudioRecorder::start(uint32_t nowMs) {
   // I2S owner: Mic（録音中はSpeakerのI2S利用をブロック）
   if (!i2sLocked_) {
     if (!I2SManager::instance().lockForMic("REC.start", 2000)) {
-      Serial.printf("[%s] I2S lockForMic failed\n", kTag);
+      I2SManager& m = I2SManager::instance();
+      Serial.printf("[%s] start ok=0 (I2S lockForMic failed owner=%u depth=%lu ownerSite=%s)\n",
+                    kTag,
+                    (unsigned)m.owner(),
+                    (unsigned long)m.depth(),
+                    m.ownerCallsite() ? m.ownerCallsite() : "");
       return false;
     }
     i2sLocked_ = true;
   }
+
 
   stopSpeakerForRec_();  // 録音前にSpeakerを止めてI2Sを空ける
 
@@ -393,6 +435,8 @@ void AudioRecorder::taskLoop_() {
       continue;
     }
 
+    bool naturalEnd = false;  // ★stop()/cancel()要求ではなく自然終了したか
+
     // start() で recording_=true になったタイミングで録音を進める
     // recordにsampleRateを渡して「狙ったフォーマットのPCM」を得る
     while (recording_) {
@@ -455,12 +499,36 @@ void AudioRecorder::taskLoop_() {
         mc_logf("[REC] buffer full/time -> stop (samples=%u peak=%d)",
                 (unsigned)capturedSamples_, (int)peakAbs_);
         stopMs_ = millis();
+        naturalEnd = true;     // ★自然終了
         recording_ = false;
         break;
       }
 
+
       vTaskDelay(pdMS_TO_TICKS(2));
     }
+
+    // ★自然終了の場合：stop() が呼ばれない経路でも I2S を解放する
+    if (naturalEnd) {
+      waitMicIdle_(200);
+      Serial.printf("[%s] autoStop finalize mic: rec=%d en=%d\n", kTag,
+                    M5.Mic.isRecording() ? 1 : 0,
+                    M5.Mic.isEnabled() ? 1 : 0);
+
+      // Mic end → Speaker復帰 → I2S unlock（stop() と同等の後始末）
+      endMic_();
+      restoreSpeakerAfterRec_();
+
+      if (i2sLocked_) {
+        I2SManager::instance().unlock("REC.autoStop");
+        i2sLocked_ = false;
+      }
+
+      Serial.printf("[%s] autoStop finalize done samples=%u peak=%d\n",
+                    kTag, (unsigned)capturedSamples_, (int)peakAbs_);
+    }
+
+
 
     // stop/cancel フラグ掃除
     stopReq_ = false;
