@@ -4,6 +4,7 @@
 #include "config.h"
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <string.h>
 
 // Azure TTS を「取得(HTTPS)→WAV再生(M5Unified)」まで行う最小モジュール。
 // ・speakAsync() でHTTP取得は別タスク
@@ -16,6 +17,8 @@ public:
 
   bool speakAsync(const String& text, uint32_t speakId, const char* voice = nullptr);
   bool speakAsync(const String& text, const char* voice = nullptr) { return speakAsync(text, 0, voice); }
+  // Cancel an in-flight speak request (best-effort; prevents late play)
+  void cancel(uint32_t speakId, const char* reason);
 
   void poll();
 
@@ -82,6 +85,10 @@ private:
   TaskHandle_t   task_  = nullptr;
   uint32_t currentSpeakId_ = 0;
   volatile uint32_t doneSpeakId_ = 0;
+  // cancel request (thread-safe)
+  volatile uint32_t cancelSpeakId_ = 0;
+  char cancelReason_[24] = {0};
+  portMUX_TYPE cancelMux_;
 
   String reqText_;
   String reqVoice_;

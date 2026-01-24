@@ -47,6 +47,9 @@ public:
   // 吹き出し更新要求（必ず main 側で UIMining::setStackchanSpeech() へ）
   bool consumeBubbleUpdate(String* outText);
 
+  // TTS中断通知（main が 1回だけ consume して cancel+clear する）
+  bool consumeAbortTts(uint32_t* outId, const char** outReason);
+
 private:
   // ---- transitions ----
   void enterIdle_(uint32_t nowMs, const char* reason);
@@ -110,5 +113,8 @@ private:
   // cooldown延長用
   bool   errorFlag_ = false;
 
+  // TTS abort (consume方式)
+  uint32_t abortTtsId_ = 0;
+  char abortTtsReason_[24] = {0};
 
 };

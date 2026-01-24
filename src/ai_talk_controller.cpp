@@ -4,6 +4,7 @@
 #include "openai_llm.h"
 #include <M5Unified.h>
 #include "config.h"
+#include <string.h>
 
 // ---- timings ----
 static constexpr uint32_t kListeningTimeoutMs      = (uint32_t)MC_AI_LISTEN_MAX_SECONDS * 1000UL;
@@ -94,6 +95,9 @@ void AiTalkController::begin(Orchestrator* orch) {
   mc_logf("[REC] begin ok=%d", recOk ? 1 : 0);
 
   enterIdle_(millis(), "begin");
+  abortTtsId_ = 0;
+  abortTtsReason_[0] = 0;
+
 }
 
 
@@ -159,6 +163,16 @@ void AiTalkController::onTtsDone(uint32_t ttsId, uint32_t nowMs) {
     enterPostSpeakBlank_(nowMs);
   }
 }
+
+bool AiTalkController::consumeAbortTts(uint32_t* outId, const char** outReason) {
+  if (abortTtsId_ == 0) return false;
+  if (outId) *outId = abortTtsId_;
+  if (outReason) *outReason = (abortTtsReason_[0] ? abortTtsReason_ : nullptr);
+  abortTtsId_ = 0;
+  abortTtsReason_[0] = 0;
+  return true;
+}
+
 
 void AiTalkController::tick(uint32_t nowMs) {
   switch (state_) {
@@ -262,6 +276,12 @@ void AiTalkController::tick(uint32_t nowMs) {
                   (unsigned long)elapsed,
                   (unsigned long)speakHardTimeoutMs_,
                   (unsigned long)expectTtsId_);
+          
+          // abort通知（mainで cancel+clear する）
+          abortTtsId_ = expectTtsId_;
+          strncpy(abortTtsReason_, "tts_timeout", sizeof(abortTtsReason_) - 1);
+          abortTtsReason_[sizeof(abortTtsReason_) - 1] = 0;
+        
           expectTtsId_ = 0;        // 遅延doneは無視する（次に引きずらない）
           enterCooldown_(nowMs, true, "tts_timeout");
         } else {

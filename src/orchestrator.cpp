@@ -104,6 +104,22 @@ void Orchestrator::setExpectedSpeak(uint32_t speakId, uint32_t rid) {
                (unsigned long)speakId, (unsigned long)rid);
 }
 
+void Orchestrator::clearExpectedSpeak(const char* reason) {
+  const uint32_t old = expectSpeakId_;
+  const AppState from = state_;
+
+  expectSpeakId_ = 0;
+  expectRid_ = 0;
+  mismatchCount_ = 0;
+  state_ = AppState::Idle;
+
+  LOG_EVT_INFO("EVT_ORCH_CLEAR_EXPECT",
+               "from=%d to=%d reason=%s old_expect=%lu",
+               (int)from, (int)state_,
+               reason ? reason : "-",
+               (unsigned long)old);
+}
+
 void Orchestrator::onAudioStart(uint32_t speakId) {
   if (expectSpeakId_ != 0 && speakId == expectSpeakId_) {
     const AppState from = state_;

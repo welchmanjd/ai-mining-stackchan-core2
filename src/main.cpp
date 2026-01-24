@@ -492,6 +492,26 @@ void loop() {
   // AI state machine tick（毎ループ）
   g_ai.tick(now);
 
+  // Phase5-A: abort TTS (consume方式)
+  {
+    uint32_t abortId = 0;
+    const char* reason = nullptr;
+    if (g_ai.consumeAbortTts(&abortId, &reason)) {
+      mc_logf("[MAIN] abort tts id=%lu reason=%s -> cancel+clear inflight+clear orch",
+              (unsigned long)abortId,
+              (reason ? reason : "-"));
+      g_tts.cancel(abortId, reason);
+
+      // 3点セット（＋表示もクリア）
+      g_ttsInflightId = 0;
+      g_ttsInflightRid = 0;
+      g_ttsInflightSpeechId = 0;
+      g_ttsInflightSpeechText = "";
+      UIMining::instance().setStackchanSpeech("");
+      g_orch.clearExpectedSpeak(reason);
+    }
+  }
+
   // ★overlayは毎ループ送らない（上部文字のチラつき対策）
   // 200msごと、またはAI state変化時のみ送る
   static uint32_t s_lastOverlayPushMs = 0;

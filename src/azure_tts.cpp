@@ -2,6 +2,7 @@
 #include "azure_tts.h"
 #include "mc_config_store.h"
 #include "logging.h"
+#include <string.h>
 
 #include <M5Unified.h>
 #include <WiFi.h>
@@ -454,6 +455,12 @@ void AzureTts::begin(uint8_t volume) {
 
   dnsWarmed_ = false;
   sessionResetPending_ = false;
+
+  // cancel state
+  cancelMux_ = portMUX_INITIALIZER_UNLOCKED;
+  cancelSpeakId_ = 0;
+  cancelReason_[0] = 0;
+
 }
 
 bool AzureTts::isBusy() const {
@@ -519,6 +526,12 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
   currentSpeakId_ = speakId;
   doneSpeakId_ = 0;
 
+  // clear stale cancel (for previous id)
+  portENTER_CRITICAL(&cancelMux_);
+  cancelSpeakId_ = 0;
+  cancelReason_[0] = 0;
+  portEXIT_CRITICAL(&cancelMux_);
+
   state_ = Fetching;
 
   if (!task_) {
@@ -532,6 +545,33 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
   }
   return true;
 }
+
+void AzureTts::cancel(uint32_t speakId, const char* reason) {
+  if (speakId == 0) return;
+
+  // record cancel request
+  portENTER_CRITICAL(&cancelMux_);
+  cancelSpeakId_ = speakId;
+  if (reason && reason[0]) {
+    strncpy(cancelReason_, reason, sizeof(cancelReason_) - 1);
+    cancelReason_[sizeof(cancelReason_) - 1] = 0;
+  } else {
+    cancelReason_[0] = 0;
+  }
+  portEXIT_CRITICAL(&cancelMux_);
+
+  M5.Log.printf("[TTS] cancel req id=%lu reason=%s\n",
+                (unsigned long)speakId,
+                (cancelReason_[0] ? cancelReason_ : "-"));
+
+  // Best-effort: if already PLAYING, try to stop immediately.
+  if (state_ == Playing && currentSpeakId_ == speakId) {
+    M5.Log.printf("[TTS] cancel: stop playing id=%lu\n", (unsigned long)speakId);
+    M5.Speaker.stop();
+  }
+}
+
+
 
 void AzureTts::poll() {
   if (state_ == Idle) return;
@@ -628,6 +668,31 @@ void AzureTts::poll() {
     // play started
     state_ = Playing;
   }
+
+    // cancel guard (prevents late play)
+    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
+      M5.Log.printf("[TTS] canceled before play id=%lu\n", (unsigned long)currentSpeakId_);
+      if (wav_) {
+        free(wav_);
+        wav_ = nullptr;
+      }
+      wavLen_ = 0;
+      state_ = Idle;
+
+      // unlock if somehow locked
+      if (i2sLocked_) {
+        I2SManager::instance().unlock("TTS.cancel_ready");
+        i2sLocked_ = false;
+      }
+
+      // do NOT set doneSpeakId_ (avoid late DONE events)
+      portENTER_CRITICAL(&cancelMux_);
+      cancelSpeakId_ = 0;
+      cancelReason_[0] = 0;
+      portEXIT_CRITICAL(&cancelMux_);
+      return;
+    }
+
 
   if (state_ == Playing) {
     if (!M5.Speaker.isPlaying()) {
@@ -971,6 +1036,19 @@ void AzureTts::taskBody() {
     M5.Log.printf("[TTS] fetch done ok=%d http=%d bytes=%lu took=%lums\n",
                   ok ? 1 : 0, last_.httpCode, (unsigned long)len, (unsigned long)last_.fetchMs);
 
+    // cancel guard: if this speakId was canceled while fetching, never enqueue for playback
+    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
+      M5.Log.printf("[TTS] canceled before play id=%lu\n", (unsigned long)currentSpeakId_);
+      if (buf) free(buf);
+      state_ = Idle;
+
+      // do NOT set doneSpeakId_
+      portENTER_CRITICAL(&cancelMux_);
+      cancelSpeakId_ = 0;
+      cancelReason_[0] = 0;
+      portEXIT_CRITICAL(&cancelMux_);
+      continue;
+    }
 
     if (!ok || !buf || !len) {
       if (buf) free(buf);

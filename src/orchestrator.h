@@ -36,6 +36,9 @@ public:
   SpeakStartCmd popNextPending();
 
   void setExpectedSpeak(uint32_t speakId, uint32_t rid);
+
+  void clearExpectedSpeak(const char* reason);
+
   void onAudioStart(uint32_t speakId);
   // desyncOut: 連続ミスマッチ閾値を超えたら true
   bool onTtsDone(uint32_t gotId, bool* desyncOut = nullptr);
