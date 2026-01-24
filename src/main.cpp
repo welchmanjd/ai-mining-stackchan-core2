@@ -508,7 +508,9 @@ void loop() {
       g_ttsInflightSpeechId = 0;
       g_ttsInflightSpeechText = "";
       UIMining::instance().setStackchanSpeech("");
-      g_orch.clearExpectedSpeak(reason);
+
+      // Phase5-B: expectだけでなくpendingも確実に掃除する
+      g_orch.cancelSpeak(abortId, reason);
     }
   }
 

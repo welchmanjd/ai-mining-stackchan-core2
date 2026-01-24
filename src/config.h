@@ -165,7 +165,7 @@
 // TTS取得(ネット遅延) + 音声再生が終わるまで待つ上限。
 // ここが短いと、音が鳴っているのに AI 側が tts_timeout で先に進んでしまう。
 #ifndef MC_AI_TTS_HARD_TIMEOUT_BASE_MS
-  #define MC_AI_TTS_HARD_TIMEOUT_BASE_MS 25000
+  #define MC_AI_TTS_HARD_TIMEOUT_BASE_MS  25000
 #endif
 #ifndef MC_AI_TTS_HARD_TIMEOUT_PER_BYTE_MS
   #define MC_AI_TTS_HARD_TIMEOUT_PER_BYTE_MS 90

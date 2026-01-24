@@ -120,6 +120,62 @@ void Orchestrator::clearExpectedSpeak(const char* reason) {
                (unsigned long)old);
 }
 
+// ------------------------------------------------------------
+// Phase5-B: cancel speak (clear expect + drop pending for the id)
+// ------------------------------------------------------------
+void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason) {
+  if (speakId == 0) return;
+
+  const AppState from = state_;
+  const uint32_t oldExpect = expectSpeakId_;
+
+  // 1) pending_ から同じ speakId を除去（遅延到着の再生キューを物理的に消す）
+  size_t removed = 0;
+  if (!pending_.empty()) {
+    for (auto it = pending_.begin(); it != pending_.end(); ) {
+      if (it->ttsId == speakId) {      // ★ pending要素のID名が違う場合はここだけ合わせて
+        it = pending_.erase(it);
+        removed++;
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  // 2) expect中なら expect を解除して Idle に戻す
+  bool clearedExpect = false;
+  if (expectSpeakId_ != 0 && expectSpeakId_ == speakId) {
+    expectSpeakId_ = 0;
+    expectRid_ = 0;
+    mismatchCount_ = 0;
+    state_ = AppState::Idle;
+    clearedExpect = true;
+  }
+
+  // 3) ThinkWait監視のリセット（外部からstateをいじるため安全側に倒す）
+  if (state_ != AppState::ThinkWait) {
+    thinkWaitSinceMs_ = 0;
+    timeoutLogged_ = false;
+  }
+  prevState_ = state_;
+
+  // 4) ログ（DoD根拠）
+  LOG_EVT_INFO(
+    "EVT_ORCH_CANCEL_SPEAK",
+    "from=%d to=%d id=%lu reason=%s old_expect=%lu cleared_expect=%d pending_removed=%u pending_left=%u",
+    (int)from,
+    (int)state_,
+    (unsigned long)speakId,
+    reason ? reason : "-",
+    (unsigned long)oldExpect,
+    clearedExpect ? 1 : 0,
+    (unsigned)removed,
+    (unsigned)pending_.size()
+  );
+}
+
+
+
 void Orchestrator::onAudioStart(uint32_t speakId) {
   if (expectSpeakId_ != 0 && speakId == expectSpeakId_) {
     const AppState from = state_;

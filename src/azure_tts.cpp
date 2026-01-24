@@ -584,6 +584,40 @@ void AzureTts::poll() {
 
   // ready to play
   if (state_ == Ready) {
+
+    // ---- Phase5-B: cancel guard (prevents late play) ----
+    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
+      M5.Log.printf("[TTS] canceled before play id=%lu reason=%s\n",
+                    (unsigned long)currentSpeakId_,
+                    (cancelReason_[0] ? cancelReason_ : "-"));
+
+      if (wav_) {
+        free(wav_);
+        wav_ = nullptr;
+      }
+      wavLen_ = 0;
+      state_ = Idle;
+
+      // unlock if somehow locked
+      if (i2sLocked_) {
+        I2SManager::instance().unlock("TTS.cancel_ready");
+        i2sLocked_ = false;
+      }
+
+      // report DONE as canceled
+      last_.ok = false;
+      strncpy(last_.err, "canceled", sizeof(last_.err) - 1);
+      last_.err[sizeof(last_.err) - 1] = 0;
+      doneSpeakId_ = currentSpeakId_;
+
+      portENTER_CRITICAL(&cancelMux_);
+      cancelSpeakId_ = 0;
+      cancelReason_[0] = 0;
+      portEXIT_CRITICAL(&cancelMux_);
+      return;
+    }
+
+
     if (!wav_ || wavLen_ == 0) {
       // nothing to play
       state_ = Idle;
@@ -1038,11 +1072,19 @@ void AzureTts::taskBody() {
 
     // cancel guard: if this speakId was canceled while fetching, never enqueue for playback
     if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
-      M5.Log.printf("[TTS] canceled before play id=%lu\n", (unsigned long)currentSpeakId_);
+      M5.Log.printf("[TTS] canceled while fetching id=%lu reason=%s\n",
+                    (unsigned long)currentSpeakId_,
+                    (cancelReason_[0] ? cancelReason_ : "-"));
+
       if (buf) free(buf);
       state_ = Idle;
 
-      // do NOT set doneSpeakId_
+      // report DONE as canceled
+      last_.ok = false;
+      strncpy(last_.err, "canceled", sizeof(last_.err) - 1);
+      last_.err[sizeof(last_.err) - 1] = 0;
+      doneSpeakId_ = currentSpeakId_;
+
       portENTER_CRITICAL(&cancelMux_);
       cancelSpeakId_ = 0;
       cancelReason_[0] = 0;

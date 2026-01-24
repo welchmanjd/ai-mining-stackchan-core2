@@ -39,6 +39,9 @@ public:
 
   void clearExpectedSpeak(const char* reason);
 
+  // Phase5-B: cancel speak (clear expect + drop pending for the id)
+  void cancelSpeak(uint32_t speakId, const char* reason);
+
   void onAudioStart(uint32_t speakId);
   // desyncOut: 連続ミスマッチ閾値を超えたら true
   bool onTtsDone(uint32_t gotId, bool* desyncOut = nullptr);
