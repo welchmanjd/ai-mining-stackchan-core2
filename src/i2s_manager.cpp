@@ -45,29 +45,6 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
   const char* snapSite = owner_callsite_;
   const uint32_t snapSince = owner_since_ms_;
 
-  // reenter（同一タスクがrecursive mutexを保持中）で owner が違う要求は即DENY
-  const TaskHandle_t curTask = xTaskGetCurrentTaskHandle();
-  if (depth_ > 0 && owner_task_ == curTask && owner_ != want) {
-    const uint32_t heldMs = (owner_ == None) ? 0 : (millis() - owner_since_ms_);
-    mc_logf("[I2S] lock DENY reenter_mismatch cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
-            ownerStr_(owner_),
-            ownerStr_(want),
-            (unsigned long)depth_,
-            0UL,
-            (unsigned long)heldMs,
-            owner_callsite_ ? owner_callsite_ : "",
-            callsite ? callsite : "");
-    LOG_EVT_INFO("I2S_OWNER", "deny_reenter cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
-                 ownerStr_(owner_),
-                 ownerStr_(want),
-                 (unsigned long)depth_,
-                 0UL,
-                 (unsigned long)heldMs,
-                 owner_callsite_ ? owner_callsite_ : "",
-                 callsite ? callsite : "");
-    return false;
-  }
-
   const BaseType_t ok = xSemaphoreTakeRecursive(mutex_, ticks);
   const uint32_t waited = millis() - t0;
 
@@ -88,33 +65,73 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
     return false;
   }
 
-  // ---- Phase1の核心：owner整合性ルール ----
-  // depth_>0（＝同一タスクでrecursive acquireできた）場合、
-  // ownerが違うなら「reenter禁止」で失敗にする。
-  if (depth_ > 0 && owner_ != want) {
+  const TaskHandle_t curTask = xTaskGetCurrentTaskHandle();
+
+  // ---- Phase4の核心：owner整合性ルール（再入は owner一致のみ許可） ----
+  // recursive mutex なので、同一タスクからの再入は xSemaphoreTakeRecursive() が即成功する。
+  // その場合でも「owner不一致」の要求は deny して false を返す（Speaker中にMic開始など）。
+  if (depth_ > 0) {
     const uint32_t heldMs = (owner_ == None) ? 0 : (millis() - owner_since_ms_);
-    mc_logf("[I2S] lock DENY reenter_mismatch cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
+
+    // 本来、depth_>0 で take に成功したなら同一タスク再入のはず。違うなら安全側でdeny。
+    if (owner_task_ != curTask) {
+      mc_logf("[I2S] lock DENY cross_task cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
+              ownerStr_(owner_),
+              ownerStr_(want),
+              (unsigned long)depth_,
+              (unsigned long)waited,
+              (unsigned long)heldMs,
+              owner_callsite_ ? owner_callsite_ : "",
+              callsite ? callsite : "");
+      LOG_EVT_INFO("I2S_OWNER", "deny_cross_task cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
+                   ownerStr_(owner_),
+                   ownerStr_(want),
+                   (unsigned long)depth_,
+                   (unsigned long)waited,
+                   (unsigned long)heldMs,
+                   owner_callsite_ ? owner_callsite_ : "",
+                   callsite ? callsite : "");
+
+      xSemaphoreGiveRecursive(mutex_);
+      return false;
+    }
+
+    if (owner_ != want) {
+      mc_logf("[I2S] lock DENY reenter_mismatch cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
+              ownerStr_(owner_),
+              ownerStr_(want),
+              (unsigned long)depth_,
+              (unsigned long)waited,
+              (unsigned long)heldMs,
+              owner_callsite_ ? owner_callsite_ : "",
+              callsite ? callsite : "");
+      LOG_EVT_INFO("I2S_OWNER", "deny_reenter cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
+                   ownerStr_(owner_),
+                   ownerStr_(want),
+                   (unsigned long)depth_,
+                   (unsigned long)waited,
+                   (unsigned long)heldMs,
+                   owner_callsite_ ? owner_callsite_ : "",
+                   callsite ? callsite : "");
+
+      // 注意：recursive take は成功しているので、必ず give してから return する（持ち逃げ防止）
+      xSemaphoreGiveRecursive(mutex_);
+      return false;
+    }
+
+    // 同ownerの再入のみ許可
+    mc_logf("[I2S] lock reenter owner=%s depth=%lu waited=%lums reqSite=%s ownerSite=%s",
             ownerStr_(owner_),
-            ownerStr_(want),
             (unsigned long)depth_,
             (unsigned long)waited,
-            (unsigned long)heldMs,
-            owner_callsite_ ? owner_callsite_ : "",
-            callsite ? callsite : "");
-    LOG_EVT_INFO("I2S_OWNER", "deny_reenter cur=%s want=%s depth=%lu waited=%lums held=%lums",
-                 ownerStr_(owner_),
-                 ownerStr_(want),
-                 (unsigned long)depth_,
-                 (unsigned long)waited,
-                 (unsigned long)heldMs);
-
-    // recursive take を取り消す
-    xSemaphoreGiveRecursive(mutex_);
-    return false;
+            callsite ? callsite : "",
+            owner_callsite_ ? owner_callsite_ : "");
+    depth_++;
+    return true;
   }
 
   // first acquire => owner transition
-  if (depth_ == 0) {
+  {
     const Owner prev = owner_;
     const uint32_t prevHeldMs = (prev == None) ? 0 : (millis() - owner_since_ms_);
 
@@ -136,17 +153,9 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
                  (unsigned long)waited,
                  (unsigned long)prevHeldMs,
                  owner_callsite_);
-  } else {
-    // 同ownerの再入のみ許可
-    mc_logf("[I2S] lock reenter owner=%s depth=%lu waited=%lums reqSite=%s ownerSite=%s",
-            ownerStr_(owner_),
-            (unsigned long)depth_,
-            (unsigned long)waited,
-            callsite ? callsite : "",
-            owner_callsite_ ? owner_callsite_ : "");
   }
 
-  depth_++;
+  depth_ = 1;
   return true;
 }
 
