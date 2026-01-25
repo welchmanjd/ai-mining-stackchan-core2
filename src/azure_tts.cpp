@@ -8,6 +8,11 @@
 #include <WiFi.h>
 #include "i2s_manager.h"
 
+// TTS debug switch (optional): define -DTTS_DEBUG_ENABLED=1 to restore very chatty logs.
+#ifndef TTS_DEBUG_ENABLED
+#define TTS_DEBUG_ENABLED 0
+#endif
+
 // ---------- helpers ----------
 static String trimCopy_(const String& s) {
   String t = s;
@@ -513,11 +518,14 @@ void AzureTts::taskEntry(void* pv) {
   vTaskDelete(nullptr);
 }
 
+// ===== src/azure_tts.cpp：speakAsync() 関数全文差し替え =====
 bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voice) {
+#if TTS_DEBUG_ENABLED
+  // DEBUG: keep the original "log every call" behavior for troubleshooting.
   M5.Log.printf("[TTS] speakAsync id=%lu text_bytes=%u head=\"%s\"\n",
-              (unsigned long)speakId,
-              (unsigned)text.length(),
-              text.substring(0, 60).c_str());
+                (unsigned long)speakId,
+                (unsigned)text.length(),
+                text.substring(0, 60).c_str());
 
   if (state_ != Idle) return false;
   if (WiFi.status() != WL_CONNECTED) {
@@ -537,14 +545,97 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
     M5.Log.printf("[TTS] Azure voice is not set\n");
     return false;
   }
-// ===== azure_tts.cpp：speakAsync() 内（done初期化）差し替え =====
+
+#else
+  // INFO: avoid wallpaper logs on reject loops (busy/wifi/config/etc.).
+  // Behavior (return true/false, state transitions, task/queue) is unchanged.
+  const uint32_t nowMs = millis();
+
+  enum : uint8_t {
+    kRejNone   = 0,
+    kRejBusy   = 1,
+    kRejWifi   = 2,
+    kRejConfig = 3,
+    kRejVoice  = 4,
+    kRejOther  = 5,
+  };
+
+  auto rejStr = [](uint8_t r) -> const char* {
+    switch (r) {
+      case kRejBusy:   return "busy";
+      case kRejWifi:   return "wifi";
+      case kRejConfig: return "config";
+      case kRejVoice:  return "voice";
+      case kRejOther:  return "other";
+      default:         return "none";
+    }
+  };
+
+  auto flushRejectSummaryIfAny = [&]() {
+    if (reject_count_ == 0 || reject_reason_ == kRejNone) return;
+    const uint32_t spanMs = (reject_last_ms_ >= reject_first_ms_) ? (reject_last_ms_ - reject_first_ms_) : 0;
+    M5.Log.printf("[TTS] speakAsync rejected x%lu reason=%s span=%.1fs (suppressed)\n",
+                  (unsigned long)reject_count_,
+                  rejStr(reject_reason_),
+                  (double)spanMs / 1000.0);
+    reject_count_ = 0;
+    reject_reason_ = kRejNone;
+    reject_first_ms_ = reject_last_ms_ = 0;
+    reject_last_log_ms_ = 0;
+  };
+
+  auto recordReject = [&](uint8_t reason) -> bool {
+    // If reason changed, summarize the previous streak immediately (keeps logs meaningful).
+    if (reject_count_ > 0 && reject_reason_ != reason) {
+      flushRejectSummaryIfAny();
+    }
+
+    if (reject_count_ == 0) {
+      reject_first_ms_ = nowMs;
+      reject_last_log_ms_ = nowMs;
+      reject_reason_ = reason;
+
+      // First reject only (INFO).
+      M5.Log.printf("[TTS] speakAsync rejected reason=%s id=%lu text_bytes=%u\n",
+                    rejStr(reason),
+                    (unsigned long)speakId,
+                    (unsigned)text.length());
+    }
+
+    reject_last_ms_ = nowMs;
+    reject_reason_ = reason;
+    reject_count_++;
+    return false;
+  };
+
+  // --- rejection checks (NO SIDE EFFECTS) ---
+  if (state_ != Idle) return recordReject(kRejBusy);
+  if (WiFi.status() != WL_CONNECTED) return recordReject(kRejWifi);
+  if (!endpoint_.length() || !key_.length()) return recordReject(kRejConfig);
+
+  // Prepare request strings (same as before)
+  reqText_ = text;
+  reqVoice_ = voice ? String(voice) : defaultVoice_;
+  if (!reqVoice_.length()) reqVoice_ = defaultVoice_;
+  if (!reqVoice_.length()) return recordReject(kRejVoice);
+
+  // Accepted: if we suppressed rejects before, emit one summary line now.
+  flushRejectSummaryIfAny();
+
+  // Accepted (INFO)
+  M5.Log.printf("[TTS] speakAsync id=%lu text_bytes=%u head=\"%s\"\n",
+                (unsigned long)speakId,
+                (unsigned)text.length(),
+                text.substring(0, 60).c_str());
+#endif
+
+  // ===== azure_tts.cpp：speakAsync() 内（done初期化）差し替え =====
   currentSpeakId_ = speakId;
 
   // clear DONE state (for previous id)
   doneSpeakId_ = 0;
   doneOk_ = false;
   doneReason_[0] = 0;
-
 
   // clear stale cancel (for previous id)
   portENTER_CRITICAL(&cancelMux_);

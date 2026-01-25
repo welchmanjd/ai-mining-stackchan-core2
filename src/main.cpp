@@ -774,8 +774,27 @@ void loop() {
   if (btnB) {
     const char* text = appConfig().hello_text;  // ★変更：設定値（config_private.h / Webで上書き可）
     if (features.ttsEnabled) {
+      // INFOログの壁紙化を防ぐ（挙動は変えない：呼び出し回数・成否判定は従来通り）
+      static uint32_t s_ttsFailLastLogMs = 0;
+      static uint32_t s_ttsFailSuppressed = 0;
+
       if (!g_tts.speakAsync(text, (uint32_t)0, nullptr)) {
-        mc_logf("[TTS] speakAsync failed (busy / wifi / config?)");
+        s_ttsFailSuppressed++;
+
+        const uint32_t kFailLogIntervalMs = 3000;
+        if (s_ttsFailLastLogMs == 0 || (now - s_ttsFailLastLogMs) >= kFailLogIntervalMs) {
+          if (s_ttsFailSuppressed > 1) {
+            mc_logf("[TTS] speakAsync failed (busy / wifi / config?) (suppressed x%lu)",
+                    (unsigned long)(s_ttsFailSuppressed - 1));
+          } else {
+            mc_logf("[TTS] speakAsync failed (busy / wifi / config?)");
+          }
+          s_ttsFailSuppressed = 0;
+          s_ttsFailLastLogMs = now;
+        }
+      } else {
+        // success: reset suppression window
+        s_ttsFailSuppressed = 0;
       }
     } else {
       UIMining::instance().setStackchanSpeech(text);
@@ -785,6 +804,7 @@ void loop() {
       g_bubbleOnlyEvType = 0;
     }
   }
+
 
 
   if (anyInput) lastInputMs = now;

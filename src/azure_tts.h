@@ -145,4 +145,11 @@ private:
 
   uint8_t defaultVolume_ = MC_SPK_VOLUME;
 
+  // speakAsync() reject suppression (INFO wallpaper guard)
+  uint32_t reject_first_ms_    = 0;
+  uint32_t reject_last_ms_     = 0;
+  uint32_t reject_count_       = 0;
+  uint8_t  reject_reason_      = 0;  // 0=none (see azure_tts.cpp)
+  uint32_t reject_last_log_ms_ = 0;  // optional: for debug/reminder throttling
+
 };
