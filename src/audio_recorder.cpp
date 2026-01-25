@@ -13,27 +13,35 @@
 #include <driver/i2s.h>
 #include <esp_err.h>
 
+#include <esp_task_wdt.h>
+#include <esp_log.h>   // ★追加：I2Sタグのログレベル制御に使う
+
 static const char* kTag = "REC";
 
-// Force-uninstall I2S driver instances to avoid noisy logs like:
-//   "E ... I2S: register I2S object to platform failed"
-// and to reduce the chance of intermittent silence after Mic <-> Speaker switching.
-static void __attribute__((unused)) forceUninstallI2S_(const char* reason) {
-  // まず I2S1 を試す（最近のログではこちらが「入っている」ことが多い）
-  esp_err_t e1 = i2s_driver_uninstall(I2S_NUM_1);
 
-  // I2S1 が「入ってない」場合だけ I2S0 を試す
-  esp_err_t e0 = ESP_ERR_INVALID_STATE;
-  if (e1 == ESP_ERR_INVALID_STATE) {
-    e0 = i2s_driver_uninstall(I2S_NUM_0);
+static void forceUninstallI2S_(const char* reason) {
+  // NOTE:
+  // i2s_driver_uninstall() を「入ってない port」に対して呼ぶと、
+  // ESP-IDF が tag="I2S" で E ログを吐く（"has not installed"）。
+  // これは想定内の後始末なので、ここだけ一時的に I2S ログを黙らせる。
+  esp_log_level_set("I2S", ESP_LOG_NONE);  // ★I2Sタグのみミュート
+
+  esp_err_t e1 = i2s_driver_uninstall((i2s_port_t)1);
+  esp_err_t e0 = i2s_driver_uninstall((i2s_port_t)0);
+
+  esp_log_level_set("I2S", ESP_LOG_ERROR); // ★必要最低限に戻す（ERRORのみ）
+
+  const bool ok1 = (e1 == ESP_OK);
+  const bool ok0 = (e0 == ESP_OK);
+  if (ok1 || ok0) {
+    mc_logf("[REC] i2s uninstall: ok (p1=%d p0=%d) (reason=%s)", (int)ok1, (int)ok0, reason);
+    return;
   }
 
-  Serial.printf("[%s] i2s uninstall: p1=%d(%s) p0=%d(%s) reason=%s\n",
-                kTag,
-                (int)e1, esp_err_to_name(e1),
-                (int)e0, esp_err_to_name(e0),
-                reason ? reason : "-");
+  // 典型：ESP_ERR_INVALID_STATE（未インストール）など
+  mc_logf("[REC] i2s uninstall: skipped/invalid_state (e1=%d e0=%d) (reason=%s)", (int)e1, (int)e0, reason);
 }
+
 
 
 
