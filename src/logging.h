@@ -39,3 +39,22 @@ inline void mc_logf(const char* fmt, ...) {
 // Heartbeat (wallpaper) logs: OFF by default. Enable only when needed.
 #define LOG_EVT_HEARTBEAT(tag, fmt, ...) \
   do { if (EVT_DEBUG_ENABLED && EVT_HEARTBEAT_ENABLED) mc_logf("[EVT] " tag " " fmt, ##__VA_ARGS__); } while (0)
+
+
+// ===== Touch logging helpers =====
+//
+// Touch logs are very chatty during tapping.
+// Default: OFF in normal logs. Enable when debugging.
+//
+// By default, TOUCH_DEBUG_ENABLED follows EVT_DEBUG_ENABLED.
+// If you want touch logs independently, define TOUCH_DEBUG_ENABLED (1/0) explicitly.
+// Enable touch logs:
+//   -DEVT_DEBUG_ENABLED=1        (touch follows event debug by default)
+//   -DTOUCH_DEBUG_ENABLED=1      (touch only)
+
+#ifndef TOUCH_DEBUG_ENABLED
+#define TOUCH_DEBUG_ENABLED EVT_DEBUG_ENABLED
+#endif
+
+#define LOG_TOUCH_DEBUG(fmt, ...) \
+  do { if (TOUCH_DEBUG_ENABLED) mc_logf("[TOUCH] " fmt, ##__VA_ARGS__); } while (0)

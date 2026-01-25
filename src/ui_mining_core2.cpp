@@ -828,9 +828,10 @@ void UIMining::handlePageInput(bool suppressTouchBeep) {
   int x = touch_.x;
   int y = touch_.y;
 
+  // INFO壁紙化防止：通常ログでは出さない。デバッグ時のみ復活。
   if (pressed != prevPressed) {
-    Serial.printf("[TOUCH] pressed=%d x=%d y=%d\n",
-                  static_cast<int>(pressed), x, y);
+    LOG_TOUCH_DEBUG("pressed=%d x=%d y=%d",
+                    static_cast<int>(pressed), x, y);
   }
 
   if (pressed && !prevPressed) {
