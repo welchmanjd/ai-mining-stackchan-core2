@@ -164,7 +164,6 @@ bool AudioRecorder::ensureMicBegun_() {
     Serial.printf("[%s] mic begin failed -> fallback speaker.end and retry\n", kTag);
     M5.Speaker.end();
     speakerEndedByRec_ = true;
-    speakerSoftMuted_ = false;
     delay(20);
 
     ok = M5.Mic.begin();
@@ -217,30 +216,6 @@ void AudioRecorder::endMic_() {
   }
 }
 
-
-
-bool AudioRecorder::startMicForRec_() {
-  // 念のためクリーンにしてから開始
-  if (M5.Mic.isEnabled()) {
-    M5.Mic.end();
-    delay(5);
-  }
-
-  // サンプルレートは record(...) でも渡せるが、明示しておくと安定しやすい
-  M5.Mic.setSampleRate(sampleRate_);
-
-  bool ok = M5.Mic.begin();
-  Serial.printf("[%s] mic begin ok=%d sr=%u\n", kTag, ok ? 1 : 0, (unsigned)sampleRate_);
-  return ok;
-}
-
-void AudioRecorder::stopMicAfterRec_() {
-  if (M5.Mic.isEnabled()) {
-    M5.Mic.end();
-    delay(5);
-    Serial.printf("[%s] mic end\n", kTag);
-  }
-}
 
 
 

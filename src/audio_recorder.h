@@ -39,21 +39,13 @@ private:
   void stopSpeakerForRec_();
   void restoreSpeakerAfterRec_();
 
-  bool startMicForRec_();
-  void stopMicAfterRec_();
-
-
   static void taskEntry_(void* arg);
   void taskLoop_();
-
-// audio_recorder.h の AudioRecorder class 内（private: に追加）
 
   bool ensureMicBegun_();
   void endMic_();
   bool micBegun_ = false;
 
-  
-private:
   // 設定
   uint32_t sampleRate_ = 16000;
   uint32_t maxSeconds_ = 10;
@@ -72,7 +64,7 @@ private:
 
   // I2S lock を録音セッション中保持しているか（Mic owner を握る）
   bool i2sLocked_ = false;
- 
+
   uint32_t startMs_ = 0;
   uint32_t stopMs_  = 0;
 
@@ -83,8 +75,6 @@ private:
   uint8_t savedSpkVolume_ = 128;
   bool savedSpkVolumeValid_ = false;
   bool speakerEndedByRec_ = false;   // 今回の録音のために end() したか
-  bool speakerSoftMuted_ = false;   // stop()+volume0 のソフト切替をしたか
-
 
   // task
   TaskHandle_t task_ = nullptr;

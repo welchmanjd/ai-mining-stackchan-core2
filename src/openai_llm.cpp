@@ -6,7 +6,6 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-#include "config_private.h"
 #include "config.h"
 
 

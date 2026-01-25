@@ -37,19 +37,6 @@ static uint32_t calcTtsHardTimeoutMs_(size_t textBytes) {
 static constexpr uint32_t kSimulatedSpeakMs        = 2000;
 
 
-static String utf8SafeClamp_(const String& s, size_t maxBytes) {
-  const size_t L = s.length();
-  if (L <= maxBytes) return s;
-
-  const char* p = s.c_str();
-  size_t cut = maxBytes;
-
-  // cut がUTF-8の継続バイト(10xxxxxx)に刺さっていたら手前へ戻す
-  while (cut > 0 && (((uint8_t)p[cut] & 0xC0) == 0x80)) {
-    cut--;
-  }
-  return s.substring(0, (unsigned)cut);
-}
 
 // UTF-8を壊さずに maxBytes 以内へ丸める（バイト上限は維持）
 static size_t utf8SeqLen_(uint8_t c) {
