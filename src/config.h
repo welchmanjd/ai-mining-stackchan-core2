@@ -177,6 +177,7 @@
   #define MC_AI_TTS_HARD_TIMEOUT_MAX_MS 60000
 #endif
 
+
 // ---- AI UI short texts（長文は出さない方針なので短文のみ）----
 #ifndef MC_AI_TEXT_LISTENING
   #define MC_AI_TEXT_LISTENING "聞いています"
