@@ -2,6 +2,8 @@
 #include "logging.h"
 #include "config_private.h"
 
+#include "mc_text_utils.h"
+
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -18,25 +20,7 @@
 #endif
 
 // ---- small helpers ----
-static String utf8SafeClamp_(const String& s, size_t maxBytes) {
-  const size_t L = s.length();
-  if (L <= maxBytes) return s;
-
-  const char* p = s.c_str();
-  size_t cut = maxBytes;
-
-  while (cut > 0 && (((uint8_t)p[cut] & 0xC0) == 0x80)) cut--;
-  return s.substring(0, (unsigned)cut);
-}
-
-static String sanitizeOneLine_(String s) {
-  s.replace("\r", " ");
-  s.replace("\n", " ");
-  s.trim();
-  // 連続スペースを軽く潰す
-  while (s.indexOf("  ") >= 0) s.replace("  ", " ");
-  return s;
-}
+// Step2: moved UTF-8 clamp / one-line sanitize into mc_text_utils.*
 
 static String buildDiag_(JsonVariant root) {
   // 本文や入力の全文は出さない。構造だけ短く。
@@ -65,7 +49,7 @@ static String buildDiag_(JsonVariant root) {
     d += "has_error ";
     if (root["error"]["message"].is<const char*>()) {
       String msg = (const char*)root["error"]["message"];
-      msg = sanitizeOneLine_(utf8SafeClamp_(msg, 80));
+      msg = mcLogHead(msg, 80);
       d += "err=" + msg + " ";
     }
   }
@@ -73,7 +57,7 @@ static String buildDiag_(JsonVariant root) {
   JsonVariant out = root["output"];
   if (!out.is<JsonArray>()) {
     d += "no_output_array";
-    return sanitizeOneLine_(utf8SafeClamp_(d, 180));
+    return mcLogHead(d, 180);
   }
 
   JsonArray a = out.as<JsonArray>();
@@ -104,7 +88,7 @@ static String buildDiag_(JsonVariant root) {
     n++;
   }
 
-  return sanitizeOneLine_(utf8SafeClamp_(d, 180));
+  return mcLogHead(d, 180);
 }
 
 
@@ -112,7 +96,7 @@ static String extractAnyText_(JsonVariant root) {
   // 1) output_text（あれば最優先）
   if (root["output_text"].is<const char*>()) {
     String s = (const char*)root["output_text"];
-    s = sanitizeOneLine_(s);
+    s = mcSanitizeOneLine(s);
     if (s.length() > 0) return s;
   }
 
@@ -126,7 +110,7 @@ static String extractAnyText_(JsonVariant root) {
       if (item["type"].is<const char*>() && String((const char*)item["type"]) == "output_text") {
         if (item["text"].is<const char*>()) {
           String s = (const char*)item["text"];
-          s = sanitizeOneLine_(s);
+          s = mcSanitizeOneLine(s);
           if (s.length()) {
             if (acc.length()) acc += "\n";
             acc += s;
@@ -146,7 +130,7 @@ static String extractAnyText_(JsonVariant root) {
           // 典型: {"type":"output_text","text":"..."}
           if (part["text"].is<const char*>()) {
             String s = (const char*)part["text"];
-            s = sanitizeOneLine_(s);
+            s = mcSanitizeOneLine(s);
             if (s.length()) {
               if (acc.length()) acc += "\n";
               acc += s;
@@ -154,7 +138,7 @@ static String extractAnyText_(JsonVariant root) {
           } else if (part["text"].is<JsonObject>() && part["text"]["value"].is<const char*>()) {
             // 念のため: {"text":{"value":"..."}}
             String s = (const char*)part["text"]["value"];
-            s = sanitizeOneLine_(s);
+            s = mcSanitizeOneLine(s);
             if (s.length()) {
               if (acc.length()) acc += "\n";
               acc += s;
@@ -164,7 +148,7 @@ static String extractAnyText_(JsonVariant root) {
           // もし refusal が返った場合も「何か喋れる文」を拾う（長い場合は上位で丸める）
           if (part["refusal"].is<const char*>()) {
             String s = (const char*)part["refusal"];
-            s = sanitizeOneLine_(s);
+            s = mcSanitizeOneLine(s);
             if (s.length()) {
               if (acc.length()) acc += "\n";
               acc += s;
@@ -175,7 +159,7 @@ static String extractAnyText_(JsonVariant root) {
     }
   }
 
-  acc = sanitizeOneLine_(acc);
+  acc = mcSanitizeOneLine(acc);
   return acc;
 }
 
@@ -258,7 +242,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     DeserializationError e = deserializeJson(doc, body);
     if (!e && doc["error"]["message"].is<const char*>()) {
       String msg = (const char*)doc["error"]["message"];
-      msg = sanitizeOneLine_(utf8SafeClamp_(msg, 120));
+      msg = mcLogHead(msg, 120);
       r.err = "http_" + String(code) + ":" + msg;
     } else {
       r.err = "http_" + String(code);
@@ -316,7 +300,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
 
 
   String out = extractAnyText_(doc.as<JsonVariant>());
-  out = sanitizeOneLine_(out);
+  out = mcSanitizeOneLine(out);
 
   if (out.length() == 0) {
     String diag = buildDiag_(doc.as<JsonVariant>());

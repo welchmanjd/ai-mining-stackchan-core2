@@ -61,8 +61,6 @@ private:
 
   void updateOverlay_(uint32_t nowMs);
 
-  static String clampBytes_(const String& s, size_t maxBytes);
-
 private:
   Orchestrator* orch_ = nullptr;
 

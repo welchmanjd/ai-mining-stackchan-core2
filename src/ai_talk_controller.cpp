@@ -2,9 +2,41 @@
 #include "logging.h"
 #include "orchestrator.h"
 #include "openai_llm.h"
+#include "mc_text_utils.h"
 #include <M5Unified.h>
 #include "config.h"
 #include <string.h>
+
+// ------------------------------------------------------------
+// Step2 fix: keep build working even if config / overlay differs
+// ------------------------------------------------------------
+
+// config.h に無い環境でもビルドが通るようにフォールバック
+#ifndef MC_AI_LISTENING_HINT_TEXT
+  #define MC_AI_LISTENING_HINT_TEXT MC_AI_IDLE_HINT_TEXT
+#endif
+#ifndef MC_AI_THINKING_HINT_TEXT
+  #define MC_AI_THINKING_HINT_TEXT MC_AI_IDLE_HINT_TEXT
+#endif
+#ifndef MC_AI_SPEAKING_HINT_TEXT
+  #define MC_AI_SPEAKING_HINT_TEXT MC_AI_IDLE_HINT_TEXT
+#endif
+
+
+// AiTalkController::AiState -> (ai_interface.h 側の) ::AiState へ安全に変換
+// UI側に無い状態（PostSpeakBlank）は Speaking に丸める。
+static inline ::AiState mcToUiAiState_(AiTalkController::AiState s) {
+  switch (s) {
+    case AiTalkController::AiState::Idle:          return ::AiState::Idle;
+    case AiTalkController::AiState::Listening:     return ::AiState::Listening;
+    case AiTalkController::AiState::Thinking:      return ::AiState::Thinking;
+    case AiTalkController::AiState::Speaking:      return ::AiState::Speaking;
+    case AiTalkController::AiState::PostSpeakBlank:return ::AiState::Speaking; // UIに無いので丸める
+    case AiTalkController::AiState::Cooldown:      return ::AiState::Cooldown;
+    default:                                       return ::AiState::Idle;
+  }
+}
+
 
 // ---- timings ----
 static constexpr uint32_t kListeningTimeoutMs      = (uint32_t)MC_AI_LISTEN_MAX_SECONDS * 1000UL;
@@ -38,39 +70,7 @@ static constexpr uint32_t kSimulatedSpeakMs        = 2000;
 
 
 
-// UTF-8を壊さずに maxBytes 以内へ丸める（バイト上限は維持）
-static size_t utf8SeqLen_(uint8_t c) {
-  if (c < 0x80) return 1;
-  if ((c & 0xE0) == 0xC0) return 2;
-  if ((c & 0xF0) == 0xE0) return 3;
-  if ((c & 0xF8) == 0xF0) return 4;
-  return 1; // 不正先頭は1扱い
-}
-
-String AiTalkController::clampBytes_(const String& s, size_t maxBytes) {
-  const size_t n = s.length(); // bytes
-  if (n <= maxBytes) return s;
-  if (maxBytes == 0) return "";
-
-  size_t i = 0;
-  while (i < n && i < maxBytes) {
-    const uint8_t c = (uint8_t)s[i];
-    const size_t L = utf8SeqLen_(c);
-    if (i + L > maxBytes) break;
-
-    // continuation bytes validate (tolerant)
-    bool ok = true;
-    for (size_t k = 1; k < L; k++) {
-      if (i + k >= n) { ok = false; break; }
-      const uint8_t cc = (uint8_t)s[i + k];
-      if ((cc & 0xC0) != 0x80) { ok = false; break; }
-    }
-    if (!ok) break;
-
-    i += L;
-  }
-  return s.substring(0, (unsigned)i);
-}
+// Step2: UTF-8 clamp / one-line sanitize are centralized in mc_text_utils.*
 
 
 
@@ -142,7 +142,7 @@ void AiTalkController::injectText(const String& text) {
   if (state_ != AiState::Listening) return;
   if (!text.length()) return;
 
-  inputText_ = clampBytes_(text, 200);
+  inputText_ = mcUtf8ClampBytes(text, 200);
   // ログは長さのみ
   mc_logf("[ai] injectText len=%u", (unsigned)inputText_.length());
 }
@@ -198,7 +198,7 @@ void AiTalkController::tick(uint32_t nowMs) {
       const uint32_t elapsed = nowMs - thinkStartMs_;
       if (replyReady_ && elapsed >= kThinkingMockMs) {
         // 念のため（保険）
-        replyText_ = clampBytes_(replyText_, MC_AI_TTS_MAX_CHARS);
+        replyText_ = mcUtf8ClampBytes(replyText_, MC_AI_TTS_MAX_CHARS);
 
         // bubble show要求（必ず main 側が setStackchanSpeech()）
         bubbleDirty_ = true;
@@ -366,15 +366,14 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
     lastSttStatus_ = stt.status;
 
     if (stt.ok) {
-      lastUserText_ = clampBytes_(stt.text, MC_AI_MAX_INPUT_CHARS);
+      lastUserText_ = mcUtf8ClampBytes(stt.text, MC_AI_MAX_INPUT_CHARS);
     } else {
       lastUserText_ = stt.err.length() ? stt.err : String(MC_AI_ERR_TEMP_FAIL_TRY_AGAIN);
       errorFlag_ = true;
     }
 
     // 秘密/全文ログ禁止：先頭だけ
-    String head = lastUserText_;
-    if (head.length() > 30) head = head.substring(0, 30);
+    String head = mcLogHead(lastUserText_, 30);
     mc_logf("[STT] done ok=%d http=%d took=%lums text_len=%u head=\"%s\"",
             lastSttOk_ ? 1 : 0,
             lastSttStatus_,
@@ -408,17 +407,21 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
 
       if (llm.ok) {
         replyText_ = llm.text;
-        replyText_ = clampBytes_(replyText_, MC_AI_TTS_MAX_CHARS);
+        replyText_ = mcUtf8ClampBytes(replyText_, MC_AI_TTS_MAX_CHARS);
         bubbleText_ = replyText_;
 
         // 先頭だけ（overlay用）
-        lastLlmTextHead_ = clampBytes_(replyText_, 40);
+        lastLlmTextHead_ = mcUtf8ClampBytes(replyText_, 40);
         if (replyText_.length() > lastLlmTextHead_.length()) lastLlmTextHead_ += "…";
       } else {
         // 失敗時フォールバック + cooldown +1秒
         errorFlag_ = true;
-        lastLlmErr_ = llm.err;
-        if (lastLlmErr_.length() > 40) lastLlmErr_ = lastLlmErr_.substring(0, 40) + "…";
+        lastLlmErr_ = mcSanitizeOneLine(llm.err);
+        {
+          String h = mcUtf8ClampBytes(lastLlmErr_, 40);
+          if (lastLlmErr_.length() > h.length()) h += "…";
+          lastLlmErr_ = h;
+        }
         replyText_ = String(MC_AI_TEXT_FALLBACK);
         bubbleText_ = replyText_;
       }
@@ -433,7 +436,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
     // STT失敗：LLMは呼ばない
     errorFlag_ = true;
     lastLlmErr_ = "STT failed";
-    replyText_ = clampBytes_(lastUserText_, MC_AI_TTS_MAX_CHARS);
+    replyText_ = mcUtf8ClampBytes(lastUserText_, MC_AI_TTS_MAX_CHARS);
     bubbleText_ = replyText_;
   }
 
@@ -495,9 +498,6 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
 }
 
 
-
-
-
 void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   // 録音中の可能性があるので保険でキャンセル
   // 「保険cancel」で cancel done が出ないように、必ず isRecording ガード
@@ -518,7 +518,7 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   overlay_ = AiUiOverlay();
   overlay_.active = false;
 
-  // cooldown延長フラグもリセット
+  // cooldown延長フラグもリセット（前の挙動へ）
   errorFlag_ = false;
 
   LOG_EVT_INFO("EVT_AI_STATE",
@@ -529,13 +529,11 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
 }
 
 
-
-
 void AiTalkController::enterSpeaking_(uint32_t nowMs) {
   state_ = AiState::Speaking;
   speakStartMs_ = nowMs;
 
-  // TTSありの場合のみ、done待ち上限を動的に計算
+  // TTSありの場合のみ、done待ち上限を動的に計算（前の挙動へ）
   speakHardTimeoutMs_ = 0;
   if (expectTtsId_ != 0) {
     speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
@@ -544,106 +542,135 @@ void AiTalkController::enterSpeaking_(uint32_t nowMs) {
             (unsigned)replyText_.length());
   }
 
-  overlay_.active = true;
-  overlay_.hint = "AI";
-
   LOG_EVT_INFO("EVT_AI_STATE", "state=SPEAKING");
   updateOverlay_(nowMs);
 }
+
+
 
 
 void AiTalkController::enterPostSpeakBlank_(uint32_t nowMs) {
   state_ = AiState::PostSpeakBlank;
   blankStartMs_ = nowMs;
 
-  // 0.5秒 空吹き出し（main側がsetStackchanSpeech("")）
-  bubbleText_  = "";
+  // 吹き出しは空にする（一定時間）
+  bubbleText_ = "";
   bubbleDirty_ = true;
 
-  overlay_.active = true;
-  overlay_.hint = "AI";
-
-  LOG_EVT_INFO("EVT_AI_STATE", "state=POST_BLANK");
+  LOG_EVT_INFO("EVT_AI_STATE", "state=POST_SPEAK_BLANK");
   updateOverlay_(nowMs);
 }
 
 void AiTalkController::enterCooldown_(uint32_t nowMs, bool error, const char* reason) {
   state_ = AiState::Cooldown;
   cooldownStartMs_ = nowMs;
-  cooldownDurMs_ = kCooldownMs + (error ? kErrorExtraMs : 0);
 
-  overlay_.active = true;
-  overlay_.hint = "AI";
+  // 基本 cooldown + エラー時は延長
+  cooldownDurMs_ = kCooldownMs;
+  if (error) cooldownDurMs_ += kErrorExtraMs;
 
-  LOG_EVT_INFO("EVT_AI_STATE",
-               "state=COOLDOWN error=%d reason=%s",
-               error ? 1 : 0, reason ? reason : "-");
+  // TTS待ちはここで解除（遅延doneは無視する）
+  expectTtsId_ = 0;
+  speakHardTimeoutMs_ = 0;
 
+  (void)reason;
+
+  LOG_EVT_INFO("EVT_AI_STATE", "state=COOLDOWN");
   updateOverlay_(nowMs);
 }
 
 void AiTalkController::updateOverlay_(uint32_t nowMs) {
   if (state_ == AiState::Idle) {
     overlay_.active = false;
+    overlay_.state = ::AiState::Idle;
+    overlay_.line1 = "";
+    overlay_.line2 = "";
+    // hint は残してもいいが、ここでは空にしておく
+    // overlay_.hint = "";
     return;
   }
 
   overlay_.active = true;
-  if (!overlay_.hint.length()) overlay_.hint = "AI";
+
+  // 型ズレ吸収（AiTalkController::AiState -> ::AiState）
+  overlay_.state = mcToUiAiState_(state_);
+
+  // hint は config が無い環境でも通るようフォールバック済み（上で #ifndef 済み）
+  // “AI” 固定にしたいならここを変えてOK。現状は既存の定数を優先。
+  if (!overlay_.hint.length()) overlay_.hint = MC_AI_IDLE_HINT_TEXT;
 
   auto ceilSec = [](uint32_t remainMs) -> int {
     return (int)((remainMs + 999) / 1000);
   };
 
-  String s;
+  // デフォルト
+  overlay_.line1 = "";
+  overlay_.line2 = "";
+
   switch (state_) {
     case AiState::Listening: {
+      overlay_.hint = MC_AI_LISTENING_HINT_TEXT;
+
       const uint32_t elapsed = nowMs - listenStartMs_;
       const uint32_t remain  = (elapsed >= kListeningTimeoutMs) ? 0 : (kListeningTimeoutMs - elapsed);
-      s = "LISTEN " + String(ceilSec(remain)) + "s";
-      break;
+      overlay_.line1 = "LISTEN " + String(ceilSec(remain)) + "s";
+      overlay_.line2 = "";
+      return;
     }
+
     case AiState::Thinking: {
+      overlay_.hint = MC_AI_THINKING_HINT_TEXT;
+
       // THINKING 中の表示：
-      // - STT失敗なら STTERR を表示
-      // - STT成功なら LLM結果（成功/失敗）を表示
+      // - STT失敗なら STT: ERR + 先頭
+      // - STT成功なら LLM OK/ERR + 先頭
       if (!lastSttOk_) {
         overlay_.line1 = "STT: ERR";
-        String head = lastUserText_;
-        if (head.length() > 40) head = head.substring(0, 40) + "…";
+        String head = mcLogHead(lastUserText_, 40);
+        if (!head.length()) head = "...";
         overlay_.line2 = head;
         return;
       }
 
       overlay_.line1 = lastLlmOk_ ? "LLM: OK" : "LLM: ERR";
-
       String head = lastLlmOk_ ? lastLlmTextHead_ : lastLlmErr_;
+      head = mcLogHead(head, 40);
       if (!head.length()) head = "...";
-      if (head.length() > 40) head = head.substring(0, 40) + "…";
       overlay_.line2 = head;
       return;
     }
 
-    case AiState::Speaking:
-      s = "SPEAK";
-      break;
+    case AiState::Speaking: {
+      overlay_.hint = MC_AI_SPEAKING_HINT_TEXT;
+      overlay_.line1 = "SPEAK";
+      overlay_.line2 = "";
+      return;
+    }
+
     case AiState::PostSpeakBlank: {
+      overlay_.hint = MC_AI_SPEAKING_HINT_TEXT;
+
       const uint32_t elapsed = nowMs - blankStartMs_;
       const uint32_t remain  = (elapsed >= kPostSpeakBlankMs) ? 0 : (kPostSpeakBlankMs - elapsed);
-      s = "BLANK " + String(ceilSec(remain)) + "s";
-      break;
+      overlay_.line1 = "BLANK " + String(ceilSec(remain)) + "s";
+      overlay_.line2 = "";
+      return;
     }
+
     case AiState::Cooldown: {
+      overlay_.hint = MC_AI_IDLE_HINT_TEXT;
+
       const uint32_t elapsed = nowMs - cooldownStartMs_;
       const uint32_t remain  = (elapsed >= cooldownDurMs_) ? 0 : (cooldownDurMs_ - elapsed);
-      s = "COOL " + String(ceilSec(remain)) + "s";
-      break;
+      overlay_.line1 = "COOL " + String(ceilSec(remain)) + "s";
+      overlay_.line2 = "";
+      return;
     }
-    default:
-      s = "AI";
-      break;
-  }
 
-  overlay_.line1 = s;
-  overlay_.line2 = "";
+    default:
+      overlay_.hint = MC_AI_IDLE_HINT_TEXT;
+      overlay_.line1 = "AI";
+      overlay_.line2 = "";
+      return;
+  }
 }
