@@ -7,22 +7,6 @@
 #include "config.h"
 #include <string.h>
 
-// ------------------------------------------------------------
-// Step2 fix: keep build working even if config / overlay differs
-// ------------------------------------------------------------
-
-// config.h に無い環境でもビルドが通るようにフォールバック
-#ifndef MC_AI_LISTENING_HINT_TEXT
-  #define MC_AI_LISTENING_HINT_TEXT MC_AI_IDLE_HINT_TEXT
-#endif
-#ifndef MC_AI_THINKING_HINT_TEXT
-  #define MC_AI_THINKING_HINT_TEXT MC_AI_IDLE_HINT_TEXT
-#endif
-#ifndef MC_AI_SPEAKING_HINT_TEXT
-  #define MC_AI_SPEAKING_HINT_TEXT MC_AI_IDLE_HINT_TEXT
-#endif
-
-
 // AiTalkController::AiState -> (ai_interface.h 側の) ::AiState へ安全に変換
 // UI側に無い状態（PostSpeakBlank）は Speaking に丸める。
 static inline ::AiState mcToUiAiState_(AiTalkController::AiState s) {
@@ -39,16 +23,16 @@ static inline ::AiState mcToUiAiState_(AiTalkController::AiState s) {
 
 
 // ---- timings ----
-static constexpr uint32_t kListeningTimeoutMs      = (uint32_t)MC_AI_LISTEN_MAX_SECONDS * 1000UL;
-static constexpr uint32_t kListeningCancelWindowMs = (uint32_t)MC_AI_LISTEN_CANCEL_WINDOW_SEC * 1000UL;
-static constexpr uint32_t kThinkingMockMs          = 200;  // 最低限の「考え中」表示（ブロッキング後でも0にしない）
-static constexpr uint32_t kPostSpeakBlankMs        = 500;
-static constexpr uint32_t kCooldownMs              = (uint32_t)MC_AI_COOLDOWN_MS;
-static constexpr uint32_t kErrorExtraMs            = (uint32_t)MC_AI_COOLDOWN_ERROR_EXTRA_MS;
+// Step3: 共有定数は config.h 側を単一ソースとして参照する
+// - LISTEN timeout / cancel window: MC_AI_LISTEN_TIMEOUT_MS / MC_AI_LISTEN_CANCEL_WINDOW_MS
+// - thinking mock / post-speak blank / cooldown: MC_AI_THINKING_MOCK_MS / MC_AI_POST_SPEAK_BLANK_MS / MC_AI_COOLDOWN_MS(+MC_AI_COOLDOWN_ERROR_EXTRA_MS)
+// - overall budget / margin: MC_AI_OVERALL_DEADLINE_MS / MC_AI_OVERALL_MARGIN_MS
+// - simulated speak: MC_AI_SIMULATED_SPEAK_MS
 
-// STT+LLM 全体上限（ms）
-static constexpr uint32_t kTotalThinkBudgetMs      = 20000;
-static constexpr uint32_t kBudgetMarginMs          = 250;
+// TTS done が来ないときの安全タイムアウト（ネット遅延 + 音声再生を含む）
+// 固定20sだと、TTS取得が遅いときに tts_timeout になって状態だけ先に進んでしまう。
+// 返答テキストのバイト数に応じて動的に延長する。
+
 
 
 
@@ -64,13 +48,6 @@ static uint32_t calcTtsHardTimeoutMs_(size_t textBytes) {
   if (t > tMax) t = tMax;
   return t;
 }
-
-// orch が無い（sandbox等）ときの擬似発話時間
-static constexpr uint32_t kSimulatedSpeakMs        = 2000;
-
-
-
-// Step2: UTF-8 clamp / one-line sanitize are centralized in mc_text_utils.*
 
 
 
@@ -103,7 +80,6 @@ bool AiTalkController::onTap(int /*x*/, int y, int screenH) {
   return onTap();
 }
 
-
 bool AiTalkController::onTap() {
   const uint32_t now = millis();
 
@@ -122,19 +98,24 @@ bool AiTalkController::onTap() {
 
   if (state_ == AiState::Listening) {
     const uint32_t elapsed = now - listenStartMs_;
-    if (elapsed <= kListeningCancelWindowMs) {
+    if (elapsed <= (uint32_t)MC_AI_LISTEN_CANCEL_WINDOW_MS) {
       // 「保険cancel」で cancel done が出ないように、必ず isRecording ガード
       if (recorder_.isRecording()) {
         recorder_.cancel();
       }
       enterIdle_(now, "tap_cancel");
+      return true;
     }
-    // 3秒以降の再タップは無視（ただし消費）
+
+    // cancel windowを過ぎたら stop→THINKING
+    lastRecOk_ = recorder_.stop(now);
+    enterThinking_(now);
     return true;
   }
 
-  return true;
+  return false;
 }
+
 
 
 void AiTalkController::injectText(const String& text) {
@@ -165,7 +146,6 @@ bool AiTalkController::consumeAbortTts(uint32_t* outId, const char** outReason) 
 }
 
 
-
 void AiTalkController::tick(uint32_t nowMs) {
   switch (state_) {
     case AiState::Idle:
@@ -174,7 +154,7 @@ void AiTalkController::tick(uint32_t nowMs) {
 
     case AiState::Listening: {
       const uint32_t elapsed = nowMs - listenStartMs_;
-      if (elapsed >= kListeningTimeoutMs) {
+      if (elapsed >= (uint32_t)MC_AI_LISTEN_TIMEOUT_MS) {
         // 10秒で確定停止 → THINKING
         lastRecOk_ = recorder_.stop(nowMs);
 
@@ -185,8 +165,6 @@ void AiTalkController::tick(uint32_t nowMs) {
           lastRecOk_ = true;
         }
 
-        // stop ok ログは recorder 側に寄せる（ここでは出さない）
-
         enterThinking_(nowMs);
       } else {
         updateOverlay_(nowMs);
@@ -196,7 +174,7 @@ void AiTalkController::tick(uint32_t nowMs) {
 
     case AiState::Thinking: {
       const uint32_t elapsed = nowMs - thinkStartMs_;
-      if (replyReady_ && elapsed >= kThinkingMockMs) {
+      if (replyReady_ && elapsed >= (uint32_t)MC_AI_THINKING_MOCK_MS) {
         // 念のため（保険）
         replyText_ = mcUtf8ClampBytes(replyText_, MC_AI_TTS_MAX_CHARS);
 
@@ -228,7 +206,6 @@ void AiTalkController::tick(uint32_t nowMs) {
           }
         }
 
-        // 失敗/tts無しでも状態機械は進める（speak時間は擬似）
         (void)enqueued;
         enterSpeaking_(nowMs);
       } else {
@@ -241,7 +218,7 @@ void AiTalkController::tick(uint32_t nowMs) {
       // TTSあり：done待ち。TTS無し：擬似時間で進める
       if (expectTtsId_ == 0) {
         const uint32_t elapsed = nowMs - speakStartMs_;
-        if (elapsed >= kSimulatedSpeakMs) {
+        if (elapsed >= (uint32_t)MC_AI_SIMULATED_SPEAK_MS) {
           enterPostSpeakBlank_(nowMs);
         } else {
           updateOverlay_(nowMs);
@@ -288,7 +265,7 @@ void AiTalkController::tick(uint32_t nowMs) {
 
     case AiState::PostSpeakBlank: {
       const uint32_t elapsed = nowMs - blankStartMs_;
-      if (elapsed >= kPostSpeakBlankMs) {
+      if (elapsed >= (uint32_t)MC_AI_POST_SPEAK_BLANK_MS) {
         enterCooldown_(nowMs, errorFlag_, "post_blank_done");
       } else {
         updateOverlay_(nowMs);
@@ -314,19 +291,19 @@ void AiTalkController::tick(uint32_t nowMs) {
 
 
 
+
 void AiTalkController::enterThinking_(uint32_t nowMs) {
   state_ = AiState::Thinking;
-
-  // STT+LLM 全体タイムアウト基準
-  overallStartMs_ = nowMs;
+  thinkStartMs_ = nowMs;
 
   overlay_.active = true;
-  overlay_.hint = MC_AI_IDLE_HINT_TEXT;
+  overlay_.state = mcToUiAiState_(state_);
+  overlay_.hint  = MC_AI_THINKING_HINT_TEXT;
+  overlay_.line1 = MC_AI_TEXT_THINKING;
+  overlay_.line2 = "";
 
-  // ---- STT（8秒枠）----
-  lastUserText_ = "";
-  lastSttOk_ = false;
-  lastSttStatus_ = 0;
+  // ---- STT ----
+  const uint32_t overallStartMs_ = millis();
   errorFlag_ = false;
 
   // ---- LLM ----
@@ -349,8 +326,8 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
     // 20s枠から残りを見つつ STT の上限を決める（通常は 8s のまま）
     uint32_t sttTimeout = (uint32_t)MC_AI_STT_TIMEOUT_MS;
     const uint32_t elapsed0 = millis() - overallStartMs_;
-    if (elapsed0 + kBudgetMarginMs < kTotalThinkBudgetMs) {
-      const uint32_t remain = kTotalThinkBudgetMs - elapsed0 - kBudgetMarginMs;
+    if (elapsed0 + (uint32_t)MC_AI_OVERALL_MARGIN_MS < (uint32_t)MC_AI_OVERALL_DEADLINE_MS) {
+      const uint32_t remain = (uint32_t)MC_AI_OVERALL_DEADLINE_MS - elapsed0 - (uint32_t)MC_AI_OVERALL_MARGIN_MS;
       if (remain < sttTimeout) sttTimeout = remain;
     }
 
@@ -373,7 +350,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
     }
 
     // 秘密/全文ログ禁止：先頭だけ
-    String head = mcLogHead(lastUserText_, 30);
+    String head = mcLogHead(lastUserText_, MC_AI_LOG_HEAD_BYTES_STT_TEXT);
     mc_logf("[STT] done ok=%d http=%d took=%lums text_len=%u head=\"%s\"",
             lastSttOk_ ? 1 : 0,
             lastSttStatus_,
@@ -386,8 +363,8 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
   if (lastSttOk_) {
     const uint32_t elapsed = millis() - overallStartMs_;
     uint32_t llmTimeout = 0;
-    if (elapsed + kBudgetMarginMs < kTotalThinkBudgetMs) {
-      llmTimeout = kTotalThinkBudgetMs - elapsed - kBudgetMarginMs;
+    if (elapsed + (uint32_t)MC_AI_OVERALL_MARGIN_MS < (uint32_t)MC_AI_OVERALL_DEADLINE_MS) {
+      llmTimeout = (uint32_t)MC_AI_OVERALL_DEADLINE_MS - elapsed - (uint32_t)MC_AI_OVERALL_MARGIN_MS;
       if (llmTimeout > (uint32_t)MC_AI_LLM_TIMEOUT_MS) llmTimeout = (uint32_t)MC_AI_LLM_TIMEOUT_MS;
     }
 
@@ -433,20 +410,12 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
               (unsigned)replyText_.length());
     }
   } else {
-    // STT失敗：LLMは呼ばない
-    errorFlag_ = true;
-    lastLlmErr_ = "STT failed";
-    replyText_ = mcUtf8ClampBytes(lastUserText_, MC_AI_TTS_MAX_CHARS);
+    // STT NG
+    replyText_ = String(MC_AI_TEXT_FALLBACK);
     bubbleText_ = replyText_;
   }
 
   replyReady_ = true;
-
-  // THINK タイマー開始（tick上の“短い考え中”表示用）
-  thinkStartMs_ = millis();
-
-  LOG_EVT_INFO("EVT_AI_STATE", "state=THINKING");
-  updateOverlay_(thinkStartMs_);
 }
 
 
@@ -565,38 +534,29 @@ void AiTalkController::enterCooldown_(uint32_t nowMs, bool error, const char* re
   state_ = AiState::Cooldown;
   cooldownStartMs_ = nowMs;
 
-  // 基本 cooldown + エラー時は延長
-  cooldownDurMs_ = kCooldownMs;
-  if (error) cooldownDurMs_ += kErrorExtraMs;
-
-  // TTS待ちはここで解除（遅延doneは無視する）
-  expectTtsId_ = 0;
-  speakHardTimeoutMs_ = 0;
-
-  (void)reason;
-
-  LOG_EVT_INFO("EVT_AI_STATE", "state=COOLDOWN");
-  updateOverlay_(nowMs);
-}
-
-void AiTalkController::updateOverlay_(uint32_t nowMs) {
-  if (state_ == AiState::Idle) {
-    overlay_.active = false;
-    overlay_.state = ::AiState::Idle;
-    overlay_.line1 = "";
-    overlay_.line2 = "";
-    // hint は残してもいいが、ここでは空にしておく
-    // overlay_.hint = "";
-    return;
-  }
+  cooldownDurMs_ = (uint32_t)MC_AI_COOLDOWN_MS;
+  if (error) cooldownDurMs_ += (uint32_t)MC_AI_COOLDOWN_ERROR_EXTRA_MS;
 
   overlay_.active = true;
+  overlay_.state = mcToUiAiState_(state_);
+  overlay_.hint  = MC_AI_IDLE_HINT_TEXT;
+  overlay_.line1 = MC_AI_TEXT_COOLDOWN;
+  overlay_.line2 = "";
 
-  // 型ズレ吸収（AiTalkController::AiState -> ::AiState）
+  LOG_EVT_INFO("EVT_AI_STATE", "state=COOLDOWN reason=%s err=%d dur=%lums",
+               reason ? reason : "-",
+               error ? 1 : 0,
+               (unsigned long)cooldownDurMs_);
+}
+
+
+
+
+void AiTalkController::updateOverlay_(uint32_t nowMs) {
+  overlay_.active = true;
   overlay_.state = mcToUiAiState_(state_);
 
-  // hint は config が無い環境でも通るようフォールバック済み（上で #ifndef 済み）
-  // “AI” 固定にしたいならここを変えてOK。現状は既存の定数を優先。
+  // hint は state に応じて上書きするが、万一空なら idle を入れる
   if (!overlay_.hint.length()) overlay_.hint = MC_AI_IDLE_HINT_TEXT;
 
   auto ceilSec = [](uint32_t remainMs) -> int {
@@ -612,7 +572,7 @@ void AiTalkController::updateOverlay_(uint32_t nowMs) {
       overlay_.hint = MC_AI_LISTENING_HINT_TEXT;
 
       const uint32_t elapsed = nowMs - listenStartMs_;
-      const uint32_t remain  = (elapsed >= kListeningTimeoutMs) ? 0 : (kListeningTimeoutMs - elapsed);
+      const uint32_t remain  = (elapsed >= (uint32_t)MC_AI_LISTEN_TIMEOUT_MS) ? 0 : ((uint32_t)MC_AI_LISTEN_TIMEOUT_MS - elapsed);
       overlay_.line1 = "LISTEN " + String(ceilSec(remain)) + "s";
       overlay_.line2 = "";
       return;
@@ -626,7 +586,7 @@ void AiTalkController::updateOverlay_(uint32_t nowMs) {
       // - STT成功なら LLM OK/ERR + 先頭
       if (!lastSttOk_) {
         overlay_.line1 = "STT: ERR";
-        String head = mcLogHead(lastUserText_, 40);
+        String head = mcLogHead(lastUserText_, MC_AI_LOG_HEAD_BYTES_OVERLAY);
         if (!head.length()) head = "...";
         overlay_.line2 = head;
         return;
@@ -634,7 +594,7 @@ void AiTalkController::updateOverlay_(uint32_t nowMs) {
 
       overlay_.line1 = lastLlmOk_ ? "LLM: OK" : "LLM: ERR";
       String head = lastLlmOk_ ? lastLlmTextHead_ : lastLlmErr_;
-      head = mcLogHead(head, 40);
+      head = mcLogHead(head, MC_AI_LOG_HEAD_BYTES_OVERLAY);
       if (!head.length()) head = "...";
       overlay_.line2 = head;
       return;
@@ -651,7 +611,7 @@ void AiTalkController::updateOverlay_(uint32_t nowMs) {
       overlay_.hint = MC_AI_SPEAKING_HINT_TEXT;
 
       const uint32_t elapsed = nowMs - blankStartMs_;
-      const uint32_t remain  = (elapsed >= kPostSpeakBlankMs) ? 0 : (kPostSpeakBlankMs - elapsed);
+      const uint32_t remain  = (elapsed >= (uint32_t)MC_AI_POST_SPEAK_BLANK_MS) ? 0 : ((uint32_t)MC_AI_POST_SPEAK_BLANK_MS - elapsed);
       overlay_.line1 = "BLANK " + String(ceilSec(remain)) + "s";
       overlay_.line2 = "";
       return;

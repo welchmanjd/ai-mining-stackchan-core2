@@ -73,6 +73,18 @@
   #define MC_AI_IDLE_HINT_TEXT "AI"
 #endif
 
+// 状態別ヒント（未定義なら Idle と同じ）
+// Step3: ai_talk_controller.cpp から移設（単一ソース化）
+#ifndef MC_AI_LISTENING_HINT_TEXT
+  #define MC_AI_LISTENING_HINT_TEXT MC_AI_IDLE_HINT_TEXT
+#endif
+#ifndef MC_AI_THINKING_HINT_TEXT
+  #define MC_AI_THINKING_HINT_TEXT MC_AI_IDLE_HINT_TEXT
+#endif
+#ifndef MC_AI_SPEAKING_HINT_TEXT
+  #define MC_AI_SPEAKING_HINT_TEXT MC_AI_IDLE_HINT_TEXT
+#endif
+
 // 実装テスト用（user_config.h で上書き可）
 #ifndef MC_AI_STT_DEBUG_SHOW_TEXT
   #define MC_AI_STT_DEBUG_SHOW_TEXT 0
@@ -103,6 +115,18 @@
 
 #ifndef MC_AI_COUNTDOWN_UPDATE_MS
   #define MC_AI_COUNTDOWN_UPDATE_MS 250
+#endif
+
+// ---- Recording time (ms; internal use) ----
+// Step3: 実装側での *1000 をここに閉じ込める（値は変更しない）
+#ifndef MC_AI_LISTEN_TIMEOUT_MS
+  #define MC_AI_LISTEN_TIMEOUT_MS ((uint32_t)MC_AI_LISTEN_MAX_SECONDS * 1000UL)
+#endif
+#ifndef MC_AI_LISTEN_MIN_MS
+  #define MC_AI_LISTEN_MIN_MS ((uint32_t)MC_AI_LISTEN_MIN_SECONDS * 1000UL)
+#endif
+#ifndef MC_AI_LISTEN_CANCEL_WINDOW_MS
+  #define MC_AI_LISTEN_CANCEL_WINDOW_MS ((uint32_t)MC_AI_LISTEN_CANCEL_WINDOW_SEC * 1000UL)
 #endif
 
 // ---- Recording params (PCM16 mono) ----
@@ -148,6 +172,26 @@
   #define MC_AI_OVERALL_DEADLINE_MS 20000
 #endif
 
+// overall budget margin (ms) : STT/LLM の残り時間計算に使う（値は変更しない）
+#ifndef MC_AI_OVERALL_MARGIN_MS
+  #define MC_AI_OVERALL_MARGIN_MS 250
+#endif
+
+// 最低限の「考え中」表示（ms）: ブロッキング後でも0にしない
+#ifndef MC_AI_THINKING_MOCK_MS
+  #define MC_AI_THINKING_MOCK_MS 200
+#endif
+
+// 発話後の空白（ms）
+#ifndef MC_AI_POST_SPEAK_BLANK_MS
+  #define MC_AI_POST_SPEAK_BLANK_MS 500
+#endif
+
+// Orchestrator が無い（sandbox等）ときの擬似発話時間（ms）
+#ifndef MC_AI_SIMULATED_SPEAK_MS
+  #define MC_AI_SIMULATED_SPEAK_MS 2000
+#endif
+
 // ---- Rate / safety limits ----
 #ifndef MC_AI_MAX_TALKS_PER_MIN
   #define MC_AI_MAX_TALKS_PER_MIN 6
@@ -159,6 +203,24 @@
 
 #ifndef MC_AI_TTS_MAX_CHARS
   #define MC_AI_TTS_MAX_CHARS 120
+#endif
+
+// ---- Log head limits (bytes) ----
+// Step3: ログ短縮のバイト数を単一ソース化（値は変更しない）
+#ifndef MC_AI_LOG_HEAD_BYTES_STT_TEXT
+  #define MC_AI_LOG_HEAD_BYTES_STT_TEXT 30
+#endif
+#ifndef MC_AI_LOG_HEAD_BYTES_OVERLAY
+  #define MC_AI_LOG_HEAD_BYTES_OVERLAY 40
+#endif
+#ifndef MC_AI_LOG_HEAD_BYTES_LLM_ERRMSG_SHORT
+  #define MC_AI_LOG_HEAD_BYTES_LLM_ERRMSG_SHORT 80
+#endif
+#ifndef MC_AI_LOG_HEAD_BYTES_LLM_HTTP_ERRMSG
+  #define MC_AI_LOG_HEAD_BYTES_LLM_HTTP_ERRMSG 120
+#endif
+#ifndef MC_AI_LOG_HEAD_BYTES_LLM_DIAG
+  #define MC_AI_LOG_HEAD_BYTES_LLM_DIAG 180
 #endif
 
 // ---- AI: TTS done hard timeout (ms) ----
@@ -176,6 +238,7 @@
 #ifndef MC_AI_TTS_HARD_TIMEOUT_MAX_MS
   #define MC_AI_TTS_HARD_TIMEOUT_MAX_MS 60000
 #endif
+
 
 
 // ---- AI UI short texts（長文は出さない方針なので短文のみ）----

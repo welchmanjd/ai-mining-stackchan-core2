@@ -49,7 +49,7 @@ static String buildDiag_(JsonVariant root) {
     d += "has_error ";
     if (root["error"]["message"].is<const char*>()) {
       String msg = (const char*)root["error"]["message"];
-      msg = mcLogHead(msg, 80);
+      msg = mcLogHead(msg, MC_AI_LOG_HEAD_BYTES_LLM_ERRMSG_SHORT);
       d += "err=" + msg + " ";
     }
   }
@@ -57,7 +57,7 @@ static String buildDiag_(JsonVariant root) {
   JsonVariant out = root["output"];
   if (!out.is<JsonArray>()) {
     d += "no_output_array";
-    return mcLogHead(d, 180);
+    return mcLogHead(d, MC_AI_LOG_HEAD_BYTES_LLM_DIAG);
   }
 
   JsonArray a = out.as<JsonArray>();
@@ -88,8 +88,10 @@ static String buildDiag_(JsonVariant root) {
     n++;
   }
 
-  return mcLogHead(d, 180);
+  return mcLogHead(d, MC_AI_LOG_HEAD_BYTES_LLM_DIAG);
 }
+
+
 
 
 static String extractAnyText_(JsonVariant root) {
@@ -242,7 +244,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     DeserializationError e = deserializeJson(doc, body);
     if (!e && doc["error"]["message"].is<const char*>()) {
       String msg = (const char*)doc["error"]["message"];
-      msg = mcLogHead(msg, 120);
+      msg = mcLogHead(msg, MC_AI_LOG_HEAD_BYTES_LLM_HTTP_ERRMSG);
       r.err = "http_" + String(code) + ":" + msg;
     } else {
       r.err = "http_" + String(code);
@@ -250,6 +252,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     r.ok = false;
     return r;
   }
+
 
   // ---- parse + extract ----
   // 返答が短い前提だけど、環境差の保険で余裕を持たせる
