@@ -408,7 +408,8 @@ void UIMining::drawStackchanScreen(const PanelData& p) {
   bool attnActiveNow = attention_active_ && ((int32_t)(attention_until_ms_ - now) > 0);
   bool attnChanged = (attnActiveNow != s_prevAttnActive);
   if (attnChanged || (now - s_lastUiHbMs) >= UI_HEARTBEAT_MS) {
-    LOG_EVT_DEBUG("EVT_UI_HEARTBEAT", "screen=stackchan attn=%d", attnActiveNow ? 1 : 0);
+    // Step2-3: heartbeatはデフォルトOFF（必要なら EVT_HEARTBEAT_ENABLED で復帰）
+    LOG_EVT_HEARTBEAT("EVT_UI_HEARTBEAT", "screen=stackchan attn=%d", attnActiveNow ? 1 : 0);
     s_lastUiHbMs = now;
     s_prevAttnActive = attnActiveNow;
   }

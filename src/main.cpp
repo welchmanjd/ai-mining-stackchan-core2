@@ -44,6 +44,33 @@ enum AppMode : uint8_t {
 static AppMode g_mode = MODE_DASH;
 
 
+// ---- AI busy / tap log aggregation (Step2) ----
+static const char* aiStateName_(AiTalkController::AiState s) {
+  switch (s) {
+    case AiTalkController::AiState::Idle:           return "IDLE";
+    case AiTalkController::AiState::Listening:      return "LISTENING";
+    case AiTalkController::AiState::Thinking:       return "THINKING";
+    case AiTalkController::AiState::Speaking:       return "SPEAKING";
+    case AiTalkController::AiState::PostSpeakBlank: return "POST";
+    case AiTalkController::AiState::Cooldown:       return "COOLDOWN";
+    default:                                        return "?";
+  }
+}
+
+// Step2-1: suppress Behavior log => 状態変化時のみ
+static bool     g_prevAiBusyForBehavior = false;
+static uint32_t g_aiBusyStartMs = 0;
+static uint32_t g_aiBusyDebugLastMs = 0; // DEBUGで毎秒を復活させる場合用
+
+// Step2-2: tap consumed => 要約ログ用に集約
+static uint32_t g_aiTapConsumedCount = 0;
+static int      g_aiTapFirstX = 0, g_aiTapFirstY = 0;
+static int      g_aiTapLastX  = 0, g_aiTapLastY  = 0;
+static uint32_t g_aiTapFirstMs = 0;
+static AiTalkController::AiState g_aiTapLastState = AiTalkController::AiState::Idle;
+
+
+
 // "Attention" ("WHAT?") mode: short-lived focus state triggered by tap in Stackchan screen.
 static bool     g_attentionActive = false;
 static uint32_t g_attentionUntilMs = 0;
@@ -783,15 +810,46 @@ void loop() {
     mc_logf("[MAIN] BtnA pressed, mode=%d", (int)g_mode);
   }
 
+
   bool aiConsumedTap = false;
   if (g_mode == MODE_STACKCHAN && touchDown) {
+    // タップ処理の「前」のAI状態を控える（cancelで即IDLEになるケース対策）
+    const AiTalkController::AiState stateBeforeTap = g_ai.state();
+
     // 上1/3タップはAIが最優先で処理（処理したらAttentionへ流さない）
     const int screenH = M5.Display.height();
     aiConsumedTap = g_ai.onTap(touchX, touchY, screenH);
+
     if (aiConsumedTap) {
-      mc_logf("[ai] tap consumed by AI (%d,%d)", touchX, touchY);
+      // Step2-2: 通常ログでは連打座標を出さず、要約用にカウントだけ貯める
+      if (g_aiTapConsumedCount == 0) {
+        g_aiTapFirstX = touchX;
+        g_aiTapFirstY = touchY;
+        g_aiTapFirstMs = now;
+      }
+      g_aiTapConsumedCount++;
+      g_aiTapLastX = touchX;
+      g_aiTapLastY = touchY;
+
+      // ---- during= の改善ポイント ----
+      // onTap() が「キャンセル」を発火すると、ここに来た時点で state が IDLE になりがち。
+      // その場合は「タップ前の状態」を採用して、during=IDLE になりにくくする。
+      const AiTalkController::AiState sNow = g_ai.state();
+      if (sNow != AiTalkController::AiState::Idle) {
+        g_aiTapLastState = sNow;
+      } else if (stateBeforeTap != AiTalkController::AiState::Idle) {
+        g_aiTapLastState = stateBeforeTap;
+      }
+      // （両方IDLEなら更新しない＝従来どおりIDLEのまま）
+
+      // 詳細（従来どおり座標追跡）は DEBUG でのみ
+      if (EVT_DEBUG_ENABLED) {
+        mc_logf("[ai][DBG] tap consumed by AI (%d,%d)", touchX, touchY);
+      }
     }
   }
+
+
 
   // AI busy中は Attention を完全抑止：すでにAttention中なら即座に終了（保険）
   if (g_mode == MODE_STACKCHAN && g_ai.isBusy() && g_attentionActive) {
@@ -897,19 +955,49 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
 
     g_behavior.update(data, now);
 
+
     StackchanReaction reaction;
     bool gotReaction = false;
-    if (g_mode == MODE_STACKCHAN && g_ai.isBusy()) {
-      // AI busy中はBehavior（日常セリフ）を発生源で止める
-      static uint32_t s_lastLogMs = 0;
-      if (now - s_lastLogMs > 1000) {
-        mc_logf("[ai] suppress Behavior while busy (state=%d)", (int)g_ai.state());
-        s_lastLogMs = now;
+
+    const bool suppressBehaviorNow = (g_mode == MODE_STACKCHAN) && g_ai.isBusy();
+
+    // ---- Step2-1: busy enter/exit を検知して1回だけ出す ----
+    if (suppressBehaviorNow && !g_prevAiBusyForBehavior) {
+      g_aiBusyStartMs = now;
+      mc_logf("[ai] busy enter state=%s reason=ai_busy", aiStateName_(g_ai.state()));
+    } else if (!suppressBehaviorNow && g_prevAiBusyForBehavior) {
+      const float durS = (now - g_aiBusyStartMs) / 1000.0f;
+      mc_logf("[ai] busy exit state=%s dur=%.1fs reason=ai_idle", aiStateName_(g_ai.state()), durS);
+
+      // ---- Step2-2: busy終了時に tap consumed を要約して1回だけ出す ----
+      if (g_aiTapConsumedCount > 0) {
+        const float spanS = (now - g_aiTapFirstMs) / 1000.0f;
+        mc_logf("[ai] tap consumed x%lu last=(%d,%d) first=(%d,%d) span=%.1fs during=%s",
+                (unsigned long)g_aiTapConsumedCount,
+                g_aiTapLastX, g_aiTapLastY,
+                g_aiTapFirstX, g_aiTapFirstY,
+                spanS, aiStateName_(g_aiTapLastState));
+
+        // reset
+        g_aiTapConsumedCount = 0;
       }
+    }
+    g_prevAiBusyForBehavior = suppressBehaviorNow;
+
+    if (suppressBehaviorNow) {
+      // Behavior（日常セリフ）抑止そのものは従来通り
       gotReaction = false;
+
+      // 詳細（毎秒）は DEBUG でのみ復活可能
+      if (EVT_DEBUG_ENABLED && (now - g_aiBusyDebugLastMs) >= 1000) {
+        mc_logf("[ai][DBG] suppress Behavior while busy (state=%s)", aiStateName_(g_ai.state()));
+        g_aiBusyDebugLastMs = now;
+      }
     } else {
       gotReaction = g_behavior.popReaction(&reaction);
     }
+
+
     if (gotReaction) {
 
 
@@ -1027,7 +1115,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
         (g_attentionActive != g_lastPopEmptyAttn);
 
       if (stateChanged || (now - s_lastHbMs) >= PRESENTER_HEARTBEAT_MS) {
-        LOG_EVT_DEBUG("EVT_PRESENT_HEARTBEAT",
+        LOG_EVT_HEARTBEAT("EVT_PRESENT_HEARTBEAT",
                       "busy=%d mode=%d attn=%d empty_streak=%lu",
                       ttsBusyNow ? 1 : 0, (int)g_mode, g_attentionActive ? 1 : 0,
                       (unsigned long)s_emptyStreak);

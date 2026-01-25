@@ -18,9 +18,16 @@ inline void mc_logf(const char* fmt, ...) {
 }
 
 // ===== Event logging helpers =====
+//
 // Toggle DEBUG output by defining EVT_DEBUG_ENABLED (1/0) before including this header.
+// Default is OFF to keep normal logs clean.
 #ifndef EVT_DEBUG_ENABLED
-#define EVT_DEBUG_ENABLED 1
+#define EVT_DEBUG_ENABLED 0
+#endif
+
+// Heartbeat logs can be enabled separately (also requires EVT_DEBUG_ENABLED=1).
+#ifndef EVT_HEARTBEAT_ENABLED
+#define EVT_HEARTBEAT_ENABLED 0
 #endif
 
 #define LOG_EVT_INFO(tag, fmt, ...) \
@@ -28,3 +35,7 @@ inline void mc_logf(const char* fmt, ...) {
 
 #define LOG_EVT_DEBUG(tag, fmt, ...) \
   do { if (EVT_DEBUG_ENABLED) mc_logf("[EVT] " tag " " fmt, ##__VA_ARGS__); } while (0)
+
+// Heartbeat (wallpaper) logs: OFF by default. Enable only when needed.
+#define LOG_EVT_HEARTBEAT(tag, fmt, ...) \
+  do { if (EVT_DEBUG_ENABLED && EVT_HEARTBEAT_ENABLED) mc_logf("[EVT] " tag " " fmt, ##__VA_ARGS__); } while (0)
