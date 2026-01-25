@@ -467,13 +467,27 @@ bool AzureTts::isBusy() const {
   return state_ != Idle;
 }
 
-bool AzureTts::consumeDone(uint32_t* outId) {
+
+bool AzureTts::consumeDone(uint32_t* outId, bool* outOk, char* outReason, size_t outReasonLen) {
   uint32_t v = doneSpeakId_;
   if (!v) return false;
+
   doneSpeakId_ = 0;
+
   if (outId) *outId = v;
+  if (outOk) *outOk = doneOk_;
+  if (outReason && outReasonLen > 0) {
+    const char* r = (doneReason_[0] ? doneReason_ : "-");
+    strncpy(outReason, r, outReasonLen - 1);
+    outReason[outReasonLen - 1] = 0;
+  }
+
+  // clear (one-shot)
+  doneOk_ = false;
+  doneReason_[0] = 0;
   return true;
 }
+
 
 void AzureTts::requestSessionReset() {
   sessionResetPending_ = true;
@@ -523,8 +537,14 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
     M5.Log.printf("[TTS] Azure voice is not set\n");
     return false;
   }
+// ===== azure_tts.cpp：speakAsync() 内（done初期化）差し替え =====
   currentSpeakId_ = speakId;
+
+  // clear DONE state (for previous id)
   doneSpeakId_ = 0;
+  doneOk_ = false;
+  doneReason_[0] = 0;
+
 
   // clear stale cancel (for previous id)
   portENTER_CRITICAL(&cancelMux_);
@@ -572,65 +592,90 @@ void AzureTts::cancel(uint32_t speakId, const char* reason) {
 }
 
 
-
+// ===== src/azure_tts.cpp：poll() 関数全文差し替え =====
 void AzureTts::poll() {
   if (state_ == Idle) return;
 
   // waiting fetch
   if (state_ == Fetching) {
-    // fetch task が完了したら state_ を Ready にして wav_ をセットする想定
     return;
   }
 
-  // ready to play
+  auto clearCancel = [&]() {
+    portENTER_CRITICAL(&cancelMux_);
+    cancelSpeakId_ = 0;
+    cancelReason_[0] = 0;
+    portEXIT_CRITICAL(&cancelMux_);
+  };
+
+  auto makeCanceledReason = [&](char* out, size_t outLen) {
+    if (!out || outLen == 0) return;
+    if (cancelReason_[0]) {
+      // canceled:<detail>
+      snprintf(out, outLen, "canceled:%s", cancelReason_);
+    } else {
+      strncpy(out, "canceled", outLen - 1);
+      out[outLen - 1] = 0;
+    }
+  };
+
+  auto setDone = [&](bool ok, const char* reason) {
+    doneOk_ = ok;
+    if (reason && reason[0]) {
+      strncpy(doneReason_, reason, sizeof(doneReason_) - 1);
+      doneReason_[sizeof(doneReason_) - 1] = 0;
+    } else {
+      doneReason_[0] = 0;
+    }
+    doneSpeakId_ = currentSpeakId_;
+  };
+
+  auto setLastDrop = [&](const char* reason) {
+    last_.ok = false;
+    if (reason && reason[0]) {
+      strncpy(last_.err, reason, sizeof(last_.err) - 1);
+      last_.err[sizeof(last_.err) - 1] = 0;
+    } else {
+      last_.err[0] = 0;
+    }
+  };
+
+  // ---------- Ready: try to play ----------
   if (state_ == Ready) {
-
-    // ---- Phase5-B: cancel guard (prevents late play) ----
+    // cancel guard (prevents late play)
     if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
+      char r[24];
+      makeCanceledReason(r, sizeof(r));
       M5.Log.printf("[TTS] canceled before play id=%lu reason=%s\n",
-                    (unsigned long)currentSpeakId_,
-                    (cancelReason_[0] ? cancelReason_ : "-"));
+                    (unsigned long)currentSpeakId_, r);
 
-      if (wav_) {
-        free(wav_);
-        wav_ = nullptr;
-      }
+      if (wav_) { free(wav_); wav_ = nullptr; }
       wavLen_ = 0;
       state_ = Idle;
 
-      // unlock if somehow locked
       if (i2sLocked_) {
         I2SManager::instance().unlock("TTS.cancel_ready");
         i2sLocked_ = false;
       }
 
-      // report DONE as canceled
-      last_.ok = false;
-      strncpy(last_.err, "canceled", sizeof(last_.err) - 1);
-      last_.err[sizeof(last_.err) - 1] = 0;
-      doneSpeakId_ = currentSpeakId_;
-
-      portENTER_CRITICAL(&cancelMux_);
-      cancelSpeakId_ = 0;
-      cancelReason_[0] = 0;
-      portEXIT_CRITICAL(&cancelMux_);
+      setLastDrop(r);
+      setDone(false, r);
+      clearCancel();
       return;
     }
 
-
     if (!wav_ || wavLen_ == 0) {
-      // nothing to play
+      M5.Log.printf("[TTS] no wav -> drop id=%lu\n", (unsigned long)currentSpeakId_);
       state_ = Idle;
-      doneSpeakId_ = currentSpeakId_;
+      setLastDrop("no_wav");
+      setDone(false, "no_wav");
       return;
     }
 
     // If speaker is still playing something else, wait here.
-    if (M5.Speaker.isPlaying()) {
-      return;
-    }
+    if (M5.Speaker.isPlaying()) return;
 
-    // ---- I2S owner: Speaker（再生中はMic側 begin/end をブロック） ----
+    // I2S owner: Speaker
     if (!i2sLocked_) {
       if (!I2SManager::instance().lockForSpeaker("TTS.play", 4000)) {
         I2SManager& m = I2SManager::instance();
@@ -644,19 +689,21 @@ void AzureTts::poll() {
         wav_ = nullptr;
         wavLen_ = 0;
         state_ = Idle;
-        doneSpeakId_ = currentSpeakId_;
+
+        setLastDrop("i2s_deny");
+        setDone(false, "i2s_deny");
         return;
       }
-      i2sLocked_ = true;  // ★重要：lock成功したら必ず立てる（unlockの条件になる）
+      i2sLocked_ = true;
     }
 
-    // Speaker が end() 済みのケース（録音の都合など）に備える
+    // Speaker begin if needed
     if (!M5.Speaker.isEnabled()) {
       M5.Log.printf("[TTS] speaker not enabled -> begin\n");
       M5.Speaker.begin();
     }
 
-    // ---- ensure volume (prevent silent) ----
+    // volume safety
     {
       const int vol = (int)M5.Speaker.getVolume();
       M5.Log.printf("[TTS] spk state: enabled=%d playing=%d vol=%d defaultVol=%d\n",
@@ -664,83 +711,78 @@ void AzureTts::poll() {
                     M5.Speaker.isPlaying() ? 1 : 0,
                     vol,
                     (int)defaultVolume_);
-
-      // 無音の典型：volume=0 が残っている
       if (vol == 0 && defaultVolume_ > 0) {
         M5.Log.printf("[TTS] spk vol=0 -> restore %d\n", (int)defaultVolume_);
         M5.Speaker.setVolume(defaultVolume_);
       }
     }
 
-    bool ok = false;
-    if (wav_ && wavLen_ > 0) {
-      // play wav
-      ok = M5.Speaker.playWav(wav_, wavLen_);
-      if (ok) {
-        M5.Log.printf("[TTS] play WAV: wav=%uB pcm=%uB sr=16000Hz dur~%lums\n",
-                      (unsigned)wavLen_, (unsigned)(wavLen_ >= 44 ? (wavLen_ - 44) : 0),
-                      (unsigned long)((wavLen_ >= 44 ? (wavLen_ - 44) : 0) / 32)); // rough
-      }
-    }
+    bool okPlay = false;
+    okPlay = M5.Speaker.playWav(wav_, wavLen_);
 
-    if (!ok) {
+    if (!okPlay) {
       M5.Log.printf("[TTS] play failed (wav=%uB)\n", (unsigned)wavLen_);
       free(wav_);
       wav_ = nullptr;
       wavLen_ = 0;
       state_ = Idle;
-      doneSpeakId_ = currentSpeakId_;
 
-      // ★失敗でも必ず unlock
       if (i2sLocked_) {
         I2SManager::instance().unlock("TTS.play_fail");
         i2sLocked_ = false;
       }
+
+      setLastDrop("play_fail");
+      setDone(false, "play_fail");
       return;
     }
 
     // play started
     state_ = Playing;
+    return;
   }
 
-    // cancel guard (prevents late play)
-    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
-      M5.Log.printf("[TTS] canceled before play id=%lu\n", (unsigned long)currentSpeakId_);
-      if (wav_) {
-        free(wav_);
-        wav_ = nullptr;
-      }
+  // ---------- Playing: wait done ----------
+  if (state_ == Playing) {
+    // canceled during play: stopは cancel() 側で行われる想定。ここでは停止検知してDONEを返す。
+    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_ && !M5.Speaker.isPlaying()) {
+      char r[24];
+      makeCanceledReason(r, sizeof(r));
+      M5.Log.printf("[TTS] canceled during play id=%lu reason=%s\n",
+                    (unsigned long)currentSpeakId_, r);
+
+      if (wav_) { free(wav_); wav_ = nullptr; }
       wavLen_ = 0;
       state_ = Idle;
 
-      // unlock if somehow locked
       if (i2sLocked_) {
-        I2SManager::instance().unlock("TTS.cancel_ready");
+        I2SManager::instance().unlock("TTS.cancel_play");
         i2sLocked_ = false;
       }
 
-      // do NOT set doneSpeakId_ (avoid late DONE events)
-      portENTER_CRITICAL(&cancelMux_);
-      cancelSpeakId_ = 0;
-      cancelReason_[0] = 0;
-      portEXIT_CRITICAL(&cancelMux_);
+      setLastDrop(r);
+      setDone(false, r);
+      clearCancel();
       return;
     }
 
-
-  if (state_ == Playing) {
     if (!M5.Speaker.isPlaying()) {
-      free(wav_);
-      wav_ = nullptr;
+      if (wav_) { free(wav_); wav_ = nullptr; }
       wavLen_ = 0;
       state_ = Idle;
-      doneSpeakId_ = currentSpeakId_;
 
-      // ★再生終了で unlock
       if (i2sLocked_) {
         I2SManager::instance().unlock("TTS.done");
         i2sLocked_ = false;
       }
+
+      // final meaning: playback ok
+      last_.ok = true;
+      strncpy(last_.err, "ok", sizeof(last_.err) - 1);
+      last_.err[sizeof(last_.err) - 1] = 0;
+
+      setDone(true, "ok");
+      return;
     }
   }
 }
@@ -1047,6 +1089,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
 
 }
 
+// ===== src/azure_tts.cpp：taskBody() 関数全文差し替え =====
 void AzureTts::taskBody() {
   while (true) {
     if (state_ != Fetching) {
@@ -1067,35 +1110,69 @@ void AzureTts::taskBody() {
     last_.fetchMs = millis() - t0;
     last_.ok = ok;
     last_.bytes = (uint32_t)len;
+
     M5.Log.printf("[TTS] fetch done ok=%d http=%d bytes=%lu took=%lums\n",
                   ok ? 1 : 0, last_.httpCode, (unsigned long)len, (unsigned long)last_.fetchMs);
 
-    // cancel guard: if this speakId was canceled while fetching, never enqueue for playback
-    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
-      M5.Log.printf("[TTS] canceled while fetching id=%lu reason=%s\n",
-                    (unsigned long)currentSpeakId_,
-                    (cancelReason_[0] ? cancelReason_ : "-"));
+    auto makeCanceledReason = [&](char* out, size_t outLen) {
+      if (!out || outLen == 0) return;
+      if (cancelReason_[0]) snprintf(out, outLen, "canceled:%s", cancelReason_);
+      else {
+        strncpy(out, "canceled", outLen - 1);
+        out[outLen - 1] = 0;
+      }
+    };
 
-      if (buf) free(buf);
-      state_ = Idle;
-
-      // report DONE as canceled
-      last_.ok = false;
-      strncpy(last_.err, "canceled", sizeof(last_.err) - 1);
-      last_.err[sizeof(last_.err) - 1] = 0;
-      doneSpeakId_ = currentSpeakId_;
-
+    auto clearCancel = [&]() {
       portENTER_CRITICAL(&cancelMux_);
       cancelSpeakId_ = 0;
       cancelReason_[0] = 0;
       portEXIT_CRITICAL(&cancelMux_);
+    };
+
+    auto setDone = [&](bool doneOk, const char* reason) {
+      doneOk_ = doneOk;
+      if (reason && reason[0]) {
+        strncpy(doneReason_, reason, sizeof(doneReason_) - 1);
+        doneReason_[sizeof(doneReason_) - 1] = 0;
+      } else {
+        doneReason_[0] = 0;
+      }
+      doneSpeakId_ = currentSpeakId_;
+    };
+
+    auto setLastDrop = [&](const char* reason) {
+      last_.ok = false;
+      if (reason && reason[0]) {
+        strncpy(last_.err, reason, sizeof(last_.err) - 1);
+        last_.err[sizeof(last_.err) - 1] = 0;
+      } else {
+        last_.err[0] = 0;
+      }
+    };
+
+    // cancel guard: canceled while fetching -> never enqueue for playback
+    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
+      char r[24];
+      makeCanceledReason(r, sizeof(r));
+      M5.Log.printf("[TTS] canceled while fetching id=%lu reason=%s\n",
+                    (unsigned long)currentSpeakId_, r);
+
+      if (buf) free(buf);
+      state_ = Idle;
+
+      setLastDrop(r);
+      setDone(false, r);
+      clearCancel();
       continue;
     }
 
     if (!ok || !buf || !len) {
       if (buf) free(buf);
       state_ = Idle;
-      doneSpeakId_ = currentSpeakId_;
+
+      setLastDrop("fetch_fail");
+      setDone(false, "fetch_fail");
       continue;
     }
 

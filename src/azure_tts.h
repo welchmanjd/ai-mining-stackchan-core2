@@ -23,7 +23,14 @@ public:
   void poll();
 
   bool isBusy() const;
-  bool consumeDone(uint32_t* outId);
+
+  // consume DONE event (always emitted for recovery)
+  // outReason will be NUL-terminated (if outReasonLen>0)
+  bool consumeDone(uint32_t* outId, bool* outOk, char* outReason, size_t outReasonLen);
+
+  // legacy wrapper
+  bool consumeDone(uint32_t* outId) { return consumeDone(outId, nullptr, nullptr, 0); }
+
 
   void requestSessionReset();
 
@@ -84,7 +91,12 @@ private:
   volatile State state_ = Idle;
   TaskHandle_t   task_  = nullptr;
   uint32_t currentSpeakId_ = 0;
+
+  // DONE: 必ず返す（上位復帰のため）＋ ok/reason を持つ
   volatile uint32_t doneSpeakId_ = 0;
+  volatile bool doneOk_ = false;
+  char doneReason_[24] = {0};
+
   // cancel request (thread-safe)
   volatile uint32_t cancelSpeakId_ = 0;
   char cancelReason_[24] = {0};

@@ -1,5 +1,39 @@
 #include "orchestrator.h"
 
+// ===== src/orchestrator.cpp：#include直後に追加 =====
+const char* Orchestrator::sourceToStr_(CancelSource s) {
+  switch (s) {
+    case CancelSource::AI:   return "AI";
+    case CancelSource::Main: return "MAIN";
+    default:                 return "OTHER";
+  }
+}
+
+const Orchestrator::CancelRecord* Orchestrator::findCanceled_(uint32_t id) const {
+  if (id == 0) return nullptr;
+  for (const auto& r : canceled_) {
+    if (r.id == id) return &r;
+  }
+  return nullptr;
+}
+
+void Orchestrator::rememberCanceled_(uint32_t id, const char* reason, CancelSource source) {
+  if (id == 0) return;
+  if (canceled_.size() >= kMaxCanceled) {
+    canceled_.erase(canceled_.begin());
+  }
+  CancelRecord rec;
+  rec.id = id;
+  rec.source = source;
+  if (reason && reason[0]) {
+    strncpy(rec.reason, reason, sizeof(rec.reason) - 1);
+    rec.reason[sizeof(rec.reason) - 1] = 0;
+  }
+  canceled_.push_back(rec);
+}
+
+
+// ===== src/orchestrator.cpp：init() 関数全文差し替え =====
 void Orchestrator::init() {
   state_ = AppState::Idle;
   expectSpeakId_ = 0;
@@ -7,11 +41,15 @@ void Orchestrator::init() {
   mismatchCount_ = 0;
   nextTtsId_ = 1;
   pending_.clear();
+  canceled_.clear();
+
   prevState_ = AppState::Idle;
   thinkWaitSinceMs_ = 0;
   timeoutLogged_ = false;
+
   LOG_EVT_INFO("EVT_ORCH_INIT", "state=%d", (int)state_);
 }
+
 
 Orchestrator::SpeakStartCmd Orchestrator::makeSpeakStartCmd(uint32_t rid, const String& text, OrchPrio prio, OrchKind kind) {
   SpeakStartCmd cmd;
@@ -120,20 +158,36 @@ void Orchestrator::clearExpectedSpeak(const char* reason) {
                (unsigned long)old);
 }
 
-// ------------------------------------------------------------
-// Phase5-B: cancel speak (clear expect + drop pending for the id)
-// ------------------------------------------------------------
+// ===== orchestrator.cpp：cancelSpeak(legacy)＋cancelSpeak(B2本体)（全文差し替え）=====
 void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason) {
+  cancelSpeak(speakId, reason, CancelSource::Other);
+}
+
+void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason, CancelSource source) {
   if (speakId == 0) return;
+
+  // idempotent guard
+  const CancelRecord* already = findCanceled_(speakId);
+  if (already) {
+    LOG_EVT_INFO("EVT_ORCH_CANCEL_IGNORED",
+                 "tts_id=%lu source=%s reason=%s orig_source=%s orig_reason=%s",
+                 (unsigned long)speakId,
+                 sourceToStr_(source),
+                 (reason && reason[0]) ? reason : "-",
+                 sourceToStr_(already->source),
+                 (already->reason[0]) ? already->reason : "-");
+    return;
+  }
+  rememberCanceled_(speakId, reason, source);
 
   const AppState from = state_;
   const uint32_t oldExpect = expectSpeakId_;
 
-  // 1) pending_ から同じ speakId を除去（遅延到着の再生キューを物理的に消す）
+  // pending_ から該当IDを除去
   size_t removed = 0;
   if (!pending_.empty()) {
-    for (auto it = pending_.begin(); it != pending_.end(); ) {
-      if (it->ttsId == speakId) {      // ★ pending要素のID名が違う場合はここだけ合わせて
+    for (auto it = pending_.begin(); it != pending_.end();) {
+      if (it->ttsId == speakId) {
         it = pending_.erase(it);
         removed++;
       } else {
@@ -142,7 +196,7 @@ void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason) {
     }
   }
 
-  // 2) expect中なら expect を解除して Idle に戻す
+  // expect解除
   bool clearedExpect = false;
   if (expectSpeakId_ != 0 && expectSpeakId_ == speakId) {
     expectSpeakId_ = 0;
@@ -152,26 +206,23 @@ void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason) {
     clearedExpect = true;
   }
 
-  // 3) ThinkWait監視のリセット（外部からstateをいじるため安全側に倒す）
+  // ThinkWait監視のリセット
   if (state_ != AppState::ThinkWait) {
     thinkWaitSinceMs_ = 0;
     timeoutLogged_ = false;
   }
   prevState_ = state_;
 
-  // 4) ログ（DoD根拠）
-  LOG_EVT_INFO(
-    "EVT_ORCH_CANCEL_SPEAK",
-    "from=%d to=%d id=%lu reason=%s old_expect=%lu cleared_expect=%d pending_removed=%u pending_left=%u",
-    (int)from,
-    (int)state_,
-    (unsigned long)speakId,
-    reason ? reason : "-",
-    (unsigned long)oldExpect,
-    clearedExpect ? 1 : 0,
-    (unsigned)removed,
-    (unsigned)pending_.size()
-  );
+  LOG_EVT_INFO("EVT_ORCH_CANCEL_SPEAK",
+               "from=%d to=%d tts_id=%lu source=%s reason=%s old_expect=%lu cleared_expect=%d pending_removed=%u pending_left=%u",
+               (int)from, (int)state_,
+               (unsigned long)speakId,
+               sourceToStr_(source),
+               (reason && reason[0]) ? reason : "-",
+               (unsigned long)oldExpect,
+               clearedExpect ? 1 : 0,
+               (unsigned)removed,
+               (unsigned)pending_.size());
 }
 
 

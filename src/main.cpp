@@ -492,27 +492,33 @@ void loop() {
   // AI state machine tick（毎ループ）
   g_ai.tick(now);
 
+// ===== main.cpp：Phase5-A abortブロック（全文差し替え）=====
   // Phase5-A: abort TTS (consume方式)
   {
     uint32_t abortId = 0;
     const char* reason = nullptr;
     if (g_ai.consumeAbortTts(&abortId, &reason)) {
-      mc_logf("[MAIN] abort tts id=%lu reason=%s -> cancel+clear inflight+clear orch",
-              (unsigned long)abortId,
-              (reason ? reason : "-"));
-      g_tts.cancel(abortId, reason);
 
-      // 3点セット（＋表示もクリア）
+      const char* r = (reason && reason[0]) ? reason : "abort";
+
+      mc_logf("[MAIN] abort tts id=%lu reason=%s -> cancel+clear inflight+clear orch",
+              (unsigned long)abortId, r);
+
+      // TTSへキャンセル（late-play防止）
+      g_tts.cancel(abortId, r);
+
+      // inflight クリア + 表示クリア
       g_ttsInflightId = 0;
       g_ttsInflightRid = 0;
       g_ttsInflightSpeechId = 0;
       g_ttsInflightSpeechText = "";
       UIMining::instance().setStackchanSpeech("");
 
-      // Phase5-B: expectだけでなくpendingも確実に掃除する
-      g_orch.cancelSpeak(abortId, reason);
+      // Orchestrator 側の expect/pending 掃除（B2: source/reason付き cancel）
+      g_orch.cancelSpeak(abortId, r, Orchestrator::CancelSource::Main);
     }
   }
+
 
   // ★overlayは毎ループ送らない（上部文字のチラつき対策）
   // 200msごと、またはAI state変化時のみ送る
@@ -561,23 +567,40 @@ void loop() {
 
   const bool ttsBusyNow = g_tts.isBusy();
 
+// ===== main.cpp：TTS DONEブロック（全文差し替え）=====
   uint32_t gotId = 0;
-  if (g_tts.consumeDone(&gotId)) {
+  bool ttsOk = false;
+  char ttsReason[24] = {0};
+
+  if (g_tts.consumeDone(&gotId, &ttsOk, ttsReason, sizeof(ttsReason))) {
+    const char* r = (ttsReason[0] ? ttsReason : "-");
+
     LOG_EVT_INFO("EVT_TTS_DONE_RX_MAIN",
-                 "got=%lu inflight=%lu expect_rid=%lu",
+                 "got=%lu inflight=%lu inflight_rid=%lu tts_ok=%d reason=%s",
                  (unsigned long)gotId,
                  (unsigned long)g_ttsInflightId,
-                 (unsigned long)g_ttsInflightRid);
+                 (unsigned long)g_ttsInflightRid,
+                 ttsOk ? 1 : 0,
+                 r);
 
     bool desync = false;
-    const bool ok = g_orch.onTtsDone(gotId, &desync);
-    if (ok) {
-      // AI側のSPEAKING→COOLDOWN同期（AIの発話でなくても安全に無視される）
+    const bool orchOk = g_orch.onTtsDone(gotId, &desync);
+
+    const uint32_t ridForLog = (g_ttsInflightId == gotId) ? g_ttsInflightRid : 0;
+
+    LOG_EVT_INFO("EVT_TTS_DONE",
+                 "rid=%lu tts_id=%lu tts_ok=%d reason=%s orch_ok=%d",
+                 (unsigned long)ridForLog,
+                 (unsigned long)gotId,
+                 ttsOk ? 1 : 0,
+                 r,
+                 orchOk ? 1 : 0);
+
+    if (orchOk) {
+      // AI側のSPEAKING→COOLDOWN同期（合わないIDはAI側で無視される想定）
       g_ai.onTtsDone(gotId);
 
-      LOG_EVT_INFO("EVT_TTS_DONE", "rid=%lu tts_id=%lu",
-                   (unsigned long)g_ttsInflightRid, (unsigned long)gotId);
-
+      // 表示クリア & inflightクリア（一致時）
       UIMining::instance().setStackchanSpeech("");
       LOG_EVT_INFO("EVT_PRESENT_SPEECH_CLEAR", "tts_id=%lu", (unsigned long)gotId);
 
@@ -596,12 +619,20 @@ void loop() {
                      "got=%lu expect=%lu",
                      (unsigned long)gotId,
                      (unsigned long)g_ttsInflightId);
+
         g_tts.requestSessionReset();
+
+        // desync時は UI/状態を強制復帰（解析しやすさ優先）
+        UIMining::instance().setStackchanSpeech("");
+        g_ttsInflightSpeechText = "";
+        g_ttsInflightSpeechId = 0;
         g_ttsInflightId = 0;
         g_ttsInflightRid = 0;
       }
     }
   }
+
+
 
   g_behavior.setTtsSpeaking(ttsBusyNow);
   applyMiningPolicyForTts(ttsBusyNow, g_ai.isBusy());

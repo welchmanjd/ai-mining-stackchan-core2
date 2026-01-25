@@ -279,7 +279,7 @@ void AiTalkController::tick(uint32_t nowMs) {
                   
           // Phase5-B: Orchestrator側にもキャンセルを通知（pending/expectを確実に掃除）
           if (orch_ && expectTtsId_ != 0) {
-            orch_->cancelSpeak(expectTtsId_, "ai_tts_timeout");
+            orch_->cancelSpeak(expectTtsId_, "ai_tts_timeout", Orchestrator::CancelSource::AI);
           }
           
           // abort通知（mainで cancel+clear する）

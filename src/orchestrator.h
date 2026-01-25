@@ -1,3 +1,4 @@
+// ===== src/orchestrator.h（全文差し替え）=====
 #pragma once
 
 #include <Arduino.h>
@@ -15,16 +16,18 @@ public:
     AiSpeak = 2,       // AI側（AiTalkController など）由来の speak
   };
 
+  // Phase5-B2: cancel 発火元
+  enum class CancelSource : uint8_t { AI = 0, Main = 1, Other = 2 };
 
   struct SpeakStartCmd {
     bool valid = false;
     uint32_t ttsId = 0;
     uint32_t rid = 0;
     OrchKind kind = OrchKind::None;
+    
     String text;
     OrchPrio prio = OrchPrio::Normal;
   };
-
 
   void init();
 
@@ -36,11 +39,12 @@ public:
   SpeakStartCmd popNextPending();
 
   void setExpectedSpeak(uint32_t speakId, uint32_t rid);
-
   void clearExpectedSpeak(const char* reason);
 
-  // Phase5-B: cancel speak (clear expect + drop pending for the id)
-  void cancelSpeak(uint32_t speakId, const char* reason);
+  // Phase5-B2: cancel speak (idempotent + reason/source)
+  void cancelSpeak(uint32_t speakId, const char* reason); // legacy (source=Other)
+  void cancelSpeak(uint32_t speakId, const char* reason, CancelSource source);
+
 
   void onAudioStart(uint32_t speakId);
   // desyncOut: 連続ミスマッチ閾値を超えたら true
@@ -57,10 +61,23 @@ private:
   static constexpr uint8_t kDesyncThreshold = 3;
   uint32_t nextTtsId_ = 1;
   static constexpr size_t kMaxSpeakText = 128;
+
   // ThinkWait(= TTS開始待ち/音声開始待ち)の監視タイムアウト
   // Azure TTS はネットワーク/トークン/生成で 5秒を超えることがあるため長めにする。
   static constexpr uint32_t kThinkWaitTimeoutMs = 30000;
 
+  // ---- Phase5-B2: cancel 冪等化（同一tts_idは1回だけ掃除＆本ログ）----
+  struct CancelRecord {
+    uint32_t id = 0;
+    CancelSource source = CancelSource::Other;
+    char reason[24] = {0};
+  };
+  static constexpr size_t kMaxCanceled = 8;
+  std::vector<CancelRecord> canceled_;
+
+  static const char* sourceToStr_(CancelSource s);
+  const CancelRecord* findCanceled_(uint32_t id) const;
+  void rememberCanceled_(uint32_t id, const char* reason, CancelSource source);
 
   std::vector<SpeakStartCmd> pending_;
   static constexpr size_t kMaxPending = 4;
