@@ -386,6 +386,7 @@ bool AudioRecorder::waitTaskDone_(uint32_t timeoutMs) {
   return true;
 }
 
+// ===== REPLACE: AudioRecorder::stop(uint32_t nowMs) =====
 bool AudioRecorder::stop(uint32_t nowMs) {
   if (!recording_) return false;
 
@@ -410,12 +411,17 @@ bool AudioRecorder::stop(uint32_t nowMs) {
     i2sLocked_ = false;
   }
 
-  Serial.printf("[%s] stop done ok=%d samples=%u peak=%d\n",
-                kTag, ok ? 1 : 0, (unsigned)capturedSamples_, (int)peakAbs_);
-  Serial.printf("[%s] stop ok=%d dur=%ums samples=%u peak=%d\n",
-                kTag, ok ? 1 : 0, (unsigned)durationMs(), (unsigned)capturedSamples_, (int)peakAbs_);
+  // ok=1 系ログは 1回だけ（dur/samples/peak を全部ここに集約）
+  Serial.printf("[%s] stop done ok=%d dur=%ums samples=%u peak=%d\n",
+                kTag,
+                ok ? 1 : 0,
+                (unsigned)durationMs(),
+                (unsigned)capturedSamples_,
+                (int)peakAbs_);
+
   return ok;
 }
+// ===== /REPLACE =====
 
 
 void AudioRecorder::cancel() {

@@ -116,6 +116,7 @@ bool AiTalkController::onTap(int /*x*/, int y, int screenH) {
   return onTap();
 }
 
+
 bool AiTalkController::onTap() {
   const uint32_t now = millis();
 
@@ -135,16 +136,19 @@ bool AiTalkController::onTap() {
   if (state_ == AiState::Listening) {
     const uint32_t elapsed = now - listenStartMs_;
     if (elapsed <= kListeningCancelWindowMs) {
-      recorder_.cancel();
+      // 「保険cancel」で cancel done が出ないように、必ず isRecording ガード
+      if (recorder_.isRecording()) {
+        recorder_.cancel();
+      }
       enterIdle_(now, "tap_cancel");
     }
     // 3秒以降の再タップは無視（ただし消費）
     return true;
   }
 
-
   return true;
 }
+
 
 void AiTalkController::injectText(const String& text) {
   // 本体統合フェーズ1では基本使わない（秘密保護のためフルログ禁止）
@@ -174,6 +178,7 @@ bool AiTalkController::consumeAbortTts(uint32_t* outId, const char** outReason) 
 }
 
 
+
 void AiTalkController::tick(uint32_t nowMs) {
   switch (state_) {
     case AiState::Idle:
@@ -187,24 +192,19 @@ void AiTalkController::tick(uint32_t nowMs) {
         lastRecOk_ = recorder_.stop(nowMs);
 
         // stopがTIMEOUTでも、サンプルが取れているなら続行させる（救済）
-        const uint32_t durMs = recorder_.durationMs();
         const size_t samples = recorder_.samples();
         if (!lastRecOk_ && samples >= (size_t)(MC_AI_REC_SAMPLE_RATE * 0.2f)) { // 0.2秒以上
           mc_logf("[REC] stop not ok but samples=%u, continue as ok", (unsigned)samples);
           lastRecOk_ = true;
         }
 
-        mc_logf("[REC] stop ok=%d dur=%lums samples=%u",
-                lastRecOk_ ? 1 : 0,
-                (unsigned long)durMs,
-                (unsigned)samples);
+        // stop ok ログは recorder 側に寄せる（ここでは出さない）
 
         enterThinking_(nowMs);
       } else {
         updateOverlay_(nowMs);
       }
       return;
-
     }
 
     case AiState::Thinking: {
@@ -276,25 +276,27 @@ void AiTalkController::tick(uint32_t nowMs) {
                   (unsigned long)elapsed,
                   (unsigned long)speakHardTimeoutMs_,
                   (unsigned long)expectTtsId_);
-                  
-          // Phase5-B: Orchestrator側にもキャンセルを通知（pending/expectを確実に掃除）
+
+          // Phase6-1a: abort reason を統一して貫通させる
+          static constexpr const char* kReason = "ai_tts_timeout";
+
+          // Orchestrator側にもキャンセルを通知（pending/expectを確実に掃除）
           if (orch_ && expectTtsId_ != 0) {
-            orch_->cancelSpeak(expectTtsId_, "ai_tts_timeout", Orchestrator::CancelSource::AI);
+            orch_->cancelSpeak(expectTtsId_, kReason, Orchestrator::CancelSource::AI);
           }
-          
+
           // abort通知（mainで cancel+clear する）
           abortTtsId_ = expectTtsId_;
-          strncpy(abortTtsReason_, "tts_timeout", sizeof(abortTtsReason_) - 1);
+          strncpy(abortTtsReason_, kReason, sizeof(abortTtsReason_) - 1);
           abortTtsReason_[sizeof(abortTtsReason_) - 1] = 0;
-        
+
           expectTtsId_ = 0;        // 遅延doneは無視する（次に引きずらない）
-          enterCooldown_(nowMs, true, "tts_timeout");
+          enterCooldown_(nowMs, true, kReason);
         } else {
           updateOverlay_(nowMs);
         }
       }
       return;
-
     }
 
     case AiState::PostSpeakBlank: {
@@ -322,6 +324,8 @@ void AiTalkController::tick(uint32_t nowMs) {
       return;
   }
 }
+
+
 
 void AiTalkController::enterThinking_(uint32_t nowMs) {
   state_ = AiState::Thinking;
@@ -455,11 +459,14 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
   updateOverlay_(thinkStartMs_);
 }
 
+
+
 void AiTalkController::enterListening_(uint32_t nowMs) {
   // 録音開始に失敗したら、busy扱い（LISTENING）へ入らない。
   // 例：TTS再生中などで I2S owner=Speaker のとき。
   lastRecOk_ = recorder_.start(nowMs);
-  mc_logf("[REC] start ok=%d", lastRecOk_ ? 1 : 0);
+
+  // start成功ログは recorder 側に寄せる（ここでは出さない）
   if (!lastRecOk_) {
     // tap は消費してよいが、state は Idle のままにする。
     mc_logf("[ai] listen start failed -> stay IDLE");
@@ -502,9 +509,14 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
 
 
 
+
+
 void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   // 録音中の可能性があるので保険でキャンセル
-  recorder_.cancel();
+  // 「保険cancel」で cancel done が出ないように、必ず isRecording ガード
+  if (recorder_.isRecording()) {
+    recorder_.cancel();
+  }
 
   state_ = AiState::Idle;
 
@@ -528,6 +540,7 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
 
   (void)nowMs; // 現状は未使用（将来の拡張用）
 }
+
 
 
 
