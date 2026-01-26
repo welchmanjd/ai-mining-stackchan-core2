@@ -50,13 +50,12 @@ static uint32_t calcTtsHardTimeoutMs_(size_t textBytes) {
 }
 
 
-
 void AiTalkController::begin(Orchestrator* orch) {
   orch_ = orch;
 
   // 録音機能初期化（失敗してもAI全体は死なない。LISTEN開始時にエラー扱いへ）
   const bool recOk = recorder_.begin();
-  mc_logf("[REC] begin ok=%d", recOk ? 1 : 0);
+  MC_LOGI("REC", "begin ok=%d", recOk ? 1 : 0);
 
   enterIdle_(millis(), "begin");
   abortTtsId_ = 0;
@@ -117,7 +116,6 @@ bool AiTalkController::onTap() {
 }
 
 
-
 void AiTalkController::injectText(const String& text) {
   // 本体統合フェーズ1では基本使わない（秘密保護のためフルログ禁止）
   if (state_ != AiState::Listening) return;
@@ -125,8 +123,10 @@ void AiTalkController::injectText(const String& text) {
 
   inputText_ = mcUtf8ClampBytes(text, 200);
   // ログは長さのみ
-  mc_logf("[ai] injectText len=%u", (unsigned)inputText_.length());
+  MC_LOGD("AI", "injectText len=%u", (unsigned)inputText_.length());
 }
+
+
 
 void AiTalkController::onSpeakDone(uint32_t rid, uint32_t nowMs) {
   // Step4: SPEAKING中に自分の rid が完了したら、空吹き出しへ
@@ -163,9 +163,10 @@ void AiTalkController::tick(uint32_t nowMs) {
         // stopがTIMEOUTでも、サンプルが取れているなら続行させる（救済）
         const size_t samples = recorder_.samples();
         if (!lastRecOk_ && samples >= (size_t)(MC_AI_REC_SAMPLE_RATE * 0.2f)) { // 0.2秒以上
-          mc_logf("[REC] stop not ok but samples=%u, continue as ok", (unsigned)samples);
+          MC_LOGW("REC", "stop not ok but samples=%u, continue as ok", (unsigned)samples);
           lastRecOk_ = true;
         }
+
 
         enterThinking_(nowMs);
       } else {
@@ -241,7 +242,7 @@ void AiTalkController::tick(uint32_t nowMs) {
       // enterSpeaking_で計算済みだが、万一0ならここでも計算しておく
       if (speakHardTimeoutMs_ == 0) {
         speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
-        mc_logf("[ai] tts hard limit(late calc)=%lums (len=%u rid=%lu)",
+        MC_LOGD("AI", "tts hard limit(late calc)=%lums (len=%u rid=%lu)",
                 (unsigned long)speakHardTimeoutMs_,
                 (unsigned)replyText_.length(),
                 (unsigned long)activeRid_);
@@ -251,7 +252,7 @@ void AiTalkController::tick(uint32_t nowMs) {
 
       if (elapsed >= speakHardTimeoutMs_) {
         // doneが来ない（/遅すぎる） → エラー扱いでcooldown延長
-        mc_logf("[ai] TTS HARD TIMEOUT FIRE rid=%lu elapsed=%lums limit=%lums tts_id=%lu",
+        MC_LOGE("AI", "TTS HARD TIMEOUT FIRE rid=%lu elapsed=%lums limit=%lums tts_id=%lu",
                 (unsigned long)activeRid_,
                 (unsigned long)elapsed,
                 (unsigned long)speakHardTimeoutMs_,
@@ -310,8 +311,6 @@ void AiTalkController::tick(uint32_t nowMs) {
   }
 }
 
-
-
 void AiTalkController::enterThinking_(uint32_t nowMs) {
   state_ = AiState::Thinking;
   thinkStartMs_ = nowMs;
@@ -339,7 +338,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
     lastSttStatus_ = 0;
     lastUserText_ = MC_AI_ERR_MIC_TOO_QUIET;
     errorFlag_ = true;
-    mc_logf("[STT] skip (rec not ok)");
+    MC_LOGW("STT", "skip (rec not ok)");
   } else {
     const uint32_t sttT0 = millis();
 
@@ -371,7 +370,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
 
     // 秘密/全文ログ禁止：先頭だけ
     String head = mcLogHead(lastUserText_, MC_AI_LOG_HEAD_BYTES_STT_TEXT);
-    mc_logf("[STT] done ok=%d http=%d took=%lums text_len=%u head=\"%s\"",
+    MC_LOGI("STT", "done ok=%d http=%d took=%lums text_len=%u head=\"%s\"",
             lastSttOk_ ? 1 : 0,
             lastSttStatus_,
             (unsigned long)sttMs,
@@ -395,7 +394,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
       errorFlag_ = true;
       replyText_ = String(MC_AI_TEXT_FALLBACK);
       bubbleText_ = replyText_;
-      mc_logf("[AI] LLM skipped (budget) elapsed=%lums", (unsigned long)elapsed);
+      MC_LOGW("LLM", "skipped (budget) elapsed=%lums", (unsigned long)elapsed);
     } else {
       const auto llm = OpenAiLlm::generateReply(lastUserText_, llmTimeout);
       lastLlmOk_ = llm.ok;
@@ -423,7 +422,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
         bubbleText_ = replyText_;
       }
 
-      mc_logf("[AI] LLM http=%d ok=%d took=%lums outLen=%u",
+      MC_LOGI("LLM", "http=%d ok=%d took=%lums outLen=%u",
               lastLlmHttp_,
               lastLlmOk_ ? 1 : 0,
               (unsigned long)lastLlmTookMs_,
@@ -439,6 +438,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
 }
 
 
+
 void AiTalkController::enterListening_(uint32_t nowMs) {
   // 録音開始に失敗したら、busy扱い（LISTENING）へ入らない。
   // 例：TTS再生中などで I2S owner=Speaker のとき。
@@ -447,7 +447,7 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
   // start成功ログは recorder 側に寄せる（ここでは出さない）
   if (!lastRecOk_) {
     // tap は消費してよいが、state は Idle のままにする。
-    mc_logf("[ai] listen start failed -> stay IDLE");
+    MC_EVT("AI", "listen start failed -> stay IDLE");
     return;
   }
 
@@ -487,6 +487,7 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
   updateOverlay_(nowMs);
 }
 
+
 void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   // 録音中の可能性があるので保険でキャンセル
   // 「保険cancel」で cancel done が出ないように、必ず isRecording ガード
@@ -518,6 +519,7 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   (void)nowMs; // 現状は未使用（将来の拡張用）
 }
 
+
 void AiTalkController::enterSpeaking_(uint32_t nowMs) {
   state_ = AiState::Speaking;
   speakStartMs_ = nowMs;
@@ -526,7 +528,7 @@ void AiTalkController::enterSpeaking_(uint32_t nowMs) {
   speakHardTimeoutMs_ = 0;
   if (awaitingOrchSpeak_) {
     speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
-    mc_logf("[ai] tts hard limit=%lums (len=%u rid=%lu)",
+    MC_LOGD("AI", "tts hard limit=%lums (len=%u rid=%lu)",
             (unsigned long)speakHardTimeoutMs_,
             (unsigned)replyText_.length(),
             (unsigned long)activeRid_);

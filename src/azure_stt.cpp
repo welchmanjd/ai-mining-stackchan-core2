@@ -119,26 +119,25 @@ SttResult transcribePcm16Mono(
     r.ok = false;
     r.err = "Wi-Fiがつながってないよ";
     r.status = -10;
-    mc_logf("[%s] wifi not connected", kTag);
+    MC_LOGW("STT", "wifi not connected");
     return r;
   }
 
   const String region = mcCfgAzRegion();
   const String key    = mcCfgAzKey();
-    #ifdef MC_AZ_STT_LANGUAGE
-    const String lang = String(MC_AZ_STT_LANGUAGE);
-    #else
-    const String lang = String("ja-JP");
-    #endif
+  #ifdef MC_AZ_STT_LANGUAGE
+  const String lang = String(MC_AZ_STT_LANGUAGE);
+  #else
+  const String lang = String("ja-JP");
+  #endif
 
-
-  String host         = normalizeSpeechHost_(mcCfgAzEndpoint());
+  String host = normalizeSpeechHost_(mcCfgAzEndpoint());
 
   if (region.length() == 0 || key.length() == 0) {
     r.ok = false;
     r.err = "Azure設定がないよ";
     r.status = -11;
-    mc_logf("[%s] missing region/key", kTag);
+    MC_LOGE("STT", "missing region/key");
     return r;
   }
 
@@ -157,7 +156,7 @@ SttResult transcribePcm16Mono(
     r.ok = false;
     r.err = "音声が空だよ";
     r.status = -12;
-    mc_logf("[%s] makeWav failed samples=%u", kTag, (unsigned)samples);
+    MC_LOGE("STT", "makeWav failed samples=%u", (unsigned)samples);
     return r;
   }
 
@@ -171,15 +170,16 @@ SttResult transcribePcm16Mono(
 #endif
   https.setReuse(false);
 
-  mc_logf("[%s] POST %s (bytes=%u, timeout=%lums)",
-          kTag, host.c_str(), (unsigned)wav.len, (unsigned long)timeoutMs);
+  // STT は 1回/対話 なので L1 で流れが追えるようにする
+  MC_LOGI("STT", "POST %s (bytes=%u, timeout=%lums)",
+          host.c_str(), (unsigned)wav.len, (unsigned long)timeoutMs);
 
   if (!https.begin(client, url)) {
     freeWav_(wav);
     r.ok = false;
     r.err = "STT接続に失敗";
     r.status = -20;
-    mc_logf("[%s] https.begin failed", kTag);
+    MC_LOGE("STT", "https.begin failed");
     return r;
   }
 
@@ -200,7 +200,7 @@ SttResult transcribePcm16Mono(
   if (httpCode <= 0) {
     r.ok = false;
     r.err = "STT通信エラー";
-    mc_logf("[%s] http fail code=%d err=%s", kTag, httpCode, https.errorToString(httpCode).c_str());
+    MC_LOGE("STT", "http fail code=%d err=%s", httpCode, https.errorToString(httpCode).c_str());
     https.end();
     return r;
   }
@@ -208,9 +208,8 @@ SttResult transcribePcm16Mono(
   String body = https.getString();
   https.end();
 
-  mc_logf("[%s] http=%d took=%lums body_len=%u",
-          kTag, httpCode, (unsigned long)took, (unsigned)body.length());
-
+  MC_LOGI("STT", "done http=%d took=%lums body_len=%u",
+          httpCode, (unsigned long)took, (unsigned)body.length());
 
   // 成功は 200。認識できない場合も 200 で空文字が来ることがある
   if (httpCode != 200) {
@@ -219,7 +218,7 @@ SttResult transcribePcm16Mono(
     // レスポンス本文は長いことがあるので、ログは短く
     String head = body;
     if (head.length() > 120) head = head.substring(0, 120);
-    mc_logf("[%s] http=%d body_head=%s", kTag, httpCode, head.c_str());
+    MC_LOGD("STT", "http=%d body_head=%s", httpCode, head.c_str());
     return r;
   }
 
@@ -232,11 +231,11 @@ SttResult transcribePcm16Mono(
     r.err = "STT解析失敗";
     String head = body;
     if (head.length() > 120) head = head.substring(0, 120);
-    mc_logf("[%s] json parse fail: %s body_head=%s", kTag, e.c_str(), head.c_str());
+    MC_LOGE("STT", "json parse fail: %s body_head=%s", e.c_str(), head.c_str());
     return r;
   }
 
-  const char* recStatus  = doc["RecognitionStatus"] | "";
+  const char* recStatus   = doc["RecognitionStatus"] | "";
   const char* displayText = doc["DisplayText"] | "";
 
   if (!displayText || !displayText[0]) {
@@ -247,14 +246,12 @@ SttResult transcribePcm16Mono(
     String head = body;
     if (head.length() > 160) head = head.substring(0, 160);
 
-    mc_logf("[%s] no text (status=%s) http=%d body_head=%s",
-            kTag,
-            (recStatus && recStatus[0]) ? recStatus : "?", 
+    MC_LOGD("STT", "no text (status=%s) http=%d body_head=%s",
+            (recStatus && recStatus[0]) ? recStatus : "?",
             httpCode,
             head.c_str());
     return r;
   }
-
 
   r.ok = true;
   r.text = String(displayText);
@@ -262,9 +259,10 @@ SttResult transcribePcm16Mono(
   // ログは先頭だけ（全文禁止）
   String head = r.text;
   if (head.length() > 60) head = head.substring(0, 60);
-  mc_logf("[%s] ok text_len=%u head=\"%s\"", kTag, (unsigned)r.text.length(), head.c_str());
+  MC_LOGI("STT", "ok text_len=%u head=\"%s\"", (unsigned)r.text.length(), head.c_str());
 
   return r;
 }
+
 
 } // namespace AzureStt

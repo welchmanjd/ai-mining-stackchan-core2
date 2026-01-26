@@ -89,6 +89,8 @@ static const uint32_t DUCO_ABORTED = UINT32_MAX - 1;
 
 
 // ---------------- プール情報取得 ----------------
+// === src/mining_task.cpp : replace whole function ===
+// ---------------- プール情報取得 ----------------
 static bool duco_get_pool() {
   WiFiClientSecure s;
   s.setInsecure();
@@ -120,8 +122,10 @@ static bool duco_get_pool() {
   g_host      = doc["ip"].as<String>();
   g_port      = (uint16_t)doc["port"].as<int>();
 
-  mc_logf("[DUCO] Pool: %s (%s:%u)", g_node_name.c_str(),
-          g_host.c_str(), (unsigned)g_port);
+  // Pool切替は「重要イベント列」として残す（頻度低い／L0でも追える）
+  MC_EVT("DUCO", "Pool: %s (%s:%u)",
+         g_node_name.c_str(),
+         g_host.c_str(), (unsigned)g_port);
 
   if (g_port != 0 && g_host.length()) {
     // ここでは「Pool自体の情報は取得OK」
@@ -247,6 +251,7 @@ if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
 
 
 // ---------------- Miner Task 本体 ----------------
+// === src/mining_task.cpp : replace whole function ===
 static void duco_task(void* pv) {
   int idx = (int)(intptr_t)pv;
   if (idx < 0 || idx >= DUCO_MINER_THREADS) idx = 0;
@@ -254,7 +259,8 @@ static void duco_task(void* pv) {
 
   char tag[8];
   snprintf(tag, sizeof(tag), "T%d", idx);
-  Serial.printf("[DUCO-%s] miner task start\n", tag);
+
+  MC_LOGI("DUCO", "miner task start %s", tag);
 
   const auto& cfg = appConfig();
 
@@ -293,8 +299,12 @@ static void duco_task(void* pv) {
 
     WiFiClient cli;
     cli.setTimeout(15);
-    Serial.printf("[DUCO-%s] connect %s:%u ...\n",
-                  tag, g_host.c_str(), g_port);
+
+    // 接続試行は周期になりうるのでRLで抑制（L1+）
+    MC_LOGI_RL("duco_connect", 10000, "DUCO",
+               "%s connect %s:%u ...",
+               tag, g_host.c_str(), g_port);
+
     if (!cli.connect(g_host.c_str(), g_port)) {
       me.connected = false;
       g_poolDiagText = "Cannot connect to the pool node.";   // ★追加
@@ -318,9 +328,9 @@ static void duco_task(void* pv) {
     serverVer.trim();  // ← ここ追加
     g_poolDiagText = "";                          // ★ここで一旦「エラーなし」に
 
-    // ★ 追加：サーバーバージョンをログ
-    mc_logf("[DUCO-%s] server version: %s",
-        tag, serverVer.c_str());
+    // サーバーバージョンは調査向け（L2+）
+    MC_LOGD("DUCO", "%s server version: %s", tag, serverVer.c_str());
+
     me.connected = true;
     g_status = String("connected (") + tag + ") " + g_node_name;
 
@@ -328,7 +338,9 @@ static void duco_task(void* pv) {
     while (cli.connected()) {
       // disabled mid-connection -> disconnect and go idle
       if (idx >= (int)g_mining_active_threads) {
-        mc_logf("[DUCO-%s] disabled -> disconnect", tag);
+        // 重要度は高いが頻度は低い想定（L1+）
+        MC_LOGI("DUCO", "%s disabled -> disconnect", tag);
+
         cli.stop();
         me.connected   = false;
         me.hashrate_kh = 0.0f;
@@ -336,7 +348,6 @@ static void duco_task(void* pv) {
         break;
       }
 
-      // Request job（user, board, miningKey）
       // Request job（user, board, miningKey）
       // NOTE:
       //   ESP32 を名乗ると Kolka に「Too high starting difficulty」と言われて全シェアがリジェクトされる。
@@ -346,10 +357,8 @@ static void duco_task(void* pv) {
       String req = String("JOB,") + cfg.duco_user + ",LOW," +
                   cfg.duco_miner_key + "\n";
 
-      // ★ 追加：何を投げたか（miner_key はログに出さない）
-      mc_logf("[DUCO-%s] send JOB user=%s board=LOW",
-              tag, cfg.duco_user);
-
+      // send JOB は壁紙化するので TRACE 寄せ（L3のみ）
+      MC_LOGT("DUCO", "%s send JOB user=%s board=LOW", tag, cfg.duco_user);
 
       unsigned long ping0 = millis();
       cli.print(req);
@@ -363,16 +372,17 @@ static void duco_task(void* pv) {
         me.connected = false;
         g_status = String("no job (") + tag + ")";
 
-        // ★ 追加：タイムアウトをログ
-        mc_logf("[DUCO-%s] no job (timeout)", tag);
+        // timeout は起きると連発しうるのでRL（L1+）
+        MC_LOGI_RL("duco_no_job", 10000, "DUCO",
+                   "%s no job (timeout)", tag);
+
         g_poolDiagText = "No job response from the pool."; // ★追加
         break;
       }
       me.last_ping_ms = (float)(millis() - ping0);
 
-      // ★ 追加：ping をログ
-      mc_logf("[DUCO-%s] job ping = %.1f ms",
-          tag, me.last_ping_ms);
+      // ping は高頻度なので TRACE 寄せ
+      MC_LOGT("DUCO", "%s job ping = %.1f ms", tag, me.last_ping_ms);
 
       // job: previousHash,expectedHash,difficulty\n
       String prev     = cli.readStringUntil(',');
@@ -394,11 +404,9 @@ static void duco_task(void* pv) {
       me.work_seed[40] = '\0';
       portEXIT_CRITICAL(&g_statsMux);
 
-
-     // ★ 追加：ジョブの中身をログ
-     mc_logf("[DUCO-%s] job diff=%d prev=%s expected=%s",
-          tag, difficulty,
-          prev.c_str(), expected.c_str());
+      // ジョブ中身は大量なので TRACE 寄せ
+      MC_LOGT("DUCO", "%s job diff=%d prev=%s expected=%s",
+              tag, difficulty, prev.c_str(), expected.c_str());
 
       // expected(hex) → 20バイト
       const size_t SHA_LEN = 20;
@@ -424,7 +432,8 @@ static void duco_task(void* pv) {
 
       if (foundNonce == DUCO_ABORTED) {
         // mining control requested to stop this thread
-        mc_logf("[DUCO-%s] job aborted by control", tag);
+        MC_EVT("DUCO", "%s job aborted by control", tag);
+
         cli.stop();
         me.connected   = false;
         me.hashrate_kh = 0.0f;
@@ -436,14 +445,13 @@ static void duco_task(void* pv) {
       if (sec <= 0) sec = 0.001f;
       float hps = hashes / (sec > 0 ? sec : 0.001f);
 
-      
-      // ★ 追加：solver の実績をログ
-      mc_logf("[DUCO-%s] solved nonce=%u hashes=%u time=%.3fs (%.1f H/s)",
-            tag,
-            (unsigned)foundNonce,
-            (unsigned)hashes,
-            sec,
-            hps);
+      // solved詳細は壁紙化するので TRACE 寄せ
+      MC_LOGT("DUCO", "%s solved nonce=%u hashes=%u time=%.3fs (%.1f H/s)",
+              tag,
+              (unsigned)foundNonce,
+              (unsigned)hashes,
+              sec,
+              hps);
 
       if (foundNonce == UINT32_MAX) {
         g_status = String("no share (") + tag + ")";
@@ -463,9 +471,8 @@ static void duco_task(void* pv) {
           String(g_walletid) + "\n";
       cli.print(submit);
 
-      
-      // ★ 追加：送った内容（短く）をログ
-      mc_logf("[DUCO-%s] submit nonce=%u hps=%.1f",
+      // submit詳細も TRACE
+      MC_LOGT("DUCO", "%s submit nonce=%u hps=%.1f",
               tag, (unsigned)foundNonce, hps);
 
       // feedback
@@ -480,17 +487,21 @@ static void duco_task(void* pv) {
         ++me.rejected;
         ++g_rej_all;
 
-        mc_logf("[DUCO-%s] no feedback (timeout)", tag);
+        // timeoutは連発しうるのでRL（L1+）
+        MC_LOGI_RL("duco_no_feedback", 10000, "DUCO",
+                   "%s no feedback (timeout)", tag);
+
         g_poolDiagText = "No result response from the pool."; // ★追加
         break;
       }
       String fb = cli.readStringUntil('\n');
       fb.trim();
 
-      // ★ 追加：フィードバックそのもの
-      mc_logf("[DUCO-%s] feedback: '%s'", tag, fb.c_str());
+      // フィードバック原文は調査向け（L2+）
+      MC_LOGD("DUCO", "%s feedback: '%s'", tag, fb.c_str());
 
-      if (fb.startsWith("GOOD")) {
+      bool ok = fb.startsWith("GOOD");
+      if (ok) {
         ++me.accepted;
         ++g_acc_all;
         g_status = String("share GOOD (#") + String(me.shares) +
@@ -503,6 +514,11 @@ static void duco_task(void* pv) {
                    ", " + tag + ")";
         // BAD のときはとりあえず直ちにPoolエラー扱いにはしない
       }
+
+      // L1向け：結果だけはRLで追える量にする
+      MC_LOGI_RL("duco_share_result", 3000, "DUCO",
+                 "%s share %s (#%lu)",
+                 tag, ok ? "GOOD" : "BAD", (unsigned long)me.shares);
 
       vTaskDelay(pdMS_TO_TICKS(5));
     }

@@ -79,6 +79,8 @@ void UIMining::drawTicker(const String& text) {
 }
 
 // ===== Avatar mood =====
+// === src/ui_mining_core2_ticker_avatar.cpp : replace whole function ===
+// ===== Avatar mood =====
 void UIMining::updateAvatarMood(const PanelData& p) {
   uint32_t now = millis();
 
@@ -107,10 +109,10 @@ void UIMining::updateAvatarMood(const PanelData& p) {
 
       // (1) 最後にシェアが動いた時間（古いほど不機嫌）
       uint32_t age = lastShareAgeSec();  // updateLastShareClock() が更新している前提
-        if (age <= 120)       score += 1;   // 2分以内に動いたらご機嫌
-        else if (age <= 300)  score += 0;   // 5分までは普通
-        else if (age <= 900)  score -= 1;   // 15分でちょい不機嫌
-        else                  score -= 2;   // 15分超えはヤバい扱い
+      if (age <= 120)       score += 1;   // 2分以内に動いたらご機嫌
+      else if (age <= 300)  score += 0;   // 5分までは普通
+      else if (age <= 900)  score -= 1;   // 15分でちょい不機嫌
+      else                  score -= 2;   // 15分超えはヤバい扱い
 
       // (2) 成功率（Accepted / (Accepted+Rejected)）
       uint32_t total = p.accepted + p.rejected;
@@ -145,26 +147,30 @@ void UIMining::updateAvatarMood(const PanelData& p) {
     else if (target < mood_level_) mood_level_--;
   }
 
-  // ===== ログ（moodが変化したら必ず）=====
+  // ===== ログ（moodが変化したら）=====
+  // 変化は“普段も見たい”が、暴れると壁紙化するのでRLでまとめる（L1+）
   if (mood_level_ != prevMood) {
     uint32_t age = lastShareAgeSec();
-    mc_logf("[MOOD] %d -> %d (wifi=%d pool=%d age=%us A=%u R=%u HR=%.2fk ref=%.2fk)",
-            (int)prevMood, (int)mood_level_,
-            (int)WiFi.status(),
-            p.poolAlive ? 1 : 0,
-            (unsigned)age,
-            (unsigned)p.accepted, (unsigned)p.rejected,
-            (double)p.hr_kh, (double)hr_ref_kh_);
+    MC_LOGI_RL("mood_change", 3000, "MOOD",
+               "%d -> %d (wifi=%d pool=%d age=%us A=%u R=%u HR=%.2fk ref=%.2fk)",
+               (int)prevMood, (int)mood_level_,
+               (int)WiFi.status(),
+               p.poolAlive ? 1 : 0,
+               (unsigned)age,
+               (unsigned)p.accepted, (unsigned)p.rejected,
+               (double)p.hr_kh, (double)hr_ref_kh_);
 
     // 変化ログを出した直後は、定期ログもリセット（連続出力を避ける）
     mood_last_report_ms_ = now;
   }
 
   // ===== ログ（定期的に現在値も出す）=====
+  // 周期ログは壁紙化しやすいので、TRACEへ寄せ（L3のみ）
   if (now - mood_last_report_ms_ >= kMoodPeriodicLogMs) {
     mood_last_report_ms_ = now;
     uint32_t age = lastShareAgeSec();
-    mc_logf("[MOOD] current=%d (wifi=%d pool=%d age=%us A=%u R=%u HR=%.2fk ref=%.2fk)",
+    MC_LOGT("MOOD",
+            "current=%d (wifi=%d pool=%d age=%us A=%u R=%u HR=%.2fk ref=%.2fk)",
             (int)mood_level_,
             (int)WiFi.status(),
             p.poolAlive ? 1 : 0,

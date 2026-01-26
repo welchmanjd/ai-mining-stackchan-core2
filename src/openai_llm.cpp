@@ -292,7 +292,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     int rPct = 0;
     if (r.outTok > 0) rPct = (r.reasoningTok * 100) / r.outTok;
 
-    mc_logf("[AI] LLM usage tot=%d in=%d out=%d r=%d(%d%%) cache=%d status=%s inc=%s",
+    MC_LOGD("LLM", "usage tot=%d in=%d out=%d r=%d(%d%%) cache=%d status=%s inc=%s",
             r.totalTok, r.inTok, r.outTok, r.reasoningTok, rPct, r.cachedTok,
             r.status.length() ? r.status.c_str() : "-",
             r.incompleteReason.length() ? r.incompleteReason.c_str() : "-");
@@ -307,7 +307,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
 
   if (out.length() == 0) {
     String diag = buildDiag_(doc.as<JsonVariant>());
-    mc_logf("[AI] LLM empty_output http=%d took=%lums body_len=%u diag=%s",
+    MC_LOGW("LLM", "empty_output http=%d took=%lums body_len=%u diag=%s",
             r.http, (unsigned long)r.tookMs, (unsigned)body.length(), diag.c_str());
     r.ok = false;
     r.err = String("empty_output ") + diag;

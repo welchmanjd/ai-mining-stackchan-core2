@@ -107,6 +107,7 @@ static long getDisplaySleepSecondsFromStore_(long fallbackSec) {
 // display sleep timeout [ms] (runtime configurable via SET display_sleep_s)
 static uint32_t g_displaySleepTimeoutMs = (uint32_t)MC_DISPLAY_SLEEP_SECONDS * 1000UL;
 
+// === src/main.cpp : replace whole function ===
 static void handleSetupLine(const char* line) {
   // 空行は無視
   if (!line || !*line) return;
@@ -138,7 +139,7 @@ static void handleSetupLine(const char* line) {
     return;
   }
 
-    if (cmd.equalsIgnoreCase("GET CFG")) {
+  if (cmd.equalsIgnoreCase("GET CFG")) {
     String j = mcConfigGetMaskedJson();
     Serial.print("@CFG ");
     Serial.println(j);
@@ -186,13 +187,13 @@ static void handleSetupLine(const char* line) {
         } else {
           g_displaySleepTimeoutMs = (uint32_t)MC_DISPLAY_SLEEP_SECONDS * 1000UL;
         }
-        mc_logf("[MAIN] display_sleep_s set: %ld sec => %lu ms",
+        MC_LOGI("MAIN", "display_sleep_s set: %ld sec => %lu ms",
                 sec, (unsigned long)g_displaySleepTimeoutMs);
       }
 
       if (key.equalsIgnoreCase("attention_text")) {
         UIMining::instance().setAttentionDefaultText(val.c_str());
-        mc_logf("[MAIN] attention_text set: %s", val.c_str());
+        MC_LOGI("MAIN", "attention_text set: %s", val.c_str());
       }
 
       if (key.equalsIgnoreCase("spk_volume")) {
@@ -200,19 +201,15 @@ static void handleSetupLine(const char* line) {
         if (v < 0) v = 0;
         if (v > 255) v = 255;
         M5.Speaker.setVolume((uint8_t)v);
-        mc_logf("[MAIN] spk_volume set: %d", v);
+        MC_LOGI("MAIN", "spk_volume set: %d", v);
       }
 
       if (key.equalsIgnoreCase("cpu_mhz")) {
         int mhz = val.toInt();
         // mcConfigSetKV 側で 80/160/240 のみ許可している前提
         setCpuFrequencyMhz(mhz);
-        mc_logf("[MAIN] cpu_mhz set: %d (now=%d)", mhz, getCpuFrequencyMhz());
+        MC_LOGI("MAIN", "cpu_mhz set: %d (now=%d)", mhz, getCpuFrequencyMhz());
       }
-
-
-
-
 
       Serial.print("@OK SET ");
       Serial.println(key);
@@ -224,7 +221,6 @@ static void handleSetupLine(const char* line) {
       Serial.println(err);
     }
     return;
-
   }
 
   if (cmd.equalsIgnoreCase("SAVE")) {
@@ -242,12 +238,11 @@ static void handleSetupLine(const char* line) {
     return;
   }
 
-
-
   // 未知コマンド
   Serial.print("@ERR unknown_cmd: ");
   Serial.println(line);
 }
+
 
 static void pollSetupSerial() {
   while (Serial.available() > 0) {
@@ -343,6 +338,7 @@ static uint32_t s_zeroSince = 0;
 // 再生中（TTS）とAI busy中は「pause」して、終わったら再開する
 static bool s_pausedByTts = false;
 
+// === src/main.cpp : replace whole function ===
 static void applyMiningPolicyForTts(bool ttsBusy, bool aiBusy) {
   (void)ttsBusy;
 
@@ -350,8 +346,8 @@ static void applyMiningPolicyForTts(bool ttsBusy, bool aiBusy) {
   const bool wantPause = speaking || aiBusy;
 
   if (wantPause != s_pausedByTts) {
-    mc_logf("[TTS] mining pause: %d -> %d (speaking=%d aiBusy=%d)",
-            (int)s_pausedByTts, (int)wantPause, (int)speaking, (int)aiBusy);
+    MC_EVT("TTS", "mining pause: %d -> %d (speaking=%d aiBusy=%d)",
+           (int)s_pausedByTts, (int)wantPause, (int)speaking, (int)aiBusy);
 
     setMiningPaused(wantPause);
     s_pausedByTts = wantPause;
@@ -369,6 +365,7 @@ static void applyMiningPolicyForTts(bool ttsBusy, bool aiBusy) {
 //   - 接続が完了するかタイムアウトしたら true を返す
 //   - それまでは false を返す
 // ※接続に成功したかどうかは WiFi.status() == WL_CONNECTED で判定する。
+// === src/main.cpp : replace whole function ===
 static bool wifi_connect() {
   const auto& cfg = appConfig();
 
@@ -387,7 +384,7 @@ static bool wifi_connect() {
       WiFi.mode(WIFI_STA);
       WiFi.begin(cfg.wifi_ssid, cfg.wifi_pass);
       t_start = millis();
-      mc_logf("[WIFI] begin connect (ssid=%s)", cfg.wifi_ssid);
+      MC_LOGI("WIFI", "begin connect (ssid=%s)", cfg.wifi_ssid);
       state = WIFI_CONNECTING;
       return false;
     }
@@ -395,12 +392,12 @@ static bool wifi_connect() {
     case WIFI_CONNECTING: {
       wl_status_t st = WiFi.status();
       if (st == WL_CONNECTED) {
-        mc_logf("[WIFI] connected: %s", WiFi.localIP().toString().c_str());
+        MC_EVT("WIFI", "connected: %s", WiFi.localIP().toString().c_str());
         state = WIFI_DONE;
         return true;
       }
       if (millis() - t_start > WIFI_CONNECT_TIMEOUT_MS) {
-        mc_logf("[WIFI] connect timeout (status=%d)", (int)st);
+        MC_LOGW("WIFI", "connect timeout (status=%d)", (int)st);
         state = WIFI_DONE;
         // 「接続試行」としては終わったので true を返す（成功/失敗は WiFi.status() で見る）
         return true;
@@ -768,10 +765,11 @@ void loop() {
     UIMining::instance().setTouchSnapshot(ts);
   }
 
+  // === src/main.cpp : replace this block inside loop() ===
   // --- スリープ中の復帰処理 ---
   if (displaySleeping) {
     if (anyInput) {
-      mc_logf("[MAIN] display wake (sleep off)");
+      MC_EVT("MAIN", "display wake (sleep off)");
       M5.Display.setBrightness(DISPLAY_ACTIVE_BRIGHTNESS);
       displaySleeping = false;
       lastInputMs     = now;
@@ -779,6 +777,8 @@ void loop() {
     delay(2);
     return;
   }
+
+
 
   // ここから「画面がON」の時の処理
   UIMining& ui = UIMining::instance();
@@ -840,7 +840,7 @@ void loop() {
       }
     }
 
-    mc_logf("[MAIN] BtnA pressed, mode=%d", (int)g_mode);
+    MC_EVT("MAIN", "BtnA pressed, mode=%d", (int)g_mode);
   }
 
 
@@ -875,10 +875,8 @@ void loop() {
       }
       // （両方IDLEなら更新しない＝従来どおりIDLEのまま）
 
-      // 詳細（従来どおり座標追跡）は DEBUG でのみ
-      if (EVT_DEBUG_ENABLED) {
-        mc_logf("[ai][DBG] tap consumed by AI (%d,%d)", touchX, touchY);
-      }
+      // 詳細（座標追跡）は TRACE のみ（壁紙化を防ぐ）
+      MC_LOGT("AI", "tap consumed by AI (%d,%d)", touchX, touchY);
     }
   }
 
@@ -886,7 +884,7 @@ void loop() {
 
   // AI busy中は Attention を完全抑止：すでにAttention中なら即座に終了（保険）
   if (g_mode == MODE_STACKCHAN && g_ai.isBusy() && g_attentionActive) {
-    mc_logf("[ATTN] force exit (aiBusy=1)");
+    MC_EVT("ATTN", "force exit (aiBusy=1)");
 
     g_attentionActive = false;
     g_attentionUntilMs = 0;
@@ -905,10 +903,10 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
   if (g_attentionActive) {
     // 何もしない（タイムアウトで抜ける or force-exitで抜ける）
   } else if (g_ai.isBusy()) {
-    mc_logf("[ATTN] suppressed (aiBusy=1)");
+    MC_LOGT("ATTN", "suppressed (aiBusy=1)");
   } else {
     const uint32_t dur = 3000;
-    mc_logf("[ATTN] enter");
+    MC_EVT("ATTN", "enter dur=%ums", (unsigned)dur);
 
     g_savedYield = getMiningYieldProfile();
     g_savedYieldValid = true;
@@ -943,7 +941,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
   // Attention timeout
   if (g_attentionActive && (int32_t)(g_attentionUntilMs - now) <= 0) {
     g_attentionActive = false;
-    mc_logf("[ATTN] exit");
+    MC_EVT("ATTN", "exit");
 
     if (g_savedYieldValid) setMiningYieldProfile(g_savedYield);
     else setMiningYieldProfile(MiningYieldNormal());
@@ -997,15 +995,15 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
     // ---- Step2-1: busy enter/exit を検知して1回だけ出す ----
     if (suppressBehaviorNow && !g_prevAiBusyForBehavior) {
       g_aiBusyStartMs = now;
-      mc_logf("[ai] busy enter state=%s reason=ai_busy", aiStateName_(g_ai.state()));
+      MC_EVT("AI", "busy enter state=%s reason=ai_busy", aiStateName_(g_ai.state()));
     } else if (!suppressBehaviorNow && g_prevAiBusyForBehavior) {
       const float durS = (now - g_aiBusyStartMs) / 1000.0f;
-      mc_logf("[ai] busy exit state=%s dur=%.1fs reason=ai_idle", aiStateName_(g_ai.state()), durS);
+      MC_EVT("AI", "busy exit state=%s dur=%.1fs reason=ai_idle", aiStateName_(g_ai.state()), durS);
 
       // ---- Step2-2: busy終了時に tap consumed を要約して1回だけ出す ----
       if (g_aiTapConsumedCount > 0) {
         const float spanS = (now - g_aiTapFirstMs) / 1000.0f;
-        mc_logf("[ai] tap consumed x%lu last=(%d,%d) first=(%d,%d) span=%.1fs during=%s",
+        MC_LOGD("AI", "tap consumed x%lu last=(%d,%d) first=(%d,%d) span=%.1fs during=%s",
                 (unsigned long)g_aiTapConsumedCount,
                 g_aiTapLastX, g_aiTapLastY,
                 g_aiTapFirstX, g_aiTapFirstY,
@@ -1021,9 +1019,9 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
       // Behavior（日常セリフ）抑止そのものは従来通り
       gotReaction = false;
 
-      // 詳細（毎秒）は DEBUG でのみ復活可能
-      if (EVT_DEBUG_ENABLED && (now - g_aiBusyDebugLastMs) >= 1000) {
-        mc_logf("[ai][DBG] suppress Behavior while busy (state=%s)", aiStateName_(g_ai.state()));
+      // 詳細（毎秒）は TRACE のみ（壁紙化を防ぐ）
+      if ((now - g_aiBusyDebugLastMs) >= 1000) {
+        MC_LOGT("AI", "suppress Behavior while busy (state=%s)", aiStateName_(g_ai.state()));
         g_aiBusyDebugLastMs = now;
       }
     } else {
@@ -1175,9 +1173,11 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
     g_suppressTouchBeepOnce = false;
   }
 
+  // === src/main.cpp : replace these blocks inside loop() ===
+
   // --- 一定時間無操作なら画面OFF（マイニングは継続）---
   if (!displaySleeping && (uint32_t)(now - lastInputMs) >= g_displaySleepTimeoutMs) {
-    mc_logf("[MAIN] display sleep (screen off)");
+    MC_EVT("MAIN", "display sleep (screen off)");
     UIMining::instance().drawSleepMessage();
     delay(DISPLAY_SLEEP_MESSAGE_MS);
     M5.Display.setBrightness(0);
@@ -1195,16 +1195,17 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
       s_ttsSavedYieldValid = true;
       setMiningYieldProfile(MiningYieldStrong());
       s_ttsYieldApplied = true;
-      mc_logf("[TTS] mining yield: Strong");
+      MC_EVT("TTS", "mining yield: Strong");
     }
   } else {
     if (s_ttsYieldApplied && !g_attentionActive) {
       if (s_ttsSavedYieldValid) setMiningYieldProfile(s_ttsSavedYield);
       else setMiningYieldProfile(MiningYieldNormal());
       s_ttsYieldApplied = false;
-      mc_logf("[TTS] mining yield: restore");
+      MC_EVT("TTS", "mining yield: restore");
     }
   }
+
 
   delay(2);
 }
