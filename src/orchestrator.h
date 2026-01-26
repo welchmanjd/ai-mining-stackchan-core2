@@ -38,7 +38,9 @@ public:
   bool hasPendingSpeak() const;
   SpeakStartCmd popNextPending();
 
-  void setExpectedSpeak(uint32_t speakId, uint32_t rid);
+  // ---- Step4: expect は Orchestrator 単一ソース（kind も保持）----
+  void setExpectedSpeak(uint32_t speakId, uint32_t rid); // legacy（kind=BehaviorSpeak）
+  void setExpectedSpeak(uint32_t speakId, uint32_t rid, OrchKind kind);
   void clearExpectedSpeak(const char* reason);
 
   // Phase5-B2: cancel speak (idempotent + reason/source)
@@ -48,7 +50,22 @@ public:
 
   void onAudioStart(uint32_t speakId);
   // desyncOut: 連続ミスマッチ閾値を超えたら true
-  bool onTtsDone(uint32_t gotId, bool* desyncOut = nullptr);
+  bool onTtsDone(uint32_t gotId, bool* desyncOut = nullptr); // legacy
+
+  // Step4: TTS DONE は rid/kind を返せる形にする
+  bool onTtsDone(uint32_t gotId,
+                 uint32_t* doneRid,
+                 OrchKind* doneKind,
+                 bool* desyncOut = nullptr);
+
+  // Step4: AI は rid で自分の発話を識別し、必要時だけ tts_id を照会する
+  uint32_t ttsIdForRid(uint32_t rid) const;
+
+  // Step4: rid でキャンセルできるようにする（tts_id を AI が保持しない）
+  bool cancelSpeakByRid(uint32_t rid,
+                        const char* reason,
+                        CancelSource source,
+                        uint32_t* outCanceledSpeakId = nullptr);
 
   AppState state() const { return state_; }
   bool tick(uint32_t nowMs);
@@ -57,6 +74,7 @@ private:
   AppState state_ = AppState::Idle;
   uint32_t expectSpeakId_ = 0;
   uint32_t expectRid_ = 0;
+  OrchKind expectKind_ = OrchKind::None;
   uint8_t  mismatchCount_ = 0;
   static constexpr uint8_t kDesyncThreshold = 3;
   uint32_t nextTtsId_ = 1;

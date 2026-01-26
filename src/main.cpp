@@ -611,7 +611,9 @@ void loop() {
                  r);
 
     bool desync = false;
-    const bool orchOk = g_orch.onTtsDone(gotId, &desync);
+    uint32_t doneRid = 0;
+    Orchestrator::OrchKind doneKind = Orchestrator::OrchKind::None;
+    const bool orchOk = g_orch.onTtsDone(gotId, &doneRid, &doneKind, &desync);
 
     const uint32_t ridForLog = (g_ttsInflightId == gotId) ? g_ttsInflightRid : 0;
 
@@ -624,8 +626,10 @@ void loop() {
                  orchOk ? 1 : 0);
 
     if (orchOk) {
-      // AI側のSPEAKING→COOLDOWN同期（合わないIDはAI側で無視される想定）
-      g_ai.onTtsDone(gotId);
+      // Step4: Orchestrator が返した kind/rid で通知先を決める
+      if (doneKind == Orchestrator::OrchKind::AiSpeak && doneRid != 0) {
+        g_ai.onSpeakDone(doneRid, now);
+      }
 
       // 表示クリア & inflightクリア（一致時）
       UIMining::instance().setStackchanSpeech("");
@@ -661,6 +665,8 @@ void loop() {
 
 
 
+
+
   g_behavior.setTtsSpeaking(ttsBusyNow);
   applyMiningPolicyForTts(ttsBusyNow, g_ai.isBusy());
 
@@ -675,7 +681,7 @@ void loop() {
         g_ttsInflightRid = pending.rid;
         g_ttsInflightSpeechText = pending.text;
         g_ttsInflightSpeechId = pending.ttsId;
-        g_orch.setExpectedSpeak(pending.ttsId, pending.rid);
+        g_orch.setExpectedSpeak(pending.ttsId, pending.rid, pending.kind);
         LOG_EVT_INFO("EVT_PRESENT_TTS_START",
                      "rid=%lu tts_id=%lu type=pending prio=%d busy=%d mode=%d attn=%d",
                      (unsigned long)pending.rid, (unsigned long)pending.ttsId,
@@ -1104,7 +1110,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
               g_ttsInflightRid = reaction.rid;
               g_ttsInflightSpeechText = cmd.text;
               g_ttsInflightSpeechId = cmd.ttsId;
-              g_orch.setExpectedSpeak(cmd.ttsId, reaction.rid);
+              g_orch.setExpectedSpeak(cmd.ttsId, reaction.rid, cmd.kind);
 
               LOG_EVT_INFO("EVT_PRESENT_TTS_START",
                            "rid=%lu tts_id=%lu type=%d prio=%d busy=%d mode=%d attn=%d",

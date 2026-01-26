@@ -35,9 +35,9 @@ public:
   void tick() { tick(millis()); }
   void tick(uint32_t nowMs);
 
-  // TTS完了通知（本体統合：Orchestrator ok のタイミングで呼ぶ）
-  void onTtsDone(uint32_t ttsId) { onTtsDone(ttsId, millis()); }
-  void onTtsDone(uint32_t ttsId, uint32_t nowMs);
+  // Step4: TTS完了通知は rid ベース（main→orch が doneRid/doneKind を返して判断）
+  void onSpeakDone(uint32_t rid) { onSpeakDone(rid, millis()); }
+  void onSpeakDone(uint32_t rid, uint32_t nowMs);
 
   bool isBusy() const { return state_ != AiState::Idle; }
   AiState state() const { return state_; }
@@ -74,7 +74,9 @@ private:
   uint32_t cooldownStartMs_ = 0;
   uint32_t cooldownDurMs_   = 0;
 
-  uint32_t expectTtsId_ = 0;
+  // Step4: AIは tts_id を保持しない（rid だけ保持）
+  uint32_t activeRid_ = 0;         // 自分の発話要求 rid
+  bool     awaitingOrchSpeak_ = false; // Orchにenqueueした発話を待っている
 
   String inputText_;
   String replyText_;

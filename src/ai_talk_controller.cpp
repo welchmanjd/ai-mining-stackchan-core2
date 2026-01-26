@@ -128,13 +128,16 @@ void AiTalkController::injectText(const String& text) {
   mc_logf("[ai] injectText len=%u", (unsigned)inputText_.length());
 }
 
-void AiTalkController::onTtsDone(uint32_t ttsId, uint32_t nowMs) {
-  // SPEAKING中に自分のttsIdが完了したら、空吹き出しへ
-  if (state_ == AiState::Speaking && expectTtsId_ != 0 && ttsId == expectTtsId_) {
-    expectTtsId_ = 0;
+void AiTalkController::onSpeakDone(uint32_t rid, uint32_t nowMs) {
+  // Step4: SPEAKING中に自分の rid が完了したら、空吹き出しへ
+  if (state_ == AiState::Speaking && awaitingOrchSpeak_ && activeRid_ != 0 && rid == activeRid_) {
+    awaitingOrchSpeak_ = false;
+    activeRid_ = 0;
     enterPostSpeakBlank_(nowMs);
   }
 }
+
+
 
 bool AiTalkController::consumeAbortTts(uint32_t* outId, const char** outReason) {
   if (abortTtsId_ == 0) return false;
@@ -183,6 +186,9 @@ void AiTalkController::tick(uint32_t nowMs) {
 
         // Orchestratorへ投入（speakAsync直叩き禁止）
         bool enqueued = false;
+        awaitingOrchSpeak_ = false;
+        activeRid_ = 0;
+
         if (orch_) {
           const uint32_t rid = (uint32_t)100000 + (nextRid_++);
           if (nextRid_ == 0) nextRid_ = 1;
@@ -195,7 +201,10 @@ void AiTalkController::tick(uint32_t nowMs) {
 
           if (cmd.valid) {
             orch_->enqueueSpeakPending(cmd);
-            expectTtsId_ = cmd.ttsId;
+
+            // Step4: AIは rid だけ保持（tts_idは握らない）
+            activeRid_ = rid;
+            awaitingOrchSpeak_ = true;
             enqueued = true;
 
             LOG_EVT_INFO("EVT_AI_ENQUEUE_SPEAK",
@@ -215,50 +224,62 @@ void AiTalkController::tick(uint32_t nowMs) {
     }
 
     case AiState::Speaking: {
-      // TTSあり：done待ち。TTS無し：擬似時間で進める
-      if (expectTtsId_ == 0) {
+      // Step4:
+      // - awaitingOrchSpeak_=false: TTS無し（sandbox等）→擬似時間
+      // - awaitingOrchSpeak_=true : Orchに問い合わせて進行を監視（tts_idは保持しない）
+      if (!awaitingOrchSpeak_) {
         const uint32_t elapsed = nowMs - speakStartMs_;
         if (elapsed >= (uint32_t)MC_AI_SIMULATED_SPEAK_MS) {
           enterPostSpeakBlank_(nowMs);
         } else {
           updateOverlay_(nowMs);
         }
-      } else {
-        const uint32_t elapsed = nowMs - speakStartMs_;
+        return;
+      }
 
-        // enterSpeaking_で計算済みだが、万一0ならここでも計算しておく
-        if (speakHardTimeoutMs_ == 0) {
-          speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
-          mc_logf("[ai] tts hard timeout(late calc)=%lums (len=%u)",
-                  (unsigned long)speakHardTimeoutMs_,
-                  (unsigned)replyText_.length());
+      const uint32_t elapsed = nowMs - speakStartMs_;
+
+      // enterSpeaking_で計算済みだが、万一0ならここでも計算しておく
+      if (speakHardTimeoutMs_ == 0) {
+        speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
+        mc_logf("[ai] tts hard timeout(late calc)=%lums (len=%u)",
+                (unsigned long)speakHardTimeoutMs_,
+                (unsigned)replyText_.length());
+      }
+
+      const uint32_t ttsIdNow = (orch_ && activeRid_ != 0) ? orch_->ttsIdForRid(activeRid_) : 0;
+
+      if (elapsed >= speakHardTimeoutMs_) {
+        // doneが来ない（/遅すぎる） → エラー扱いでcooldown延長
+        mc_logf("[ai] tts timeout elapsed=%lums limit=%lums (rid=%lu tts_id=%lu)",
+                (unsigned long)elapsed,
+                (unsigned long)speakHardTimeoutMs_,
+                (unsigned long)activeRid_,
+                (unsigned long)ttsIdNow);
+
+        // Phase6-1a: abort reason を統一して貫通させる
+        static constexpr const char* kReason = "ai_tts_timeout";
+
+        // Orchestrator側で rid→tts_id を解決してキャンセル（pending/expectを確実に掃除）
+        uint32_t canceledId = 0;
+        if (orch_ && activeRid_ != 0) {
+          orch_->cancelSpeakByRid(activeRid_, kReason, Orchestrator::CancelSource::AI, &canceledId);
         }
 
-        if (elapsed >= speakHardTimeoutMs_) {
-          // doneが来ない（/遅すぎる） → エラー扱いでcooldown延長
-          mc_logf("[ai] tts timeout elapsed=%lums limit=%lums (expect=%lu)",
-                  (unsigned long)elapsed,
-                  (unsigned long)speakHardTimeoutMs_,
-                  (unsigned long)expectTtsId_);
-
-          // Phase6-1a: abort reason を統一して貫通させる
-          static constexpr const char* kReason = "ai_tts_timeout";
-
-          // Orchestrator側にもキャンセルを通知（pending/expectを確実に掃除）
-          if (orch_ && expectTtsId_ != 0) {
-            orch_->cancelSpeak(expectTtsId_, kReason, Orchestrator::CancelSource::AI);
-          }
-
-          // abort通知（mainで cancel+clear する）
-          abortTtsId_ = expectTtsId_;
+        // abort通知（Azure cancel が必要な場合のみ）
+        if (canceledId != 0) {
+          abortTtsId_ = canceledId;
           strncpy(abortTtsReason_, kReason, sizeof(abortTtsReason_) - 1);
           abortTtsReason_[sizeof(abortTtsReason_) - 1] = 0;
-
-          expectTtsId_ = 0;        // 遅延doneは無視する（次に引きずらない）
-          enterCooldown_(nowMs, true, kReason);
-        } else {
-          updateOverlay_(nowMs);
         }
+
+        // 遅延doneは無視する（次に引きずらない）
+        awaitingOrchSpeak_ = false;
+        activeRid_ = 0;
+
+        enterCooldown_(nowMs, true, kReason);
+      } else {
+        updateOverlay_(nowMs);
       }
       return;
     }
@@ -288,7 +309,6 @@ void AiTalkController::tick(uint32_t nowMs) {
       return;
   }
 }
-
 
 
 
@@ -419,7 +439,6 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
 }
 
 
-
 void AiTalkController::enterListening_(uint32_t nowMs) {
   // 録音開始に失敗したら、busy扱い（LISTENING）へ入らない。
   // 例：TTS再生中などで I2S owner=Speaker のとき。
@@ -452,7 +471,9 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
   lastLlmTextHead_ = "";
 
   replyText_ = "";
-  expectTtsId_ = 0;
+  // Step4: ridベースで管理（tts_idは握らない）
+  activeRid_ = 0;
+  awaitingOrchSpeak_ = false;
 
   // 開始時に吹き出し消す（Behaviorの残りを消す）
   bubbleText_  = "";
@@ -465,7 +486,6 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
   LOG_EVT_INFO("EVT_AI_STATE", "state=LISTENING");
   updateOverlay_(nowMs);
 }
-
 
 void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   // 録音中の可能性があるので保険でキャンセル
@@ -480,7 +500,8 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   replyText_ = "";
 
   // TTS待ちの解除
-  expectTtsId_ = 0;
+  activeRid_ = 0;
+  awaitingOrchSpeak_ = false;
   speakHardTimeoutMs_ = 0;
 
   // overlay消す
@@ -497,14 +518,13 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   (void)nowMs; // 現状は未使用（将来の拡張用）
 }
 
-
 void AiTalkController::enterSpeaking_(uint32_t nowMs) {
   state_ = AiState::Speaking;
   speakStartMs_ = nowMs;
 
   // TTSありの場合のみ、done待ち上限を動的に計算（前の挙動へ）
   speakHardTimeoutMs_ = 0;
-  if (expectTtsId_ != 0) {
+  if (awaitingOrchSpeak_) {
     speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
     mc_logf("[ai] tts hard timeout=%lums (len=%u)",
             (unsigned long)speakHardTimeoutMs_,
