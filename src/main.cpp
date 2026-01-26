@@ -13,6 +13,7 @@
 #include <esp32-hal-cpu.h>
 #include <ArduinoJson.h>
 
+#include <esp_log.h>
 
 #include "ui_mining_core2.h"
 #include "app_presenter.h"
@@ -426,13 +427,21 @@ static void setupTimeNTP() {
 }
 
 
-
-
-
 void setup() {
   // --- シリアルとログ（最初に開く） ---
   Serial.begin(115200);
   mcConfigBegin();
+
+  // Step5: suppress "ssl_client UNKNOWN ERROR CODE" wallpaper logs.
+  // That line is emitted as ESP_LOG_ERROR even when STT succeeds (http=200),
+  // so keeping ERROR will not silence it.
+  // Normal ops: mute it completely. Enable EVT_DEBUG_ENABLED when you want to see it.
+#if EVT_DEBUG_ENABLED
+  esp_log_level_set("ssl_client", ESP_LOG_ERROR);
+#else
+  esp_log_level_set("ssl_client", ESP_LOG_NONE);
+#endif
+
 
   delay(50);
   mc_logf("[MAIN] setup() start");
@@ -441,7 +450,6 @@ void setup() {
   const uint32_t req_mhz = mcCfgCpuMhz(); // LittleFS設定があれば優先
   setCpuFrequencyMhz((int)req_mhz);
   mc_logf("[MAIN] cpu_mhz=%d (req=%lu)", getCpuFrequencyMhz(), (unsigned long)req_mhz);
-
 
   // --- M5Unified の設定 ---
   auto cfg_m5 = M5.config();
@@ -452,7 +460,6 @@ void setup() {
   cfg_m5.internal_mic = true;   // ★録音に必要
   cfg_m5.internal_spk = true;
   cfg_m5.internal_rtc = true;
-
 
   mc_logf("[MAIN] call M5.begin()");
   M5.begin(cfg_m5);
@@ -477,7 +484,6 @@ void setup() {
 
   // AI controller init（Orchestrator を渡す）
   g_ai.begin(&g_orch);
-
 
   // --- 画面の初期状態 ---
   M5.Display.setBrightness(DISPLAY_ACTIVE_BRIGHTNESS);
@@ -504,6 +510,7 @@ void setup() {
   // FreeRTOS タスクでマイニング開始
   startMiner();
 }
+
 
 
 

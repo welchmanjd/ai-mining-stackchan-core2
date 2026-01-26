@@ -148,7 +148,6 @@ bool AiTalkController::consumeAbortTts(uint32_t* outId, const char** outReason) 
   return true;
 }
 
-
 void AiTalkController::tick(uint32_t nowMs) {
   switch (state_) {
     case AiState::Idle:
@@ -242,19 +241,20 @@ void AiTalkController::tick(uint32_t nowMs) {
       // enterSpeaking_で計算済みだが、万一0ならここでも計算しておく
       if (speakHardTimeoutMs_ == 0) {
         speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
-        mc_logf("[ai] tts hard timeout(late calc)=%lums (len=%u)",
+        mc_logf("[ai] tts hard limit(late calc)=%lums (len=%u rid=%lu)",
                 (unsigned long)speakHardTimeoutMs_,
-                (unsigned)replyText_.length());
+                (unsigned)replyText_.length(),
+                (unsigned long)activeRid_);
       }
 
       const uint32_t ttsIdNow = (orch_ && activeRid_ != 0) ? orch_->ttsIdForRid(activeRid_) : 0;
 
       if (elapsed >= speakHardTimeoutMs_) {
         // doneが来ない（/遅すぎる） → エラー扱いでcooldown延長
-        mc_logf("[ai] tts timeout elapsed=%lums limit=%lums (rid=%lu tts_id=%lu)",
+        mc_logf("[ai] TTS HARD TIMEOUT FIRE rid=%lu elapsed=%lums limit=%lums tts_id=%lu",
+                (unsigned long)activeRid_,
                 (unsigned long)elapsed,
                 (unsigned long)speakHardTimeoutMs_,
-                (unsigned long)activeRid_,
                 (unsigned long)ttsIdNow);
 
         // Phase6-1a: abort reason を統一して貫通させる
@@ -526,15 +526,15 @@ void AiTalkController::enterSpeaking_(uint32_t nowMs) {
   speakHardTimeoutMs_ = 0;
   if (awaitingOrchSpeak_) {
     speakHardTimeoutMs_ = calcTtsHardTimeoutMs_(replyText_.length());
-    mc_logf("[ai] tts hard timeout=%lums (len=%u)",
+    mc_logf("[ai] tts hard limit=%lums (len=%u rid=%lu)",
             (unsigned long)speakHardTimeoutMs_,
-            (unsigned)replyText_.length());
+            (unsigned)replyText_.length(),
+            (unsigned long)activeRid_);
   }
 
   LOG_EVT_INFO("EVT_AI_STATE", "state=SPEAKING");
   updateOverlay_(nowMs);
 }
-
 
 
 

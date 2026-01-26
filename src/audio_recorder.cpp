@@ -2,6 +2,7 @@
 #include "logging.h"
 #include "i2s_manager.h"
 #include "config.h"
+#include "mc_log_limiter.h"
 
 
 #include <M5Unified.h>
@@ -39,9 +40,18 @@ static void forceUninstallI2S_(const char* reason) {
   }
 
   // 典型：ESP_ERR_INVALID_STATE（未インストール）など
-  mc_logf("[REC] i2s uninstall: skipped/invalid_state (e1=%d e0=%d) (reason=%s)", (int)e1, (int)e0, reason);
+  // Step5: noisy in rough operation -> rate limit + summary.
+  const uint32_t nowMs = millis();
+  uint32_t suppressed = 0;
+  if (McLogLimiter::shouldLog("REC_i2s_uninstall_invalid", 60000UL, nowMs, &suppressed)) {
+    if (suppressed > 0) {
+      mc_logf("[REC] i2s uninstall: skipped/invalid_state repeated x%lu (suppressed 60s)",
+              (unsigned long)suppressed);
+    }
+    mc_logf("[REC] i2s uninstall: skipped/invalid_state (e1=%d e0=%d) (reason=%s)",
+            (int)e1, (int)e0, reason);
+  }
 }
-
 
 
 
