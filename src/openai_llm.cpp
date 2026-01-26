@@ -165,42 +165,41 @@ static String extractAnyText_(JsonVariant root) {
   return acc;
 }
 
+
 namespace OpenAiLlm {
+
+
 
 LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
   LlmResult r;
   const uint32_t t0 = millis();
 
-  // timeout guard
   if (timeoutMs < 200) timeoutMs = 200;
 
-  // ---- request build (no secrets in logs) ----
-  // NOTE: Responses API の典型レスポンスは output[].type=message, content[].type=output_text, text=... 
+  // start は上位(AiTalkController)がEVTで出すので、ここはDIAGへ
+  MC_EVT_D("LLM", "start timeout=%lums in_len=%u",
+           (unsigned long)timeoutMs, (unsigned)userText.length());
+
+  // ---- request build ----
   DynamicJsonDocument req(2048);
   req["model"] = MC_OPENAI_MODEL;
 
-  // 出力制約は instructions に寄せる
   req["instructions"] =
       "あなたはスタックチャンの会話AIです。日本語で短く答えてください。"
       "返答は120文字以内。箇条書き禁止。1〜2文。"
       "相手が『聞こえる？』等の確認なら、明るく短く返してください。";
 
-  req["input"] = userText; // 呼び出し側で丸め済み想定
+  req["input"] = userText;
 
-  // reasoningモデルは reasoning tokens も output 側として消費しうるため、
-  // 上限が小さいと「reasoningだけ返ってstatus=incomplete」になり得る。
   req["reasoning"]["effort"] = MC_OPENAI_REASONING_EFFORT;
   req["max_output_tokens"] = (int)MC_OPENAI_MAX_OUTPUT_TOKENS;
-
-  // text format を明示（保険）
   req["text"]["format"]["type"] = "text";
-
 
   String payload;
   serializeJson(req, payload);
 
   WiFiClientSecure client;
-  client.setInsecure(); // まず動作優先（後で証明書固定化）
+  client.setInsecure();
   client.setTimeout(timeoutMs);
 
   HTTPClient http;
@@ -213,6 +212,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     r.ok = false;
     r.err = "http_begin_failed";
     r.tookMs = millis() - t0;
+    MC_EVT("LLM", "fail stage=begin took=%lums", (unsigned long)r.tookMs);
     return r;
   }
 
@@ -234,37 +234,40 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
   if (code <= 0) {
     r.ok = false;
     r.err = "http_post_failed";
+    MC_EVT("LLM", "fail stage=http_post code=%d took=%lums",
+           code, (unsigned long)r.tookMs);
     return r;
   }
 
   if (code < 200 || code >= 300) {
-    // 本文は出さない（エラーメッセージだけ短く）
-    // OpenAI のエラーは JSON で返ることが多いので、可能なら message だけ拾う
-    DynamicJsonDocument doc(4096);
-    DeserializationError e = deserializeJson(doc, body);
-    if (!e && doc["error"]["message"].is<const char*>()) {
-      String msg = (const char*)doc["error"]["message"];
+    DynamicJsonDocument docE(4096);
+    DeserializationError e = deserializeJson(docE, body);
+    if (!e && docE["error"]["message"].is<const char*>()) {
+      String msg = (const char*)docE["error"]["message"];
       msg = mcLogHead(msg, MC_AI_LOG_HEAD_BYTES_LLM_HTTP_ERRMSG);
       r.err = "http_" + String(code) + ":" + msg;
     } else {
       r.err = "http_" + String(code);
     }
     r.ok = false;
+
+    MC_EVT("LLM", "fail stage=http status=%d took=%lums",
+           code, (unsigned long)r.tookMs);
     return r;
   }
 
-
   // ---- parse + extract ----
-  // 返答が短い前提だけど、環境差の保険で余裕を持たせる
   DynamicJsonDocument doc(24576);
   DeserializationError e = deserializeJson(doc, body);
   if (e) {
     r.ok = false;
     r.err = String("json_parse_failed:") + e.c_str();
+    MC_EVT("LLM", "fail stage=json_parse took=%lums body_len=%u",
+           (unsigned long)r.tookMs, (unsigned)body.length());
     return r;
   }
 
-  // ---- status / incomplete reason (safe: structure only) ----
+  // status / incomplete reason（短い構造情報）
   if (doc["status"].is<const char*>()) {
     r.status = (const char*)doc["status"];
   }
@@ -273,7 +276,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     r.incompleteReason = (const char*)doc["incomplete_details"]["reason"];
   }
 
-  // ---- usage parse (safe: numbers only) ----
+  // usage（数字だけ）
   if (doc["usage"].is<JsonObject>()) {
     JsonObject u = doc["usage"].as<JsonObject>();
     r.inTok    = u["input_tokens"] | 0;
@@ -288,7 +291,6 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     }
 
 #if MC_OPENAI_LOG_USAGE
-    // 割合（整数%）も出す：安全で見てて楽しい
     int rPct = 0;
     if (r.outTok > 0) rPct = (r.reasoningTok * 100) / r.outTok;
 
@@ -299,25 +301,30 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
 #endif
   }
 
-
-
-
   String out = extractAnyText_(doc.as<JsonVariant>());
   out = mcSanitizeOneLine(out);
 
   if (out.length() == 0) {
     String diag = buildDiag_(doc.as<JsonVariant>());
-    MC_LOGW("LLM", "empty_output http=%d took=%lums body_len=%u diag=%s",
-            r.http, (unsigned long)r.tookMs, (unsigned)body.length(), diag.c_str());
+
+    // empty_output は重要：EVTで常時残す（ただし本文は出さない）
+    MC_EVT("LLM", "empty_output http=%d took=%lums body_len=%u diag=%s",
+           r.http, (unsigned long)r.tookMs, (unsigned)body.length(), diag.c_str());
+
     r.ok = false;
     r.err = String("empty_output ") + diag;
     return r;
   }
 
-
   r.ok = true;
   r.text = out;
+
+  // done は上位(AiTalkController)がEVTで出すので、ここはDIAGへ
+  MC_EVT_D("LLM", "done http=%d took=%lums out_len=%u tok=%d",
+           r.http, (unsigned long)r.tookMs, (unsigned)r.text.length(), r.totalTok);
+
   return r;
 }
+
 
 } // namespace OpenAiLlm

@@ -322,7 +322,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
   overlay_.line2 = "";
 
   // ---- STT ----
-  const uint32_t overallStartMs_ = millis();
+  const uint32_t overallT0 = millis();
   errorFlag_ = false;
 
   // ---- LLM ----
@@ -338,18 +338,27 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
     lastSttStatus_ = 0;
     lastUserText_ = MC_AI_ERR_MIC_TOO_QUIET;
     errorFlag_ = true;
+
+    // EVT: STTを実施できなかった事実（テキスト内容は出さない）
+    MC_EVT("STT", "skip reason=rec_not_ok samples=%u", (unsigned)recorder_.samples());
     MC_LOGW("STT", "skip (rec not ok)");
   } else {
-    const uint32_t sttT0 = millis();
-
     // 20s枠から残りを見つつ STT の上限を決める（通常は 8s のまま）
     uint32_t sttTimeout = (uint32_t)MC_AI_STT_TIMEOUT_MS;
-    const uint32_t elapsed0 = millis() - overallStartMs_;
+    const uint32_t elapsed0 = millis() - overallT0;
     if (elapsed0 + (uint32_t)MC_AI_OVERALL_MARGIN_MS < (uint32_t)MC_AI_OVERALL_DEADLINE_MS) {
-      const uint32_t remain = (uint32_t)MC_AI_OVERALL_DEADLINE_MS - elapsed0 - (uint32_t)MC_AI_OVERALL_MARGIN_MS;
+      const uint32_t remain =
+          (uint32_t)MC_AI_OVERALL_DEADLINE_MS - elapsed0 - (uint32_t)MC_AI_OVERALL_MARGIN_MS;
       if (remain < sttTimeout) sttTimeout = remain;
     }
 
+    // EVT: STT開始（秘密なし）
+    MC_EVT("STT", "start samples=%u sr=%d timeout=%lums",
+           (unsigned)recorder_.samples(),
+           (int)MC_AI_REC_SAMPLE_RATE,
+           (unsigned long)sttTimeout);
+
+    const uint32_t sttT0 = millis();
     auto stt = AzureStt::transcribePcm16Mono(
         recorder_.data(),
         recorder_.samples(),
@@ -368,22 +377,28 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
       errorFlag_ = true;
     }
 
-    // 秘密/全文ログ禁止：先頭だけ
-    String head = mcLogHead(lastUserText_, MC_AI_LOG_HEAD_BYTES_STT_TEXT);
-    MC_LOGI("STT", "done ok=%d http=%d took=%lums text_len=%u head=\"%s\"",
+    // ★重要：STT認識テキストはログに出さない（head含む）
+    MC_EVT("STT", "done ok=%d http=%d took=%lums text_len=%u",
+           lastSttOk_ ? 1 : 0,
+           lastSttStatus_,
+           (unsigned long)sttMs,
+           (unsigned)lastUserText_.length());
+
+    // L1ではEVTで十分。調査用の重複サマリはDIAGへ。
+    MC_LOGD("STT", "done ok=%d http=%d took=%lums text_len=%u",
             lastSttOk_ ? 1 : 0,
             lastSttStatus_,
             (unsigned long)sttMs,
-            (unsigned)lastUserText_.length(),
-            head.c_str());
+            (unsigned)lastUserText_.length());
   }
 
   // ---- LLM（10秒枠、ただし全体20秒を超えない）----
   if (lastSttOk_) {
-    const uint32_t elapsed = millis() - overallStartMs_;
+    const uint32_t elapsed = millis() - overallT0;
     uint32_t llmTimeout = 0;
     if (elapsed + (uint32_t)MC_AI_OVERALL_MARGIN_MS < (uint32_t)MC_AI_OVERALL_DEADLINE_MS) {
-      llmTimeout = (uint32_t)MC_AI_OVERALL_DEADLINE_MS - elapsed - (uint32_t)MC_AI_OVERALL_MARGIN_MS;
+      llmTimeout =
+          (uint32_t)MC_AI_OVERALL_DEADLINE_MS - elapsed - (uint32_t)MC_AI_OVERALL_MARGIN_MS;
       if (llmTimeout > (uint32_t)MC_AI_LLM_TIMEOUT_MS) llmTimeout = (uint32_t)MC_AI_LLM_TIMEOUT_MS;
     }
 
@@ -395,7 +410,10 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
       replyText_ = String(MC_AI_TEXT_FALLBACK);
       bubbleText_ = replyText_;
       MC_LOGW("LLM", "skipped (budget) elapsed=%lums", (unsigned long)elapsed);
+      MC_EVT("LLM", "skip reason=budget elapsed=%lums", (unsigned long)elapsed);
     } else {
+      MC_EVT("LLM", "start timeout=%lums", (unsigned long)llmTimeout);
+
       const auto llm = OpenAiLlm::generateReply(lastUserText_, llmTimeout);
       lastLlmOk_ = llm.ok;
       lastLlmHttp_ = llm.http;
@@ -406,7 +424,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
         replyText_ = mcUtf8ClampBytes(replyText_, MC_AI_TTS_MAX_CHARS);
         bubbleText_ = replyText_;
 
-        // 先頭だけ（overlay用）
+        // 先頭だけ（overlay用、ログには出さない）
         lastLlmTextHead_ = mcUtf8ClampBytes(replyText_, 40);
         if (replyText_.length() > lastLlmTextHead_.length()) lastLlmTextHead_ += "…";
       } else {
@@ -422,7 +440,14 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
         bubbleText_ = replyText_;
       }
 
-      MC_LOGI("LLM", "http=%d ok=%d took=%lums outLen=%u",
+      MC_EVT("LLM", "done ok=%d http=%d took=%lums outLen=%u",
+             lastLlmOk_ ? 1 : 0,
+             lastLlmHttp_,
+             (unsigned long)lastLlmTookMs_,
+             (unsigned)replyText_.length());
+
+      // L1ではEVTで十分。調査用のサマリはDIAGへ。
+      MC_LOGD("LLM", "http=%d ok=%d took=%lums outLen=%u",
               lastLlmHttp_,
               lastLlmOk_ ? 1 : 0,
               (unsigned long)lastLlmTookMs_,

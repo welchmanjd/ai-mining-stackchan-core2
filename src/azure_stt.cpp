@@ -107,6 +107,7 @@ static bool makeWav_(const int16_t* pcm, size_t samples, uint32_t sampleRate, Wa
 }
 
 
+
 SttResult transcribePcm16Mono(
     const int16_t* pcm,
     size_t samples,
@@ -119,49 +120,51 @@ SttResult transcribePcm16Mono(
     r.ok = false;
     r.err = "Wi-Fiがつながってないよ";
     r.status = -10;
+    MC_EVT("STT", "fail stage=wifi");
     MC_LOGW("STT", "wifi not connected");
     return r;
   }
 
   const String region = mcCfgAzRegion();
   const String key    = mcCfgAzKey();
-  #ifdef MC_AZ_STT_LANGUAGE
+#ifdef MC_AZ_STT_LANGUAGE
   const String lang = String(MC_AZ_STT_LANGUAGE);
-  #else
+#else
   const String lang = String("ja-JP");
-  #endif
+#endif
 
-  String host = normalizeSpeechHost_(mcCfgAzEndpoint());
+  String hostFromCfg = normalizeSpeechHost_(mcCfgAzEndpoint());
+  bool useCustomHost = (hostFromCfg.length() > 0);
 
   if (region.length() == 0 || key.length() == 0) {
     r.ok = false;
     r.err = "Azure設定がないよ";
     r.status = -11;
+    MC_EVT("STT", "fail stage=config");
     MC_LOGE("STT", "missing region/key");
     return r;
   }
 
-  // host が空なら region の標準STTホストへ
+  String host = hostFromCfg;
   if (host.length() == 0) {
     host = region + ".stt.speech.microsoft.com";
   }
 
-  // endpoint URL
   String url = "https://" + host
     + "/speech/recognition/conversation/cognitiveservices/v1?language=" + (lang.length() ? lang : "ja-JP");
 
-  // WAV化（バイナリバッファ）
   WavBuf wav;
   if (!makeWav_(pcm, samples, (uint32_t)sampleRate, wav)) {
     r.ok = false;
     r.err = "音声が空だよ";
     r.status = -12;
+    MC_EVT("STT", "fail stage=wav samples=%u", (unsigned)samples);
     MC_LOGE("STT", "makeWav failed samples=%u", (unsigned)samples);
     return r;
   }
 
   WiFiClientSecure client;
-  client.setInsecure(); // CA固定は後回し
+  client.setInsecure();
 
   HTTPClient https;
   https.setTimeout((int)timeoutMs);
@@ -170,22 +173,21 @@ SttResult transcribePcm16Mono(
 #endif
   https.setReuse(false);
 
-  // STT は 1回/対話 なので L1 で流れが追えるようにする
-  MC_LOGI("STT", "POST %s (bytes=%u, timeout=%lums)",
-          host.c_str(), (unsigned)wav.len, (unsigned long)timeoutMs);
+  // ★start は上位(AiTalkController)がEVTで出すので、ここはDIAGへ落とす
+  MC_EVT_D("STT", "start custom=%d bytes=%u timeout=%lums",
+           useCustomHost ? 1 : 0, (unsigned)wav.len, (unsigned long)timeoutMs);
 
   if (!https.begin(client, url)) {
     freeWav_(wav);
     r.ok = false;
     r.err = "STT接続に失敗";
     r.status = -20;
+    MC_EVT("STT", "fail stage=begin");
     MC_LOGE("STT", "https.begin failed");
     return r;
   }
 
-  // headers
   https.addHeader("Ocp-Apim-Subscription-Key", key);
-
   String ct = "audio/wav; codecs=audio/pcm; samplerate=" + String(sampleRate);
   https.addHeader("Content-Type", ct);
 
@@ -200,38 +202,37 @@ SttResult transcribePcm16Mono(
   if (httpCode <= 0) {
     r.ok = false;
     r.err = "STT通信エラー";
-    MC_LOGE("STT", "http fail code=%d err=%s", httpCode, https.errorToString(httpCode).c_str());
+    MC_EVT("STT", "fail stage=http_post code=%d took=%lums",
+           httpCode, (unsigned long)took);
+    MC_LOGD("STT", "http fail code=%d err=%s",
+            httpCode, https.errorToString(httpCode).c_str());
     https.end();
     return r;
   }
 
   String body = https.getString();
+  const uint32_t bodyLen = (uint32_t)body.length();
   https.end();
 
-  MC_LOGI("STT", "done http=%d took=%lums body_len=%u",
-          httpCode, (unsigned long)took, (unsigned)body.length());
-
-  // 成功は 200。認識できない場合も 200 で空文字が来ることがある
   if (httpCode != 200) {
     r.ok = false;
     r.err = "STT失敗";
-    // レスポンス本文は長いことがあるので、ログは短く
-    String head = body;
-    if (head.length() > 120) head = head.substring(0, 120);
-    MC_LOGD("STT", "http=%d body_head=%s", httpCode, head.c_str());
+    MC_EVT("STT", "fail stage=http status=%d took=%lums body_len=%lu",
+           httpCode, (unsigned long)took, (unsigned long)bodyLen);
+    MC_LOGD("STT", "http=%d took=%lums body_len=%lu",
+            httpCode, (unsigned long)took, (unsigned long)bodyLen);
     return r;
   }
 
-  // JSON parse（ArduinoJson v7: StaticJsonDocument は非推奨）
   JsonDocument doc;
   DeserializationError e = deserializeJson(doc, body);
-
   if (e) {
     r.ok = false;
     r.err = "STT解析失敗";
-    String head = body;
-    if (head.length() > 120) head = head.substring(0, 120);
-    MC_LOGE("STT", "json parse fail: %s body_head=%s", e.c_str(), head.c_str());
+    MC_EVT("STT", "fail stage=json_parse took=%lums body_len=%lu",
+           (unsigned long)took, (unsigned long)bodyLen);
+    MC_LOGD("STT", "json parse fail: %s body_len=%lu",
+            e.c_str(), (unsigned long)bodyLen);
     return r;
   }
 
@@ -241,28 +242,27 @@ SttResult transcribePcm16Mono(
   if (!displayText || !displayText[0]) {
     r.ok = false;
     r.err = "うまく聞き取れなかったよ";
-
-    // 本文は長いので先頭だけ（秘密は含まれない想定）
-    String head = body;
-    if (head.length() > 160) head = head.substring(0, 160);
-
-    MC_LOGD("STT", "no text (status=%s) http=%d body_head=%s",
+    MC_EVT("STT", "fail stage=no_text status=%s took=%lums",
+           (recStatus && recStatus[0]) ? recStatus : "-",
+           (unsigned long)took);
+    MC_LOGD("STT", "no text (status=%s) http=%d took=%lums",
             (recStatus && recStatus[0]) ? recStatus : "?",
             httpCode,
-            head.c_str());
+            (unsigned long)took);
     return r;
   }
 
   r.ok = true;
   r.text = String(displayText);
 
-  // ログは先頭だけ（全文禁止）
-  String head = r.text;
-  if (head.length() > 60) head = head.substring(0, 60);
-  MC_LOGI("STT", "ok text_len=%u head=\"%s\"", (unsigned)r.text.length(), head.c_str());
+  // ★done も上位がEVTで出すので DIAG へ
+  MC_EVT_D("STT", "done http=%d took=%lums text_len=%u",
+           httpCode, (unsigned long)took, (unsigned)r.text.length());
 
   return r;
 }
+
+
 
 
 } // namespace AzureStt

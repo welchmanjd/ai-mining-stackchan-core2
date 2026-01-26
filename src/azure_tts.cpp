@@ -414,7 +414,6 @@ static bool isCustomEndpoint_(const String& endpoint) {
 }
 
 
-// === src/azure_tts.cpp : replace whole function ===
 void AzureTts::begin(uint8_t volume) {
   cfg_ = RuntimeConfig{};
   keepaliveEnabled_ = true;
@@ -430,14 +429,15 @@ void AzureTts::begin(uint8_t volume) {
   if (customHost_.length()) {
     // custom endpoint
     endpoint_ = "https://" + customHost_ + "/tts/cognitiveservices/v1";
-    MC_LOGD("TTS", "endpoint: custom=%s", endpoint_.c_str());
+    // URL/hostはログに出さない（環境情報の壁紙化防止）
+    MC_LOGD("TTS", "endpoint: custom (len=%u)", (unsigned)endpoint_.length());
   } else if (region_.length()) {
     // region endpoint
     endpoint_ = "https://" + region_ + ".tts.speech.microsoft.com/cognitiveservices/v1";
-    MC_LOGD("TTS", "endpoint: region=%s", endpoint_.c_str());
+    MC_LOGD("TTS", "endpoint: region (len=%u)", (unsigned)endpoint_.length());
   } else {
     endpoint_ = "";
-    MC_LOGD("TTS", "endpoint: region=(not set)");
+    MC_LOGD("TTS", "endpoint: (not set)");
   }
 
   // 設定詳細は DIAG（運用では不要）
@@ -472,6 +472,7 @@ void AzureTts::begin(uint8_t volume) {
   cancelSpeakId_ = 0;
   cancelReason_[0] = 0;
 }
+
 
 
 bool AzureTts::isBusy() const {
@@ -524,117 +525,52 @@ void AzureTts::taskEntry(void* pv) {
   vTaskDelete(nullptr);
 }
 
+
+
 bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voice) {
 #if TTS_DEBUG_ENABLED
-  // DEBUG: keep the original "log every call" behavior for troubleshooting.
-  MC_LOGI("TTS", "speakAsync id=%lu text_bytes=%u head=\"%s\"",
-           (unsigned long)speakId,
-           (unsigned)text.length(),
-           text.substring(0, 60).c_str());
+  // DEBUGでも「全文/先頭(head)」は出さない（秘密・個人情報保護）
+  MC_LOGD("TTS", "speakAsync call id=%lu text_bytes=%u",
+          (unsigned long)speakId,
+          (unsigned)text.length());
+#endif
 
-  if (state_ != Idle) return false;
+  // --- rejection checks (NO SIDE EFFECTS) ---
+  if (state_ != Idle) {
+    MC_LOGI_RL("TTS.rej.busy", 1500, "TTS",
+               "speakAsync rejected reason=busy id=%lu text_bytes=%u",
+               (unsigned long)speakId, (unsigned)text.length());
+    return false;
+  }
   if (WiFi.status() != WL_CONNECTED) {
-    MC_LOGW("TTS", "WiFi not connected");
+    MC_LOGI_RL("TTS.rej.wifi", 3000, "TTS",
+               "speakAsync rejected reason=wifi id=%lu",
+               (unsigned long)speakId);
     return false;
   }
-
   if (!endpoint_.length() || !key_.length()) {
-    MC_LOGE("TTS", "Azure config missing (endpoint/key)");
+    MC_LOGI_RL("TTS.rej.config", 5000, "TTS",
+               "speakAsync rejected reason=config id=%lu",
+               (unsigned long)speakId);
     return false;
   }
 
-  reqText_ = text;
+  // Prepare request strings (same behavior as before)
+  reqText_  = text;
   reqVoice_ = voice ? String(voice) : defaultVoice_;
   if (!reqVoice_.length()) reqVoice_ = defaultVoice_;
   if (!reqVoice_.length()) {
-    MC_LOGE("TTS", "Azure voice is not set");
+    MC_LOGI_RL("TTS.rej.voice", 5000, "TTS",
+               "speakAsync rejected reason=voice id=%lu",
+               (unsigned long)speakId);
     return false;
   }
 
-#else
-  // INFO: avoid wallpaper logs on reject loops (busy/wifi/config/etc.).
-  // Behavior (return true/false, state transitions, task/queue) is unchanged.
-  const uint32_t nowMs = millis();
+  // Accepted（EVTは常時：パイプライン追跡用 / ただし text内容は出さない）
+  MC_EVT("TTS", "accepted id=%lu text_bytes=%u",
+         (unsigned long)speakId,
+         (unsigned)text.length());
 
-  enum : uint8_t {
-    kRejNone   = 0,
-    kRejBusy   = 1,
-    kRejWifi   = 2,
-    kRejConfig = 3,
-    kRejVoice  = 4,
-    kRejOther  = 5,
-  };
-
-  auto rejStr = [](uint8_t r) -> const char* {
-    switch (r) {
-      case kRejBusy:   return "busy";
-      case kRejWifi:   return "wifi";
-      case kRejConfig: return "config";
-      case kRejVoice:  return "voice";
-      case kRejOther:  return "other";
-      default:         return "none";
-    }
-  };
-
-  auto flushRejectSummaryIfAny = [&]() {
-    if (reject_count_ == 0 || reject_reason_ == kRejNone) return;
-    const uint32_t spanMs = (reject_last_ms_ >= reject_first_ms_) ? (reject_last_ms_ - reject_first_ms_) : 0;
-    MC_LOGI("TTS", "speakAsync rejected x%lu reason=%s span=%.1fs (suppressed)",
-           (unsigned long)reject_count_,
-           rejStr(reject_reason_),
-           (double)spanMs / 1000.0);
-    reject_count_ = 0;
-    reject_reason_ = kRejNone;
-    reject_first_ms_ = reject_last_ms_ = 0;
-    reject_last_log_ms_ = 0;
-  };
-
-  auto recordReject = [&](uint8_t reason) -> bool {
-    // If reason changed, summarize the previous streak immediately (keeps logs meaningful).
-    if (reject_count_ > 0 && reject_reason_ != reason) {
-      flushRejectSummaryIfAny();
-    }
-
-    if (reject_count_ == 0) {
-      reject_first_ms_ = nowMs;
-      reject_last_log_ms_ = nowMs;
-      reject_reason_ = reason;
-
-      // First reject only (INFO).
-      MC_LOGI("TTS", "speakAsync rejected reason=%s id=%lu text_bytes=%u",
-             rejStr(reason),
-             (unsigned long)speakId,
-             (unsigned)text.length());
-    }
-
-    reject_last_ms_ = nowMs;
-    reject_reason_ = reason;
-    reject_count_++;
-    return false;
-  };
-
-  // --- rejection checks (NO SIDE EFFECTS) ---
-  if (state_ != Idle) return recordReject(kRejBusy);
-  if (WiFi.status() != WL_CONNECTED) return recordReject(kRejWifi);
-  if (!endpoint_.length() || !key_.length()) return recordReject(kRejConfig);
-
-  // Prepare request strings (same as before)
-  reqText_ = text;
-  reqVoice_ = voice ? String(voice) : defaultVoice_;
-  if (!reqVoice_.length()) reqVoice_ = defaultVoice_;
-  if (!reqVoice_.length()) return recordReject(kRejVoice);
-
-  // Accepted: if we suppressed rejects before, emit one summary line now.
-  flushRejectSummaryIfAny();
-
-  // Accepted (INFO)
-  MC_LOGI("TTS", "speakAsync id=%lu text_bytes=%u head=\"%s\"",
-           (unsigned long)speakId,
-           (unsigned)text.length(),
-           text.substring(0, 60).c_str());
-#endif
-
-  // ===== azure_tts.cpp：speakAsync() 内（done初期化）差し替え =====
   currentSpeakId_ = speakId;
 
   // clear DONE state (for previous id)
@@ -655,6 +591,7 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
     if (ok != pdPASS) {
       task_ = nullptr;
       state_ = Idle;
+      MC_EVT("TTS", "fail stage=task_create id=%lu", (unsigned long)speakId);
       MC_LOGE("TTS", "task create failed");
       return false;
     }
@@ -689,7 +626,6 @@ void AzureTts::cancel(uint32_t speakId, const char* reason) {
 }
 
 
-// ===== src/azure_tts.cpp：poll() 関数全文差し替え =====
 void AzureTts::poll() {
   if (state_ == Idle) return;
 
@@ -708,7 +644,6 @@ void AzureTts::poll() {
   auto makeCanceledReason = [&](char* out, size_t outLen) {
     if (!out || outLen == 0) return;
     if (cancelReason_[0]) {
-      // canceled:<detail>
       snprintf(out, outLen, "canceled:%s", cancelReason_);
     } else {
       strncpy(out, "canceled", outLen - 1);
@@ -744,7 +679,7 @@ void AzureTts::poll() {
       char r[24];
       makeCanceledReason(r, sizeof(r));
       MC_EVT("TTS", "canceled before play id=%lu reason=%s",
-            (unsigned long)currentSpeakId_, r);
+             (unsigned long)currentSpeakId_, r);
 
       if (wav_) { free(wav_); wav_ = nullptr; }
       wavLen_ = 0;
@@ -762,6 +697,7 @@ void AzureTts::poll() {
     }
 
     if (!wav_ || wavLen_ == 0) {
+      MC_EVT("TTS", "fail id=%lu reason=no_wav", (unsigned long)currentSpeakId_);
       MC_LOGW("TTS", "no wav -> drop id=%lu", (unsigned long)currentSpeakId_);
       state_ = Idle;
       setLastDrop("no_wav");
@@ -777,7 +713,9 @@ void AzureTts::poll() {
       if (!I2SManager::instance().lockForSpeaker("TTS.play", 4000)) {
         I2SManager& m = I2SManager::instance();
 
-        // drop確定なので L1(WARN) に要点、詳細は L2(DIAG)
+        MC_EVT("TTS", "fail id=%lu reason=i2s_deny wav=%uB",
+               (unsigned long)currentSpeakId_, (unsigned)wavLen_);
+
         MC_LOGW("TTS", "I2S lockForSpeaker failed -> drop id=%lu wav=%uB",
                 (unsigned long)currentSpeakId_, (unsigned)wavLen_);
         MC_LOGD("TTS", "i2s owner=%u depth=%lu ownerSite=%s",
@@ -803,11 +741,9 @@ void AzureTts::poll() {
       M5.Speaker.begin();
     }
 
-    // volume safety
+    // volume safety（詳細はD/T）
     {
       const int vol = (int)M5.Speaker.getVolume();
-
-      // 壁紙化しうるので TRACE
       MC_LOGT("TTS", "spk state: enabled=%d playing=%d vol=%d defaultVol=%d",
               M5.Speaker.isEnabled() ? 1 : 0,
               M5.Speaker.isPlaying() ? 1 : 0,
@@ -815,18 +751,18 @@ void AzureTts::poll() {
               (int)defaultVolume_);
 
       if (vol == 0 && defaultVolume_ > 0) {
-        // 起こると困るので DIAG で残す
         MC_LOGD("TTS", "spk vol=0 -> restore %d", (int)defaultVolume_);
         M5.Speaker.setVolume(defaultVolume_);
       }
     }
 
-
-    bool okPlay = false;
-    okPlay = M5.Speaker.playWav(wav_, wavLen_);
+    bool okPlay = M5.Speaker.playWav(wav_, wavLen_);
 
     if (!okPlay) {
+      MC_EVT("TTS", "fail id=%lu reason=play_fail wav=%uB",
+             (unsigned long)currentSpeakId_, (unsigned)wavLen_);
       MC_LOGE("TTS", "play failed (wav=%uB)", (unsigned)wavLen_);
+
       free(wav_);
       wav_ = nullptr;
       wavLen_ = 0;
@@ -842,19 +778,22 @@ void AzureTts::poll() {
       return;
     }
 
-    // play started
+    // play started（EVT）
+    MC_EVT("TTS", "play start id=%lu bytes=%u",
+           (unsigned long)currentSpeakId_, (unsigned)wavLen_);
+
     state_ = Playing;
     return;
   }
 
   // ---------- Playing: wait done ----------
   if (state_ == Playing) {
-    // canceled during play: stopは cancel() 側で行われる想定。ここでは停止検知してDONEを返す。
+    // canceled during play
     if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_ && !M5.Speaker.isPlaying()) {
       char r[24];
       makeCanceledReason(r, sizeof(r));
       MC_EVT("TTS", "canceled during play id=%lu reason=%s",
-            (unsigned long)currentSpeakId_, r);
+             (unsigned long)currentSpeakId_, r);
 
       if (wav_) { free(wav_); wav_ = nullptr; }
       wavLen_ = 0;
@@ -881,7 +820,9 @@ void AzureTts::poll() {
         i2sLocked_ = false;
       }
 
-      // final meaning: playback ok
+      // playback ok（EVT）
+      MC_EVT("TTS", "play done id=%lu", (unsigned long)currentSpeakId_);
+
       last_.ok = true;
       strncpy(last_.err, "ok", sizeof(last_.err) - 1);
       last_.err[sizeof(last_.err) - 1] = 0;
@@ -920,6 +861,7 @@ void AzureTts::warmupDnsOnce_() {
 }
 
 
+
 bool AzureTts::fetchTokenOld_(String* outTok) {
   if (!outTok) return false;
   outTok->clear();
@@ -929,6 +871,8 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
   constexpr uint32_t kTokenTimeoutMs = 6000;
 
   auto tryUrl = [&](const String& url) -> bool {
+    (void)url; // URL自体はログに出さない（環境依存情報の壁紙化防止）
+
     WiFiClientSecure c;
     c.setInsecure();
 
@@ -938,7 +882,7 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
     h.setTimeout(kTokenTimeoutMs);
 
     if (!h.begin(c, url)) {
-      MC_LOGW("TTS", "token: begin failed (%s)", url.c_str());
+      MC_LOGD("TTS_TOKEN", "begin failed");
       h.end();
       return false;
     }
@@ -954,27 +898,27 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
       tok.trim();
       h.end();
       if (tok.length()) {
-        *outTok = tok;
+        *outTok = tok; // ★ログに出さない
         return true;
       }
-      MC_LOGW("TTS", "token: empty body (200)");
+      MC_LOGD("TTS_TOKEN", "HTTP 200 but empty body");
       return false;
     }
 
-    String body = h.getString();
-    if (body.length()) body = body.substring(0, 120);
-    MC_LOGW("TTS", "token: HTTP %d (%s) body=%s", code, url.c_str(), body.c_str());
+    // 本文はトークン系の可能性があるので絶対ログに出さない
+    (void)h.getString();
+    MC_LOGD("TTS_TOKEN", "HTTP %d", code);
     h.end();
     return false;
   };
 
-  // 1) custom host があるなら同ホストで
+  // 1) custom host
   if (customHost_.length()) {
     String url = String("https://") + customHost_ + "/sts/v1.0/issueToken";
     if (tryUrl(url)) return true;
   }
 
-  // 2) region STS（本命）
+  // 2) region STS
   if (region_.length()) {
     String url = String("https://") + region_ + ".api.cognitive.microsoft.com/sts/v1.0/issueToken";
     if (tryUrl(url)) return true;
@@ -983,6 +927,9 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
   return false;
 }
 
+
+
+
 bool AzureTts::ensureToken_() {
   uint32_t now = millis();
 
@@ -990,17 +937,19 @@ bool AzureTts::ensureToken_() {
   if (now < tokenFailUntilMs_) return false;
 
   if (WiFi.status() != WL_CONNECTED) {
-    MC_LOGW("TTS", "token fetch failed -> WiFi not connected");
+    MC_LOGI_RL("TTS.token.wifi", 5000, "TTS_TOKEN", "fetch skipped: wifi not connected");
     return false;
   }
 
   String tok;
   bool ok = fetchTokenOld_(&tok);
   if (ok && tok.length()) {
-    token_ = tok;
+    token_ = tok; // ★秘密：ログに出さない
     tokenExpireMs_ = now + 9 * 60 * 1000; // 9min cache
     tokenFailCount_ = 0;
-    MC_LOGI("TTS", "token: ok (cached 9min)");
+
+    // トークン更新は頻度低いので L1+ にサマリOK（内容は出さない）
+    MC_LOGI("TTS_TOKEN", "ok (cached 9min)");
     return true;
   }
 
@@ -1008,10 +957,12 @@ bool AzureTts::ensureToken_() {
   tokenFailCount_ = (uint8_t)min<int>(tokenFailCount_ + 1, 10);
   uint32_t backoff = 1000u * (1u << min<int>(tokenFailCount_, 6)); // up to ~64s
   tokenFailUntilMs_ = now + backoff;
-  MC_LOGW("TTS", "token fetch failed (cooldown=%us)", backoff / 1000);
+
+  // 連続失敗は壁紙化しやすいので RL
+  MC_LOGI_RL("TTS.token.fail", 5000, "TTS_TOKEN",
+             "fail (cooldown=%us)", (unsigned)(backoff / 1000));
   return false;
 }
-
 
 
 static String AzureTts_xmlEscape_(const String& s) {
@@ -1046,7 +997,7 @@ String AzureTts::buildSsml_(const String& text, const String& voice) const {
   return ssml;
 }
 
-// === src/azure_tts.cpp : replace whole function ===
+
 bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   if (!outBuf || !outLen) return false;
   *outBuf = nullptr;
@@ -1081,7 +1032,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   https_.addHeader("Accept-Encoding", "identity");
   https_.addHeader("Connection", useKeepAlive ? "keep-alive" : "close");
 
-  // Authorization
+  // Authorization（★tokenはログに出さない）
   https_.addHeader("Authorization", "Bearer " + token_);
 
   // custom endpoint requires extra region header sometimes
@@ -1093,14 +1044,12 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   last_.httpCode = code;
 
   if (code != 200) {
+    // 本文はログに出さない（個人情報/秘密の混入可能性をゼロにする）
     String body = https_.getString();
+    const size_t bodyLen = body.length();
+    (void)body;
 
-    MC_LOGW("TTS", "HTTP %d", code);
-    if (body.length()) {
-      String head = body;
-      if (head.length() > 160) head = head.substring(0, 160);
-      MC_LOGD("TTS", "err body head=%s", head.c_str());
-    }
+    MC_LOGD("TTS", "HTTP %d body_len=%u", code, (unsigned)bodyLen);
 
     https_.end();
 
@@ -1139,7 +1088,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
       return false;
     }
 
-    // ★ extra safety: if chunk markers still leaked, salvage them
+    // ★ extra safety
     salvageChunkedLeakIfNeeded_(&buf, &used);
 
     MC_LOGT("TTS", "rx wav bytes=%u (chunked keepAlive=%d)",
@@ -1177,7 +1126,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
     return false;
   }
 
-  // ★ safety: if chunk markers leaked, salvage them
+  // ★ safety
   size_t outN = got;
   salvageChunkedLeakIfNeeded_(&buf, &outN);
 
@@ -1190,7 +1139,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
 }
 
 
-// ===== src/azure_tts.cpp：taskBody() 関数全文差し替え =====
+
 void AzureTts::taskBody() {
   while (true) {
     if (state_ != Fetching) {
@@ -1203,7 +1152,10 @@ void AzureTts::taskBody() {
     last_.seq = seq_;
     uint32_t t0 = millis();
 
-    String ssml = buildSsml_(reqText_, reqVoice_);
+    // fetch開始（EVT：時系列で追えるように）
+    MC_EVT("TTS", "fetch start id=%lu", (unsigned long)currentSpeakId_);
+
+    String ssml = buildSsml_(reqText_, reqVoice_); // ★SSML全文はログに出さない
     uint8_t* buf = nullptr;
     size_t len = 0;
 
@@ -1212,8 +1164,13 @@ void AzureTts::taskBody() {
     last_.ok = ok;
     last_.bytes = (uint32_t)len;
 
-    MC_LOGI("TTS", "fetch done ok=%d http=%d bytes=%lu took=%lums",
-            ok ? 1 : 0, last_.httpCode, (unsigned long)len, (unsigned long)last_.fetchMs);
+    // fetch結果（EVT：要点）
+    MC_EVT("TTS", "fetch done id=%lu ok=%d http=%d bytes=%lu took=%lums",
+           (unsigned long)currentSpeakId_,
+           ok ? 1 : 0,
+           last_.httpCode,
+           (unsigned long)len,
+           (unsigned long)last_.fetchMs);
 
     auto makeCanceledReason = [&](char* out, size_t outLen) {
       if (!out || outLen == 0) return;
@@ -1257,7 +1214,7 @@ void AzureTts::taskBody() {
       char r[24];
       makeCanceledReason(r, sizeof(r));
       MC_EVT("TTS", "canceled while fetching id=%lu reason=%s",
-            (unsigned long)currentSpeakId_, r);
+             (unsigned long)currentSpeakId_, r);
 
       if (buf) free(buf);
       state_ = Idle;
@@ -1272,6 +1229,9 @@ void AzureTts::taskBody() {
       if (buf) free(buf);
       state_ = Idle;
 
+      MC_EVT("TTS", "fail id=%lu reason=fetch_fail http=%d",
+             (unsigned long)currentSpeakId_, last_.httpCode);
+
       setLastDrop("fetch_fail");
       setDone(false, "fetch_fail");
       continue;
@@ -1283,6 +1243,8 @@ void AzureTts::taskBody() {
     state_ = Ready;
   }
 }
+
+
 
 void AzureTts::resetSession_() {
   https_.end();
