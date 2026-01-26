@@ -1,9 +1,8 @@
+// === src/audio_recorder.cpp : replace whole file ===
 #include "audio_recorder.h"
 #include "logging.h"
 #include "i2s_manager.h"
 #include "config.h"
-#include "mc_log_limiter.h"
-
 
 #include <M5Unified.h>
 #include <LittleFS.h>
@@ -15,12 +14,12 @@
 #include <esp_err.h>
 
 #include <esp_task_wdt.h>
-#include <esp_log.h>   // ★追加：I2Sタグのログレベル制御に使う
-
-static const char* kTag = "REC";
-
+#include <esp_log.h>   // ★I2Sタグのログレベル制御に使う
 
 static void forceUninstallI2S_(const char* reason) {
+  // EVT（常時）：呼んだ事実が重要
+  MC_EVT("REC", "i2s_uninstall exec reason=%s", reason ? reason : "");
+
   // NOTE:
   // i2s_driver_uninstall() を「入ってない port」に対して呼ぶと、
   // ESP-IDF が tag="I2S" で E ログを吐く（"has not installed"）。
@@ -34,27 +33,22 @@ static void forceUninstallI2S_(const char* reason) {
 
   const bool ok1 = (e1 == ESP_OK);
   const bool ok0 = (e0 == ESP_OK);
+
+  // 詳細は L2+
+  LOG_EVT_DEBUG("REC", "i2s_uninstall_d result p1_ok=%d p0_ok=%d e1=%d e0=%d reason=%s",
+                (int)ok1, (int)ok0, (int)e1, (int)e0, reason ? reason : "");
+
   if (ok1 || ok0) {
-    mc_logf("[REC] i2s uninstall: ok (p1=%d p0=%d) (reason=%s)", (int)ok1, (int)ok0, reason);
+    MC_LOGD("REC", "i2s uninstall ok (p1=%d p0=%d) reason=%s", (int)ok1, (int)ok0, reason ? reason : "");
     return;
   }
 
   // 典型：ESP_ERR_INVALID_STATE（未インストール）など
-  // Step5: noisy in rough operation -> rate limit + summary.
-  const uint32_t nowMs = millis();
-  uint32_t suppressed = 0;
-  if (McLogLimiter::shouldLog("REC_i2s_uninstall_invalid", 60000UL, nowMs, &suppressed)) {
-    if (suppressed > 0) {
-      mc_logf("[REC] i2s uninstall: skipped/invalid_state repeated x%lu (suppressed 60s)",
-              (unsigned long)suppressed);
-    }
-    mc_logf("[REC] i2s uninstall: skipped/invalid_state (e1=%d e0=%d) (reason=%s)",
-            (int)e1, (int)e0, reason);
-  }
+  // 壁紙化防止：L1+ で rate-limit（60s）
+  MC_LOGI_RL("REC_i2s_uninstall_invalid", 60000UL, "REC",
+             "i2s uninstall skipped/invalid_state (e1=%d e0=%d) reason=%s",
+             (int)e1, (int)e0, reason ? reason : "");
 }
-
-
-
 
 static void waitMicIdle_(uint32_t timeoutMs) {
   const uint32_t t0 = millis();
@@ -100,9 +94,10 @@ static size_t retToSamples_(R ret, size_t requestedSamples) {
   }
   return (size_t)ret;
 }
+
 bool AudioRecorder::begin() {
   initialized_ = true;
-  Serial.printf("[%s] begin ok=1\n", kTag);
+  MC_LOGD("REC", "begin ok=1");
   return true;
 }
 
@@ -118,8 +113,6 @@ void AudioRecorder::stopSpeakerForRec_() {
   }
 }
 
-
-
 void AudioRecorder::restoreSpeakerAfterRec_() {
   if (!savedSpkVolumeValid_) return;
 
@@ -127,7 +120,7 @@ void AudioRecorder::restoreSpeakerAfterRec_() {
   delay(20);
 
   if (!M5.Speaker.isEnabled()) {
-    Serial.printf("[%s] speaker begin (restore)\n", kTag);
+    MC_LOGD("REC", "speaker begin (restore)");
 
     // 念のため：残骸が残ってると register failed になり得るので end を叩いてから begin
     M5.Speaker.end();
@@ -141,7 +134,7 @@ void AudioRecorder::restoreSpeakerAfterRec_() {
     delay(10);
 
     if (!M5.Speaker.isEnabled()) {
-      Serial.printf("[%s] speaker begin failed -> leave disabled (TTS will begin later)\n", kTag);
+      MC_LOGW("REC", "speaker begin failed -> leave disabled (TTS will begin later)");
       savedSpkVolumeValid_ = false;
       return;
     }
@@ -150,12 +143,10 @@ void AudioRecorder::restoreSpeakerAfterRec_() {
   M5.Speaker.setVolume(savedSpkVolume_);
   savedSpkVolumeValid_ = false;
 
-  Serial.printf("[%s] speaker restored vol=%d\n", kTag, (int)savedSpkVolume_);
+  MC_LOGD("REC", "speaker restored vol=%d", (int)savedSpkVolume_);
 }
 
-
 bool AudioRecorder::ensureMicBegun_() {
-
   if (micBegun_) return true;
 
   // サンプルレートを先に明示
@@ -163,29 +154,27 @@ bool AudioRecorder::ensureMicBegun_() {
 
   // まずは通常 begin（Speakerはソフト停止/ミュート済みの想定）
   bool ok = M5.Mic.begin();
-  Serial.printf("[%s] mic begin ok=%d sr=%u\n",
-                kTag, ok ? 1 : 0, (unsigned)sampleRate_);
+  MC_LOGD("REC", "mic begin ok=%d sr=%u", ok ? 1 : 0, (unsigned)sampleRate_);
   micBegun_ = ok;
 
   if (ok) return true;
 
   // フォールバック：Speaker を end() してからリトライ（begin/end多発を避けつつ、環境差に対応）
   if (!speakerEndedByRec_ && M5.Speaker.isEnabled()) {
-    Serial.printf("[%s] mic begin failed -> fallback speaker.end and retry\n", kTag);
+    MC_LOGW("REC", "mic begin failed -> fallback speaker.end and retry");
     M5.Speaker.end();
     speakerEndedByRec_ = true;
     delay(20);
 
     ok = M5.Mic.begin();
-    Serial.printf("[%s] mic begin(retry) ok=%d sr=%u\n",
-                  kTag, ok ? 1 : 0, (unsigned)sampleRate_);
+    MC_LOGD("REC", "mic begin(retry) ok=%d sr=%u", ok ? 1 : 0, (unsigned)sampleRate_);
     micBegun_ = ok;
   }
 
   return ok;
 }
 
-
+// === src/audio_recorder.cpp : replace whole function AudioRecorder::endMic_() ===
 void AudioRecorder::endMic_() {
   if (!micBegun_) return;
 
@@ -194,13 +183,15 @@ void AudioRecorder::endMic_() {
   if (!i2sLocked_) {
     if (I2SManager::instance().lockForMic("REC.endMic", 2000)) {
       tempLock = true;
+    } else {
+      MC_LOGW("REC", "endMic: temp lockForMic failed (continue cleanup)");
     }
   }
 
   // まず録音が完全に止まるのを待つ
   waitMicIdle_(200);
 
-  Serial.printf("[%s] mic end\n", kTag);
+  MC_LOGD("REC", "mic end");
   M5.Mic.end();
 
   // end直後に少し待つ（I2Sドライバ解放待ち）
@@ -208,15 +199,13 @@ void AudioRecorder::endMic_() {
 
   // 念のため：まだenabled扱いならもう一回 end を試す
   if (M5.Mic.isEnabled()) {
-    Serial.printf("[%s] mic still enabled after end -> retry\n", kTag);
+    // 連打/頻出で壁紙化しやすいのでRL化（L1で流れ続けない）
+    MC_LOGI_RL("REC_mic_end_retry", 10000UL, "REC", "mic still enabled after end -> retry");
     M5.Mic.end();
     delay(20);
   }
 
   // ★重要：Speakerが元々無効だったケースでも、Mic側のI2Sドライバ残骸を確実に消す
-  // これをやらないと、次の Speaker.begin / play で
-  //   "register I2S object to platform failed"
-  // が出ることがある。
   forceUninstallI2S_("endMic");
 
   micBegun_ = false;
@@ -225,8 +214,6 @@ void AudioRecorder::endMic_() {
     I2SManager::instance().unlock("REC.endMic");
   }
 }
-
-
 
 
 bool AudioRecorder::allocBuffer_() {
@@ -240,15 +227,14 @@ bool AudioRecorder::allocBuffer_() {
     pcm_ = (int16_t*)malloc(bytes);
   }
   if (!pcm_) {
-    Serial.printf("[%s] allocBuffer FAIL bytes=%u\n", kTag, (unsigned)bytes);
+    MC_LOGE("REC", "allocBuffer FAIL bytes=%u", (unsigned)bytes);
     maxSamples_ = 0;
     return false;
   }
   memset(pcm_, 0, bytes);
   capturedSamples_ = 0;
   peakAbs_ = 0;
-  Serial.printf("[%s] allocBuffer OK bytes=%u samples=%u\n",
-                kTag, (unsigned)bytes, (unsigned)maxSamples_);
+  MC_LOGD("REC", "allocBuffer OK bytes=%u samples=%u", (unsigned)bytes, (unsigned)maxSamples_);
   return true;
 }
 
@@ -268,10 +254,10 @@ bool AudioRecorder::startTask_() {
       taskEntry_, "recTask", 4096, this, 2, &task_, 1 /* core1 */);
   if (ok != pdPASS) {
     task_ = nullptr;
-    Serial.printf("[%s] task create FAIL\n", kTag);
+    MC_LOGE("REC", "task create FAIL");
     return false;
   }
-  Serial.printf("[%s] task start\n", kTag);
+  MC_LOGD("REC", "task start");
   return true;
 }
 
@@ -283,21 +269,31 @@ bool AudioRecorder::start(uint32_t nowMs) {
   if (!i2sLocked_) {
     if (!I2SManager::instance().lockForMic("REC.start", 2000)) {
       I2SManager& m = I2SManager::instance();
-      Serial.printf("[%s] start ok=0 (I2S lockForMic failed owner=%u depth=%lu ownerSite=%s)\n",
-                    kTag,
-                    (unsigned)m.owner(),
-                    (unsigned long)m.depth(),
-                    m.ownerCallsite() ? m.ownerCallsite() : "");
+
+      // EVT（常時）：開始できなかった事実が重要
+      MC_EVT("REC", "start_fail reason=i2s_deny curOwner=%u depth=%lu curSite=%s",
+             (unsigned)m.owner(),
+             (unsigned long)m.depth(),
+             m.ownerCallsite() ? m.ownerCallsite() : "");
+
+      // L1：要点（壁紙化しない）
+      MC_LOGW("REC", "start FAIL: I2S busy (curOwner=%u depth=%lu curSite=%s)",
+              (unsigned)m.owner(),
+              (unsigned long)m.depth(),
+              m.ownerCallsite() ? m.ownerCallsite() : "");
       return false;
     }
     i2sLocked_ = true;
   }
 
-
   stopSpeakerForRec_();  // 録音前にSpeakerを止めてI2Sを空ける
 
   // ★Mic を必ず begin（録音セッション毎に確実化）
   if (!ensureMicBegun_()) {
+    // EVT（常時）
+    MC_EVT("REC", "start_fail reason=mic_begin");
+    MC_LOGW("REC", "start FAIL: mic begin failed");
+
     restoreSpeakerAfterRec_();
     if (i2sLocked_) {
       I2SManager::instance().unlock("REC.start.fail");
@@ -307,6 +303,10 @@ bool AudioRecorder::start(uint32_t nowMs) {
   }
 
   if (!allocBuffer_()) {
+    // EVT（常時）
+    MC_EVT("REC", "start_fail reason=alloc");
+    MC_LOGW("REC", "start FAIL: allocBuffer failed");
+
     endMic_();                 // ★失敗時も解放
     restoreSpeakerAfterRec_();
     if (i2sLocked_) {
@@ -315,9 +315,18 @@ bool AudioRecorder::start(uint32_t nowMs) {
     }
     return false;
   }
+
   if (!startTask_()) {
+    // EVT（常時）
+    MC_EVT("REC", "start_fail reason=task_create");
+    MC_LOGW("REC", "start FAIL: task create failed");
+
     endMic_();                 // ★失敗時も解放
     restoreSpeakerAfterRec_();
+    if (i2sLocked_) {
+      I2SManager::instance().unlock("REC.start.fail");
+      i2sLocked_ = false;
+    }
     return false;
   }
 
@@ -331,11 +340,16 @@ bool AudioRecorder::start(uint32_t nowMs) {
   recording_ = true;
 
   xTaskNotifyGive(task_);
-  Serial.printf("[%s] start now=%u\n", kTag, (unsigned)nowMs);
-  Serial.printf("[%s] start ok=1\n", kTag);
+
+  // EVT（常時）：開始確定が重要
+  MC_EVT("REC", "start now=%u sr=%u maxSec=%u",
+         (unsigned)nowMs, (unsigned)sampleRate_, (unsigned)maxSeconds_);
+
+  // 詳細は L2+ 側へ
+  MC_LOGD("REC", "start ok=1");
+
   return true;
 }
-
 
 void AudioRecorder::requestStop_(bool cancel) {
   if (!initialized_ || !task_) return;
@@ -354,7 +368,15 @@ bool AudioRecorder::waitTaskDone_(uint32_t timeoutMs) {
   const uint32_t t0 = millis();
   while (recording_) {
     if ((millis() - t0) > timeoutMs) {
-      mc_logf("[REC] waitTaskDone TIMEOUT (timeout=%lums samples=%u stopReq=%d cancelReq=%d)",
+      // EVT（常時）：timeout/abort が重要
+      MC_EVT("REC", "timeout waitTaskDone timeout=%lums samples=%u stopReq=%d cancelReq=%d",
+             (unsigned long)timeoutMs,
+             (unsigned)capturedSamples_,
+             stopReq_ ? 1 : 0,
+             cancelReq_ ? 1 : 0);
+
+      // L1：要点
+      MC_LOGW("REC", "waitTaskDone TIMEOUT (timeout=%lums samples=%u stopReq=%d cancelReq=%d)",
               (unsigned long)timeoutMs,
               (unsigned)capturedSamples_,
               stopReq_ ? 1 : 0,
@@ -370,8 +392,14 @@ bool AudioRecorder::waitTaskDone_(uint32_t timeoutMs) {
       if (task_) {
         vTaskDelete(task_);
         task_ = nullptr;
-        mc_logf("[REC] task deleted by forceAbort");
+
+        // EVT（常時）：abort確定（task delete）
+        MC_EVT("REC", "abort forceAbort task_deleted=1");
+        MC_LOGW("REC", "task deleted by forceAbort");
+      } else {
+        MC_EVT("REC", "abort forceAbort task_deleted=0");
       }
+
       return false;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -379,11 +407,10 @@ bool AudioRecorder::waitTaskDone_(uint32_t timeoutMs) {
   return true;
 }
 
-// ===== REPLACE: AudioRecorder::stop(uint32_t nowMs) =====
 bool AudioRecorder::stop(uint32_t nowMs) {
   if (!recording_) return false;
 
-  Serial.printf("[%s] stop req\n", kTag);
+  MC_LOGD("REC", "stop req");
   requestStop_(false);
   bool ok = waitTaskDone_(2000);
 
@@ -391,9 +418,9 @@ bool AudioRecorder::stop(uint32_t nowMs) {
 
   // stopReqでタスクが止まっても、I2S内部がまだ録音中の可能性があるので少し待つ
   waitMicIdle_(200);
-  Serial.printf("[%s] stop finalize mic: rec=%d en=%d\n", kTag,
-                M5.Mic.isRecording() ? 1 : 0,
-                M5.Mic.isEnabled() ? 1 : 0);
+  MC_LOGD("REC", "stop finalize mic: rec=%d en=%d",
+          M5.Mic.isRecording() ? 1 : 0,
+          M5.Mic.isEnabled() ? 1 : 0);
 
   // ★順序が重要：Mic -> end、（少し待つ）、Speaker -> begin
   endMic_();
@@ -404,18 +431,16 @@ bool AudioRecorder::stop(uint32_t nowMs) {
     i2sLocked_ = false;
   }
 
-  // ok=1 系ログは 1回だけ（dur/samples/peak を全部ここに集約）
-  Serial.printf("[%s] stop done ok=%d dur=%ums samples=%u peak=%d\n",
-                kTag,
-                ok ? 1 : 0,
-                (unsigned)durationMs(),
-                (unsigned)capturedSamples_,
-                (int)peakAbs_);
+  // EVT（常時）：正常停止確定が重要
+  MC_EVT("REC", "stop ok=%d dur=%ums samples=%u peak=%d",
+         ok ? 1 : 0,
+         (unsigned)durationMs(),
+         (unsigned)capturedSamples_,
+         (int)peakAbs_);
 
+  MC_LOGD("REC", "stop done ok=%d", ok ? 1 : 0);
   return ok;
 }
-// ===== /REPLACE =====
-
 
 void AudioRecorder::cancel() {
   if (!recording_) {
@@ -427,20 +452,23 @@ void AudioRecorder::cancel() {
       I2SManager::instance().unlock("REC.cancel(idle)");
       i2sLocked_ = false;
     }
-    Serial.printf("[%s] cancel done (buffer freed)\n", kTag);
+
+    // EVT（常時）：キャンセル確定が重要
+    MC_EVT("REC", "cancel (idle) buffer_freed=1");
+    MC_LOGD("REC", "cancel done (idle, buffer freed)");
     return;
   }
 
-  Serial.printf("[%s] cancel req\n", kTag);
+  MC_LOGD("REC", "cancel req");
   requestStop_(true);
   waitTaskDone_(2000);
 
   freeBuffer_();
 
   waitMicIdle_(200);
-  Serial.printf("[%s] cancel finalize mic: rec=%d en=%d\n", kTag,
-                M5.Mic.isRecording() ? 1 : 0,
-                M5.Mic.isEnabled() ? 1 : 0);
+  MC_LOGD("REC", "cancel finalize mic: rec=%d en=%d",
+          M5.Mic.isRecording() ? 1 : 0,
+          M5.Mic.isEnabled() ? 1 : 0);
 
   // ★順序：Mic end → Speaker復帰
   endMic_();
@@ -451,9 +479,10 @@ void AudioRecorder::cancel() {
     i2sLocked_ = false;
   }
 
-  Serial.printf("[%s] cancel done (buffer freed)\n", kTag);
+  // EVT（常時）：キャンセル確定が重要
+  MC_EVT("REC", "cancel buffer_freed=1");
+  MC_LOGD("REC", "cancel done (buffer freed)");
 }
-
 
 uint32_t AudioRecorder::durationMs() const {
   if (sampleRate_ == 0) return 0;
@@ -472,7 +501,8 @@ bool AudioRecorder::saveWavToFs(const char* path) {
   writeWavHeader_(f, sampleRate_, dataBytes);
   f.write((const uint8_t*)pcm_, dataBytes);
   f.close();
-  Serial.printf("[%s] saveWav ok path=%s bytes=%u\n", kTag, path, (unsigned)dataBytes);
+
+  MC_LOGD("REC", "saveWav ok path=%s bytes=%u", path ? path : "", (unsigned)dataBytes);
   return true;
 }
 
@@ -498,7 +528,6 @@ void AudioRecorder::taskLoop_() {
     bool naturalEnd = false;  // ★stop()/cancel()要求ではなく自然終了したか
 
     // start() で recording_=true になったタイミングで録音を進める
-    // recordにsampleRateを渡して「狙ったフォーマットのPCM」を得る
     while (recording_) {
       if (forceAbort_) break;
 
@@ -518,7 +547,6 @@ void AudioRecorder::taskLoop_() {
       int16_t tmp[kChunk];
 
       // ★重要：M5Unifiedのrecord()は「録音要求→完了待ち」の使い方が安定。
-      //   完了前に tmp を読むと、ゴミ/ノイズになり得る。
       bool submitted = M5.Mic.record(tmp, kChunk, sampleRate_, false);
       if (!submitted) {
         vTaskDelay(pdMS_TO_TICKS(2));
@@ -552,18 +580,20 @@ void AudioRecorder::taskLoop_() {
         }
       }
 
-
       // バッファ満杯 or 時間満了
       const uint32_t elapsedMs = millis() - startMs_;
       if (capturedSamples_ >= maxSamples_ || elapsedMs >= (maxSeconds_ * 1000UL)) {
-        mc_logf("[REC] buffer full/time -> stop (samples=%u peak=%d)",
-                (unsigned)capturedSamples_, (int)peakAbs_);
         stopMs_ = millis();
         naturalEnd = true;     // ★自然終了
         recording_ = false;
+
+        // EVT（常時）：timeout確定が重要（stop() が呼ばれない経路）
+        MC_EVT("REC", "timeout reason=buffer_full_or_time dur=%lums samples=%u peak=%d",
+               (unsigned long)elapsedMs,
+               (unsigned)capturedSamples_,
+               (int)peakAbs_);
         break;
       }
-
 
       vTaskDelay(pdMS_TO_TICKS(2));
     }
@@ -571,9 +601,9 @@ void AudioRecorder::taskLoop_() {
     // ★自然終了の場合：stop() が呼ばれない経路でも I2S を解放する
     if (naturalEnd) {
       waitMicIdle_(200);
-      Serial.printf("[%s] autoStop finalize mic: rec=%d en=%d\n", kTag,
-                    M5.Mic.isRecording() ? 1 : 0,
-                    M5.Mic.isEnabled() ? 1 : 0);
+      MC_LOGD("REC", "autoStop finalize mic: rec=%d en=%d",
+              M5.Mic.isRecording() ? 1 : 0,
+              M5.Mic.isEnabled() ? 1 : 0);
 
       // Mic end → Speaker復帰 → I2S unlock（stop() と同等の後始末）
       endMic_();
@@ -584,11 +614,9 @@ void AudioRecorder::taskLoop_() {
         i2sLocked_ = false;
       }
 
-      Serial.printf("[%s] autoStop finalize done samples=%u peak=%d\n",
-                    kTag, (unsigned)capturedSamples_, (int)peakAbs_);
+      MC_LOGD("REC", "autoStop finalize done samples=%u peak=%d",
+              (unsigned)capturedSamples_, (int)peakAbs_);
     }
-
-
 
     // stop/cancel フラグ掃除
     stopReq_ = false;
