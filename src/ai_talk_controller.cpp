@@ -322,7 +322,8 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
   overlay_.line2 = "";
 
   // ---- STT ----
-  const uint32_t overallT0 = millis();
+  overallStartMs_ = millis();
+  const uint32_t overallT0 = overallStartMs_;
   errorFlag_ = false;
 
   // ---- LLM ----
@@ -341,7 +342,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
 
     // EVT: STTを実施できなかった事実（テキスト内容は出さない）
     MC_EVT("STT", "skip reason=rec_not_ok samples=%u", (unsigned)recorder_.samples());
-    MC_LOGW("STT", "skip (rec not ok)");
+    MC_LOGW("STT", "skip (rec not ok) samples=%u", (unsigned)recorder_.samples());
   } else {
     // 20s枠から残りを見つつ STT の上限を決める（通常は 8s のまま）
     uint32_t sttTimeout = (uint32_t)MC_AI_STT_TIMEOUT_MS;
@@ -384,7 +385,7 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
            (unsigned long)sttMs,
            (unsigned)lastUserText_.length());
 
-    // L1ではEVTで十分。調査用の重複サマリはDIAGへ。
+    // 通常ログ（サマリのみ、秘密なし）※DMC_LOG_LEVEL=1では出さない想定
     MC_LOGD("STT", "done ok=%d http=%d took=%lums text_len=%u",
             lastSttOk_ ? 1 : 0,
             lastSttStatus_,
@@ -424,11 +425,10 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
         replyText_ = mcUtf8ClampBytes(replyText_, MC_AI_TTS_MAX_CHARS);
         bubbleText_ = replyText_;
 
-        // 先頭だけ（overlay用、ログには出さない）
+        // overlay用（ログには出さない）
         lastLlmTextHead_ = mcUtf8ClampBytes(replyText_, 40);
         if (replyText_.length() > lastLlmTextHead_.length()) lastLlmTextHead_ += "…";
       } else {
-        // 失敗時フォールバック + cooldown +1秒
         errorFlag_ = true;
         lastLlmErr_ = mcSanitizeOneLine(llm.err);
         {
@@ -446,7 +446,6 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
              (unsigned long)lastLlmTookMs_,
              (unsigned)replyText_.length());
 
-      // L1ではEVTで十分。調査用のサマリはDIAGへ。
       MC_LOGD("LLM", "http=%d ok=%d took=%lums outLen=%u",
               lastLlmHttp_,
               lastLlmOk_ ? 1 : 0,

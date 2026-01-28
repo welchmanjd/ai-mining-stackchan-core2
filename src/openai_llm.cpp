@@ -239,22 +239,29 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     return r;
   }
 
-  if (code < 200 || code >= 300) {
-    DynamicJsonDocument docE(4096);
-    DeserializationError e = deserializeJson(docE, body);
-    if (!e && docE["error"]["message"].is<const char*>()) {
-      String msg = (const char*)docE["error"]["message"];
-      msg = mcLogHead(msg, MC_AI_LOG_HEAD_BYTES_LLM_HTTP_ERRMSG);
-      r.err = "http_" + String(code) + ":" + msg;
-    } else {
-      r.err = "http_" + String(code);
-    }
-    r.ok = false;
+ if (code < 200 || code >= 300) {
+  // 本文は出さない（エラーメッセージだけ短く）
+  // OpenAI のエラーは JSON で返ることが多いので、可能なら message だけ拾う
+  DynamicJsonDocument doc(4096);
+  DeserializationError e = deserializeJson(doc, body);
 
-    MC_EVT("LLM", "fail stage=http status=%d took=%lums",
-           code, (unsigned long)r.tookMs);
-    return r;
+  String msg = "";
+  if (!e && doc["error"]["message"].is<const char*>()) {
+    msg = (const char*)doc["error"]["message"];
+    msg = mcLogHead(msg, MC_AI_LOG_HEAD_BYTES_LLM_HTTP_ERRMSG);
   }
+
+  // 重要：message は r.err に含めない（入力断片が混ざる可能性を排除）
+  r.err = "http_" + String(code);
+  r.ok = false;
+
+  if (msg.length()) {
+    MC_LOGD("LLM", "http=%d err_message=%s", code, msg.c_str());
+  } else {
+    MC_LOGD("LLM", "http=%d", code);
+  }
+  return r;
+}
 
   // ---- parse + extract ----
   DynamicJsonDocument doc(24576);
@@ -307,12 +314,13 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
   if (out.length() == 0) {
     String diag = buildDiag_(doc.as<JsonVariant>());
 
-    // empty_output は重要：EVTで常時残す（ただし本文は出さない）
-    MC_EVT("LLM", "empty_output http=%d took=%lums body_len=%u diag=%s",
-           r.http, (unsigned long)r.tookMs, (unsigned)body.length(), diag.c_str());
+    // 本文（生成テキスト）はログに出さない。診断はデバッグログに閉じ込める。
+    MC_LOGW("LLM", "empty_output http=%d took=%lums body_len=%u",
+            r.http, (unsigned long)r.tookMs, (unsigned)body.length());
+    MC_LOGD("LLM", "empty_output diag=%s", diag.c_str());
 
     r.ok = false;
-    r.err = String("empty_output ") + diag;
+    r.err = "empty_output";
     return r;
   }
 
