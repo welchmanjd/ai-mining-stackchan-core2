@@ -292,6 +292,8 @@ static bool     g_bubbleOnlyActive = false;
 static uint32_t g_bubbleOnlyUntilMs = 0;
 static uint32_t g_bubbleOnlyRid = 0;
 static int      g_bubbleOnlyEvType = 0;
+enum class BubbleSource : uint8_t { None = 0, Ai = 1, Behavior = 2, Info = 3, System = 4 };
+static BubbleSource g_bubbleOnlySource = BubbleSource::None;
 // 吹き出し表示時間を文字数に合わせて可変にする
 static uint32_t bubbleShowMs(const String& text) {
   const size_t len = text.length();
@@ -300,6 +302,59 @@ static uint32_t bubbleShowMs(const String& text) {
   const uint32_t maxMs = 8000;
   if (ms > maxMs) ms = maxMs;
   return ms;
+}
+
+static void bubbleClear(const char* reason, bool forceUiClear = false) {
+  if (!g_bubbleOnlyActive) return;
+
+  const uint32_t oldRid = g_bubbleOnlyRid;
+  const int oldType = g_bubbleOnlyEvType;
+
+  g_bubbleOnlyActive = false;
+  g_bubbleOnlyUntilMs = 0;
+
+  if (g_mode == MODE_STACKCHAN && (forceUiClear || !g_attentionActive)) {
+    UIMining::instance().setStackchanSpeech("");
+  }
+
+  LOG_EVT_INFO("EVT_PRESENT_BUBBLE_ONLY_CLEAR",
+               "rid=%lu type=%d mode=%d attn=%d reason=%s",
+               (unsigned long)oldRid, oldType,
+               (int)g_mode, g_attentionActive ? 1 : 0,
+               reason ? reason : "-");
+
+  g_bubbleOnlyRid = 0;
+  g_bubbleOnlyEvType = 0;
+  g_bubbleOnlySource = BubbleSource::None;
+}
+
+static void bubbleShow(const String& text,
+                       uint32_t now,
+                       uint32_t rid,
+                       int evType,
+                       int prio,
+                       BubbleSource source) {
+  if (!text.length()) return;
+  if (g_attentionActive) return;
+
+  UIMining::instance().setStackchanSpeech(text);
+
+  g_bubbleOnlyActive = true;
+  const uint32_t showMs = bubbleShowMs(text);
+  g_bubbleOnlyUntilMs = now + showMs;
+  g_bubbleOnlyRid = rid;
+  g_bubbleOnlyEvType = evType;
+  g_bubbleOnlySource = source;
+
+  LOG_EVT_INFO("EVT_PRESENT_BUBBLE_ONLY_SHOW",
+               "rid=%lu type=%d prio=%d len=%u mode=%d attn=%d show_ms=%lu text=%s",
+               (unsigned long)rid,
+               evType,
+               prio,
+               (unsigned)text.length(),
+               (int)g_mode, g_attentionActive ? 1 : 0,
+               (unsigned long)showMs,
+               text.c_str());
 }
 
 // ReactionPriority -> OrchPrio 変換宣言
@@ -523,6 +578,13 @@ void loop() {
   // AI state machine tick（毎ループ）
   g_ai.tick(now);
 
+  {
+    String aiBubbleText;
+    if (g_ai.consumeBubbleUpdate(&aiBubbleText)) {
+      bubbleShow(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
+    }
+  }
+
 // ===== main.cpp：Phase5-A abortブロック（全文差し替え）=====
   // Phase5-A: abort TTS (consume方式)
   {
@@ -583,6 +645,10 @@ void loop() {
   const bool audioPlayingNow = M5.Speaker.isPlaying();
   if (!g_prevAudioPlaying && audioPlayingNow && g_ttsInflightId != 0) {
     g_orch.onAudioStart(g_ttsInflightId);
+
+    if (g_bubbleOnlyActive) {
+      bubbleClear("tts_start");
+    }
 
     if (g_ttsInflightSpeechId != 0 &&
         g_ttsInflightSpeechId == g_ttsInflightId &&
@@ -810,11 +876,7 @@ void loop() {
         s_ttsFailSuppressed = 0;
       }
     } else {
-      UIMining::instance().setStackchanSpeech(text);
-      g_bubbleOnlyActive = true;
-      g_bubbleOnlyUntilMs = now + bubbleShowMs(String(text));
-      g_bubbleOnlyRid = 0;
-      g_bubbleOnlyEvType = 0;
+      bubbleShow(String(text), now, 0, 0, 0, BubbleSource::System);
     }
   }
 
@@ -918,20 +980,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
     M5.Speaker.tone(1800, 30);
 
     if (g_bubbleOnlyActive) {
-      const uint32_t oldRid = g_bubbleOnlyRid;
-      const int oldType = g_bubbleOnlyEvType;
-
-      g_bubbleOnlyActive = false;
-      g_bubbleOnlyUntilMs = 0;
-      g_bubbleOnlyRid = 0;
-      g_bubbleOnlyEvType = 0;
-
-      UIMining::instance().setStackchanSpeech("");
-
-      LOG_EVT_INFO("EVT_PRESENT_BUBBLE_ONLY_CLEAR",
-                   "rid=%lu type=%d mode=%d attn=%d reason=attention_start",
-                   (unsigned long)oldRid, oldType,
-                   (int)g_mode, g_attentionActive ? 1 : 0);
+      bubbleClear("attention_start", true);
     }
   }
 }
@@ -965,20 +1014,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
 
     // bubble-only auto clear（期限切れ）
     if (g_bubbleOnlyActive && (int32_t)(g_bubbleOnlyUntilMs - now) <= 0) {
-      g_bubbleOnlyActive = false;
-      g_bubbleOnlyUntilMs = 0;
-
-      if (g_mode == MODE_STACKCHAN && !g_attentionActive) {
-        UIMining::instance().setStackchanSpeech("");
-      }
-
-      LOG_EVT_INFO("EVT_PRESENT_BUBBLE_ONLY_CLEAR",
-                   "rid=%lu type=%d mode=%d attn=%d reason=timeout",
-                   (unsigned long)g_bubbleOnlyRid, g_bubbleOnlyEvType,
-                   (int)g_mode, g_attentionActive ? 1 : 0);
-
-      g_bubbleOnlyRid = 0;
-      g_bubbleOnlyEvType = 0;
+      bubbleClear("timeout");
     }
 
     UIMining::PanelData data;
@@ -1061,43 +1097,27 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
       // ---- bubble-only present (speak=0) ----
       if (g_mode == MODE_STACKCHAN) {
         if (reaction.speak && g_bubbleOnlyActive) {
-          g_bubbleOnlyActive = false;
-          g_bubbleOnlyUntilMs = 0;
-
-          if (!g_attentionActive) {
-            UIMining::instance().setStackchanSpeech("");
-          }
-
-          LOG_EVT_INFO("EVT_PRESENT_BUBBLE_ONLY_CLEAR",
-                       "rid=%lu type=%d mode=%d attn=%d reason=tts_event",
-                       (unsigned long)g_bubbleOnlyRid, g_bubbleOnlyEvType,
-                       (int)g_mode, g_attentionActive ? 1 : 0);
-
-          g_bubbleOnlyRid = 0;
-          g_bubbleOnlyEvType = 0;
+          bubbleClear("tts_event");
         }
 
         if (!reaction.speak &&
             !isIdleTick &&
             reaction.speechText.length() &&
             !suppressedByAttention) {
+          const bool isBubbleInfo =
+            (reaction.evType == StackchanEventType::InfoPool) ||
+            (reaction.evType == StackchanEventType::InfoPing) ||
+            (reaction.evType == StackchanEventType::InfoHashrate) ||
+            (reaction.evType == StackchanEventType::InfoShares) ||
+            (reaction.evType == StackchanEventType::InfoMiningOff);
+          const BubbleSource bubbleSource = isBubbleInfo ? BubbleSource::Info : BubbleSource::Behavior;
 
-          UIMining::instance().setStackchanSpeech(reaction.speechText);
-
-          g_bubbleOnlyActive = true;
-          const uint32_t showMs = bubbleShowMs(reaction.speechText);
-          g_bubbleOnlyUntilMs = now + showMs;
-          g_bubbleOnlyRid = reaction.rid;
-          g_bubbleOnlyEvType = (int)reaction.evType;
-
-          LOG_EVT_INFO("EVT_PRESENT_BUBBLE_ONLY_SHOW",
-                       "rid=%lu type=%d prio=%d len=%u mode=%d attn=%d show_ms=%lu text=%s",
-                       (unsigned long)reaction.rid,
-                       (int)reaction.evType, (int)reaction.priority,
-                       (unsigned)reaction.speechText.length(),
-                       (int)g_mode, g_attentionActive ? 1 : 0,
-                       (unsigned long)showMs,
-                       reaction.speechText.c_str());
+          bubbleShow(reaction.speechText,
+                     now,
+                     reaction.rid,
+                     (int)reaction.evType,
+                     (int)reaction.priority,
+                     bubbleSource);
         }
       }
 
