@@ -91,25 +91,25 @@ private:
   AiUiOverlay aiOverlay_{};
   UIMining();
   // ---------- Spec constants (relative to right panel origin) ----------
-  static constexpr int PAD_LR = 4;
-  static constexpr int PAD_T  = 4;
-  static constexpr int CHAR_W = 12; // Font0 * 2
-  static constexpr int CHAR_H = 16;
-  static constexpr int X_LABEL = PAD_LR;             // abs148 -> rel4
-  static constexpr int X_VALUE = PAD_LR + CHAR_W*5;  // abs208 -> rel64
-  static constexpr int Y_HEADER = 4;
-  static constexpr int Y1 = 24;
-  static constexpr int Y2 = 42;
-  static constexpr int Y3 = 60;
-  static constexpr int Y4 = 78;
-  static constexpr int IND_R = 2;
-  static constexpr int IND_Y = 12;
+  static constexpr int kPadLr = 4;
+  static constexpr int kPadT  = 4;
+  static constexpr int kCharW = 12; // Font0 * 2
+  static constexpr int kCharH = 16;
+  static constexpr int kXLabel = kPadLr;             // abs148 -> rel4
+  static constexpr int kXValue = kPadLr + kCharW*5;  // abs208 -> rel64
+  static constexpr int kYHeader = 4;
+  static constexpr int kY1 = 24;
+  static constexpr int kY2 = 42;
+  static constexpr int kY3 = 60;
+  static constexpr int kY4 = 78;
+  static constexpr int kIndR = 2;
+  static constexpr int kIndY = 12;
   // abs 302/308/314 -> rel 158/164/170
-  static constexpr int IND_X1 = 158;
-  static constexpr int IND_X2 = 164;
-  static constexpr int IND_X3 = 170;
-  static constexpr uint16_t COL_LABEL = 0xC618; // light grey
-  static constexpr uint16_t COL_DARK  = 0x4208;
+  static constexpr int kIndX1 = 158;
+  static constexpr int kIndX2 = 164;
+  static constexpr int kIndX3 = 170;
+  static constexpr uint16_t kColLabel = 0xC618; // light grey
+  static constexpr uint16_t kColDark  = 0x4208;
   struct TextLayoutY {
     int header, y1, y2, y3, y4;
     int ind_y;

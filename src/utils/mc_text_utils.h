@@ -6,11 +6,11 @@
 #include <Arduino.h>
 // Clamp to max_bytes without breaking UTF-8 sequences.
 // If s is already <= max_bytes, returns s as-is.
-String mcUtf8ClampBytes(const String& s, size_t max_bytes);
+String mcUtf8ClampBytes(const String& s, size_t maxBytes);
 // Sanitize for logs/UI: make it one-line without destroying UTF-8.
 // - \r, \n, \t => space
 // - trim
 // - collapse 2+ spaces => 1 space
 String mcSanitizeOneLine(const String& s);
 // Convenience for logs: mcUtf8ClampBytes(mcSanitizeOneLine(s), max_bytes)
-String mcLogHead(const String& s, size_t max_bytes);
+String mcLogHead(const String& s, size_t maxBytes);

@@ -1,4 +1,4 @@
-﻿// UI for Mining stackchan avatar ticker.
+// UI for Mining stackchan avatar ticker.
 // Module implementation.
 // Uses M5Stack-Avatar library for Stack-chan style face rendering.
 // https://github.com/meganetaaan/m5stack-avatar
@@ -19,25 +19,25 @@ void UIMining::prepHeaderFont() {
 // ===== Header + dots =====
 void UIMining::drawDots(const TextLayoutY& ly) {
   uint16_t active   = TFT_CYAN;
-  uint16_t inactive = COL_DARK;
-  const int xs[3] = { IND_X1, IND_X2, IND_X3 };
+  uint16_t inactive = kColDark;
+  const int xs[3] = { kIndX1, kIndX2, kIndX3 };
   for (int i = 0; i < 3; ++i) {
-    if (i == infoPage_) info_.fillCircle(xs[i], ly.ind_y, IND_R, active);
-    else                 info_.drawCircle(xs[i], ly.ind_y, IND_R, inactive);
+    if (i == infoPage_) info_.fillCircle(xs[i], ly.ind_y, kIndR, active);
+    else                 info_.drawCircle(xs[i], ly.ind_y, kIndR, inactive);
   }
 }
 void UIMining::drawHeader(const char* title, const TextLayoutY& ly) {
   info_.fillRect(0, ly.header, INF_W, 8, BLACK);
   prepHeaderFont();
   info_.setTextColor(TFT_CYAN, BLACK);
-  int safe_w = INF_W - 30;
+  int safeW = INF_W - 30;
   String t = title;
-  while (t.length() && info_.textWidth(t) > safe_w) {
+  while (t.length() && info_.textWidth(t) > safeW) {
     t.remove(t.length() - 1);
   }
   int tw = info_.textWidth(t);
-  int x  = (safe_w - tw) / 2;
-  if (x < PAD_LR) x = PAD_LR;
+  int x  = (safeW - tw) / 2;
+  if (x < kPadLr) x = kPadLr;
   info_.setCursor(x, ly.header);
   info_.print(t);
   drawDots(ly);
@@ -45,16 +45,16 @@ void UIMining::drawHeader(const char* title, const TextLayoutY& ly) {
 // ===== Line primitive =====
 void UIMining::drawLine(int y, const char* label4, const String& value,
                         uint16_t colLabel, uint16_t colValue) {
-  info_.fillRect(0, y, INF_W, CHAR_H, BLACK);
+  info_.fillRect(0, y, INF_W, kCharH, BLACK);
   prepBodyFont();
   info_.setTextColor(colLabel, BLACK);
-  info_.setCursor(X_LABEL, y);
+  info_.setCursor(kXLabel, y);
   String lab = String(label4);
   while (lab.length() < 4) lab += ' ';
   if (lab.length() > 4) lab = lab.substring(0, 4);
   info_.print(lab);
   info_.setTextColor(colValue, BLACK);
-  info_.setCursor(X_VALUE, y);
+  info_.setCursor(kXValue, y);
   String v = value;
   if (v.length() > 9) v = v.substring(0, 9);
   info_.print(v);
@@ -252,32 +252,32 @@ void UIMining::drawPage0(const PanelData& p) {
   // Mining summary page.
   auto ly = computeTextLayoutY();
   drawHeader("MINING STATUS", ly);
-  drawLine(ly.y1, "HASH", vHash(p.hrKh_), COL_LABEL, cHash(p));
+  drawLine(ly.y1, "HASH", vHash(p.hrKh_), kColLabel, cHash(p));
   uint8_t success = 0;
   String shrVal = vShare(p.accepted_, p.rejected_, success);
-  drawLine(ly.y2, "SHR ", shrVal, COL_LABEL, cShare(success));
-  drawLine(ly.y3, "DIFF", vDiff(p.diff_), COL_LABEL, WHITE);
+  drawLine(ly.y2, "SHR ", shrVal, kColLabel, cShare(success));
+  drawLine(ly.y3, "DIFF", vDiff(p.diff_), kColLabel, WHITE);
   uint32_t age = lastShareAgeSec();
-  drawLine(ly.y4, "LAST", vLast(age), COL_LABEL, cLast(age));
+  drawLine(ly.y4, "LAST", vLast(age), kColLabel, cLast(age));
 }
 void UIMining::drawPage1(const PanelData& p) {
   // Device health/status page.
   auto ly = computeTextLayoutY();
   drawHeader("DEVICE STATUS", ly);
-  drawLine(ly.y1, "UP  ", vUp(p.elapsedS_), COL_LABEL, WHITE);
+  drawLine(ly.y1, "UP  ", vUp(p.elapsedS_), kColLabel, WHITE);
   float tc = readTempC();
-  drawLine(ly.y2, "TEMP", vTemp(tc), COL_LABEL, cTemp(tc));
+  drawLine(ly.y2, "TEMP", vTemp(tc), kColLabel, cTemp(tc));
   int pct = batteryPct();
-  drawLine(ly.y3, "BATT", vBatt(), COL_LABEL, cBatt(pct));
-  uint32_t free_kb = ESP.getFreeHeap() / 1024;
-  drawLine(ly.y4, "HEAP", vHeap(), COL_LABEL, cHeap(free_kb));
+  drawLine(ly.y3, "BATT", vBatt(), kColLabel, cBatt(pct));
+  uint32_t freeKb = ESP.getFreeHeap() / 1024;
+  drawLine(ly.y4, "HEAP", vHeap(), kColLabel, cHeap(freeKb));
 }
 void UIMining::drawPage2(const PanelData& p) {
   // Network status page.
   auto ly = computeTextLayoutY();
   drawHeader("NETWORK", ly);
   String nv = vNet(p);
-  drawLine(ly.y1, "NET ", nv, COL_LABEL, cNet(nv));
+  drawLine(ly.y1, "NET ", nv, kColLabel, cNet(nv));
   String pv;
   if (p.pingMs_ < 0) {
     pv = " ---- ms";
@@ -286,24 +286,24 @@ void UIMining::drawPage2(const PanelData& p) {
     snprintf(b, sizeof(b), " %d ms", static_cast<int>(roundf(p.pingMs_)));
     pv = String(b);
   }
-  drawLine(ly.y2, "PING", pv, COL_LABEL, WHITE);
+  drawLine(ly.y2, "PING", pv, kColLabel, WHITE);
   int rssi = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : -100;
-  drawLine(ly.y3, "WIFI", vRssi(), COL_LABEL, cRssi(rssi));
-  drawLine(ly.y4, "POOL", "", COL_LABEL, WHITE);
+  drawLine(ly.y3, "WIFI", vRssi(), kColLabel, cRssi(rssi));
+  drawLine(ly.y4, "POOL", "", kColLabel, WHITE);
   drawPoolNameSmall(ly, p.poolName_);
 }
 void UIMining::drawPoolNameSmall(const TextLayoutY& ly, const String& name) {
-  int y = ly.y4 + CHAR_H + 6;
+  int y = ly.y4 + kCharH + 6;
   info_.fillRect(0, y, INF_W, 10, BLACK);
   info_.setFont(&fonts::Font0);
   info_.setTextSize(1);
   info_.setTextColor(WHITE, BLACK);
   String s = name.length() ? name : String("--");
-  int max_w = INF_W - PAD_LR * 2;
-  while (s.length() && info_.textWidth(s) > max_w) {
+  int maxW = INF_W - kPadLr * 2;
+  while (s.length() && info_.textWidth(s) > maxW) {
     s.remove(s.length() - 1);
   }
-  info_.setCursor(PAD_LR, y);
+  info_.setCursor(kPadLr, y);
   info_.print(s);
 }
 // ===== Right panel draw =====
@@ -317,3 +317,4 @@ void UIMining::drawInfo(const PanelData& p) {
   }
   info_.pushSprite(X_INF, 0);
 }
+

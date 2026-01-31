@@ -1,4 +1,4 @@
-﻿// src/mining_task.cpp
+// src/mining_task.cpp
 // Module implementation.
 #include "ai/mining_task.h"
 #include "config/config.h"
@@ -45,19 +45,19 @@ struct DucoThreadStats {
 static DucoThreadStats   g_thr[kDucoMinerThreads];
 static SemaphoreHandle_t g_shaMutex = nullptr;
 static portMUX_TYPE g_statsMux = portMUX_INITIALIZER_UNLOCKED;
-static String   g_node_name;
+static String   g_nodeName;
 static String   g_host;
 static uint16_t g_port = 0;
-static uint32_t g_acc_all = 0, g_rej_all = 0;
+static uint32_t g_accAll = 0, g_rejAll = 0;
 static String   g_status = "boot";
-static bool     g_any_connected = false;
-static char     g_chip_id[16] = {0};
-static int      g_walletid = 0;
+static bool     g_anyConnected = false;
+static char     g_chipId[16] = {0};
+static int      g_walletId = 0;
 static String   g_poolDiagText = "";
 // ===== mining control knobs (for attention mode etc.) =====
-static volatile uint8_t  g_mining_active_threads = kDucoMinerThreads; // 0..kDucoMinerThreads
-static volatile uint16_t g_yield_every = 1024;   // power-of-two recommended
-static volatile uint8_t  g_yield_ms    = 1;      // delay in ms at yield points
+static volatile uint8_t  g_miningActiveThreads = kDucoMinerThreads; // 0..kDucoMinerThreads
+static volatile uint16_t g_yieldEvery = 1024;   // power-of-two recommended
+static volatile uint8_t  g_yieldMs    = 1;      // delay in ms at yield points
 static inline uint16_t normalizePow2_(uint16_t v) {
   // Force to power-of-two for a cheap bitmask in the nonce loop.
   if (v < 8) v = 8;
@@ -90,11 +90,11 @@ static bool ducoGetPool_() {
     g_poolDiagText = "Failed to parse pool info response.";
     return false;
   }
-  g_node_name = doc["name"].as<String>();
+  g_nodeName = doc["name"].as<String>();
   g_host      = doc["ip"].as<String>();
   g_port      = (uint16_t)doc["port"].as<int>();
   MC_EVT("DUCO", "Pool: %s (%s:%u)",
-         g_node_name.c_str(),
+         g_nodeName.c_str(),
          g_host.c_str(), (unsigned)g_port);
   if (g_port != 0 && g_host.length()) {
     g_poolDiagText = "";
@@ -132,20 +132,20 @@ static inline void sha1Calc_(const unsigned char* data,
 static uint32_t ducoSolveDucoS1_(const String& seed,
                                   const unsigned char* expected20,
                                   uint32_t difficulty,
-                                  uint32_t& hashes_done,
+                                    uint32_t& hashesDone,
                                   DucoThreadStats* stats) {
   // Tight loop: compute SHA1(seed + nonce) until the hash matches expected20.
   const uint32_t maxNonce = difficulty * 100U;
-  hashes_done = 0;
+  hashesDone = 0;
   char buf[96];
-  int seed_len = seed.length();
-  if (seed_len > (int)sizeof(buf) - 12) seed_len = sizeof(buf) - 12;
-  memcpy(buf, seed.c_str(), seed_len);
-  char* nonce_ptr = buf + seed_len;
+  int seedLen = seed.length();
+  if (seedLen > (int)sizeof(buf) - 12) seedLen = sizeof(buf) - 12;
+  memcpy(buf, seed.c_str(), seedLen);
+  char* noncePtr = buf + seedLen;
   unsigned char out[20];
 // thread index (0/1..) for control checks
-const int tidx = (stats) ? int(stats - g_thr) : -1;
-if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
+const int tIdx = (stats) ? int(stats - g_thr) : -1;
+if (tIdx >= 0 && tIdx >= (int)g_miningActiveThreads) {
   return kDucoAborted;
 }
   for (uint32_t nonce = 0; nonce <= maxNonce; ++nonce) {
@@ -153,13 +153,13 @@ if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
     if (g_miningPaused) {
       waitWhilePaused_();
       // If this thread got disabled while paused, abort cleanly.
-      if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
+        if (tIdx >= 0 && tIdx >= (int)g_miningActiveThreads) {
         return kDucoAborted;
       }
     }
-    int nlen = u32ToDec_(nonce_ptr, nonce);
-    sha1Calc_((const unsigned char*)buf, seed_len + nlen, out);
-    hashes_done++;
+     int nlen = u32ToDec_(noncePtr, nonce);
+     sha1Calc_((const unsigned char*)buf, seedLen + nlen, out);
+     hashesDone++;
     if (memcmp(out, expected20, 20) == 0) {
       // Found a valid share; publish progress atomically.
       if (stats) {
@@ -172,7 +172,7 @@ if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
       }
       return nonce;
     }
-    uint16_t every = g_yield_every;
+    uint16_t every = g_yieldEvery;
     uint32_t mask  = (every >= 1) ? (uint32_t)(every - 1) : 0xFFFFFFFFu;
     if ((nonce & mask) == 0) {
       // Periodic progress update and cooperative yield.
@@ -185,10 +185,10 @@ if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
         portEXIT_CRITICAL(&g_statsMux);
       }
       // If this thread got disabled mid-job, abort cleanly.
-      if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
+        if (tIdx >= 0 && tIdx >= (int)g_miningActiveThreads) {
         return kDucoAborted;
       }
-      uint8_t dms = g_yield_ms;
+      uint8_t dms = g_yieldMs;
       if (dms) vTaskDelay(pdMS_TO_TICKS(dms));
     }
   }
@@ -205,7 +205,7 @@ static void ducoTask_(void* pv) {
   const auto& cfg = appConfig();
   for (;;) {
     // ----- mining control: idle if this thread is disabled (STOP/HALF) -----
-    if (idx >= (int)g_mining_active_threads) {
+    if (idx >= (int)g_miningActiveThreads) {
       me.connected_   = false;
       me.hashrateKh_ = 0.0f;
       vTaskDelay(pdMS_TO_TICKS(200));
@@ -214,7 +214,7 @@ static void ducoTask_(void* pv) {
     // WiFi
     while (WiFi.status() != WL_CONNECTED) {
       // disabled while waiting for WiFi -> just idle
-      if (idx >= (int)g_mining_active_threads) {
+      if (idx >= (int)g_miningActiveThreads) {
         me.connected_   = false;
         me.hashrateKh_ = 0.0f;
         vTaskDelay(pdMS_TO_TICKS(200));
@@ -255,16 +255,16 @@ static void ducoTask_(void* pv) {
       continue;
     }
     String serverVer = cli.readStringUntil('\n');
-    g_status       = String("connected (") + tag + ") " + g_node_name;
+    g_status       = String("connected (") + tag + ") " + g_nodeName;
     serverVer.trim();
     g_poolDiagText = "";
     MC_LOGD("DUCO", "%s server version: %s", tag, serverVer.c_str());
     me.connected_ = true;
-    g_status = String("connected (") + tag + ") " + g_node_name;
+    g_status = String("connected (") + tag + ") " + g_nodeName;
     // ===== JOB loop =====
     while (cli.connected()) {
       // disabled mid-connection -> disconnect and go idle
-      if (idx >= (int)g_mining_active_threads) {
+      if (idx >= (int)g_miningActiveThreads) {
         MC_LOGI("DUCO", "%s disabled -> disconnect", tag);
         cli.stop();
         me.connected_   = false;
@@ -310,8 +310,8 @@ static void ducoTask_(void* pv) {
       portEXIT_CRITICAL(&g_statsMux);
       MC_LOGT("DUCO", "%s job diff=%d prev=%s expected=%s",
               tag, difficulty, prev.c_str(), expected.c_str());
-      const size_t SHA_LEN = 20;
-      unsigned char expBytes[SHA_LEN];
+        const size_t shaLen = 20;
+        unsigned char expBytes[shaLen];
       memset(expBytes, 0, sizeof(expBytes));
       size_t elen = expected.length() / 2;
       const char* ce = expected.c_str();
@@ -321,9 +321,9 @@ static void ducoTask_(void* pv) {
         if (c >= 'A' && c <= 'F') return (uint8_t)(c - 'A' + 10);
         return 0;
       };
-      for (size_t i = 0, j = 0; j < elen && j < SHA_LEN; i += 2, ++j) {
-        expBytes[j] = (h(ce[i]) << 4) | h(ce[i + 1]);
-      }
+        for (size_t i = 0, j = 0; j < elen && j < shaLen; i += 2, ++j) {
+          expBytes[j] = (h(ce[i]) << 4) | h(ce[i + 1]);
+        }
       // solve
       uint32_t hashes = 0;
       unsigned long tStart = micros();
@@ -359,8 +359,8 @@ static void ducoTask_(void* pv) {
           String(foundNonce) + "," + String(hps) + "," +
           String(cfg.ducoBanner_) + " " + cfg.appVersion_ + "," +
           cfg.ducoRigName_ + "," +
-          "DUCOID" + String((char*)g_chip_id) + "," +
-          String(g_walletid) + "\n";
+          "DUCOID" + String((char*)g_chipId) + "," +
+          String(g_walletId) + "\n";
       cli.print(submit);
       MC_LOGT("DUCO", "%s submit nonce=%u hps=%.1f",
               tag, (unsigned)foundNonce, hps);
@@ -372,7 +372,7 @@ static void ducoTask_(void* pv) {
       if (!cli.available()) {
         g_status = String("no feedback (") + tag + ")";
         ++me.rejected_;
-        ++g_rej_all;
+        ++g_rejAll;
         MC_LOGI_RL("duco_no_feedback", 10000, "DUCO",
                    "%s no feedback (timeout)", tag);
         g_poolDiagText = "No result response from the pool.";
@@ -384,13 +384,13 @@ static void ducoTask_(void* pv) {
       bool ok = fb.startsWith("GOOD");
       if (ok) {
         ++me.accepted_;
-        ++g_acc_all;
+        ++g_accAll;
         g_status = String("share GOOD (#") + String(me.shares_) +
                    ", " + tag + ")";
         g_poolDiagText = "";
       } else {
         ++me.rejected_;
-        ++g_rej_all;
+        ++g_rejAll;
         g_status = String("share BAD (#") + String(me.shares_) +
                    ", " + tag + ")";
       }
@@ -414,15 +414,15 @@ void startMiner() {
   g_shaMutex = xSemaphoreCreateMutex();
   uint64_t chipid = ESP.getEfuseMac();
   uint16_t chip   = (uint16_t)(chipid >> 32);
-  snprintf((char*)g_chip_id, sizeof(g_chip_id),
+  snprintf((char*)g_chipId, sizeof(g_chipId),
            "%04X%08X", chip, (uint32_t)chipid);
   randomSeed((uint32_t)millis());
-  g_walletid = random(0, 2811);
+  g_walletId = random(0, 2811);
   WiFi.setSleep(false);
   for (int i = 0; i < kDucoMinerThreads; ++i) {
     g_thr[i] = DucoThreadStats();
   }
-  g_acc_all = g_rej_all = 0;
+  g_accAll = g_rejAll = 0;
   for (int i = 0; i < kDucoMinerThreads; ++i) {
     int core = (i == 0) ? 0 : 1;
     UBaseType_t prio = 1;
@@ -441,13 +441,13 @@ void updateMiningSummary(MiningSummary& out) {
   float    totalKh = 0.0f;
   float    maxPing  = 0.0f;
   uint32_t acc = 0, rej = 0, diff = 0;
-  g_any_connected = false;
+  g_anyConnected = false;
   for (int i = 0; i < kDucoMinerThreads; ++i) {
     totalKh += g_thr[i].hashrateKh_;
     acc      += g_thr[i].accepted_;
     rej      += g_thr[i].rejected_;
     if (g_thr[i].difficulty_ > diff) diff = g_thr[i].difficulty_;
-    if (g_thr[i].connected_) g_any_connected = true;
+    if (g_thr[i].connected_) g_anyConnected = true;
     if (g_thr[i].lastPingMs_ > maxPing) {
       maxPing = g_thr[i].lastPingMs_;
     }
@@ -456,8 +456,8 @@ void updateMiningSummary(MiningSummary& out) {
   out.accepted_      = acc;
   out.rejected_      = rej;
   out.maxDifficulty_ = diff;
-  out.anyConnected_  = g_any_connected;
-  out.poolName_      = g_node_name;
+  out.anyConnected_  = g_anyConnected;
+  out.poolName_      = g_nodeName;
   out.maxPingMs_     = maxPing;
   out.miningEnabled_ = features.miningEnabled_;
   char logbuf[64];
@@ -465,22 +465,22 @@ void updateMiningSummary(MiningSummary& out) {
            "%s A%u R%u HR %.1fkH/s d%u",
            g_status.startsWith("share GOOD") ? "good " :
            g_status.startsWith("share BAD")  ? "rej  " :
-           g_any_connected ? "alive" : "dead ",
+           g_anyConnected ? "alive" : "dead ",
            (unsigned)acc, (unsigned)rej, totalKh, (unsigned)diff);
   out.logLine40_ = String(logbuf);
   out.poolDiag_ = g_poolDiagText;
   auto hexDigit = [](uint8_t v) -> char {
     return (v < 10) ? (char)('0' + v) : (char)('a' + (v - 10));
   };
-  int wi_connected = -1;
-  int wi_any = -1;
+  int wiConnected = -1;
+  int wiAny = -1;
   for (int i = 0; i < kDucoMinerThreads; ++i) {
     if (g_thr[i].workValid_) {
-      if (wi_any < 0) wi_any = i;
-      if (g_thr[i].connected_ && wi_connected < 0) wi_connected = i;
+        if (wiAny < 0) wiAny = i;
+        if (g_thr[i].connected_ && wiConnected < 0) wiConnected = i;
     }
   }
-  int wi = (wi_connected >= 0) ? wi_connected : wi_any;
+  int wi = (wiConnected >= 0) ? wiConnected : wiAny;
   if (wi >= 0) {
     uint8_t out20[20];
     char seed40[41];
@@ -514,20 +514,21 @@ void updateMiningSummary(MiningSummary& out) {
 // ===== Mining control API (public) =====
 void setMiningActiveThreads(uint8_t activeThreads) {
   if (activeThreads > kDucoMinerThreads) activeThreads = kDucoMinerThreads;
-  g_mining_active_threads = activeThreads;
+  g_miningActiveThreads = activeThreads;
 }
 uint8_t getMiningActiveThreads() {
-  return g_mining_active_threads;
+  return g_miningActiveThreads;
 }
 void setMiningYieldProfile(MiningYieldProfile p) {
   // normalize 'every' to power-of-two (fast bitmask check)
   p.every_ = normalizePow2_(p.every_);
-  g_yield_every = p.every_;
-  g_yield_ms    = p.delayMs_;
+  g_yieldEvery = p.every_;
+  g_yieldMs    = p.delayMs_;
 }
 MiningYieldProfile getMiningYieldProfile() {
   MiningYieldProfile p;
-  p.every_    = g_yield_every;
-  p.delayMs_ = g_yield_ms;
+  p.every_    = g_yieldEvery;
+  p.delayMs_ = g_yieldMs;
   return p;
 }
+

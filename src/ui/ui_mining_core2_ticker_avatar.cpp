@@ -142,7 +142,7 @@ void UIMining::updateAvatarMood(const PanelData& p) {
 void UIMining::updateAvatarLiveliness() {
   uint32_t now = millis();
   // bubble text showing? used to modify gaze/mouth behavior
-  const bool bubble_active = inStackchanMode_ && (stackchanBubbleText_.length() > 0);
+  const bool bubbleActive = inStackchanMode_ && (stackchanBubbleText_.length() > 0);
   float energy = 0.9f;      // neutral
   float eyeOpen = 1.0f;
   float gazeAmp = 1.0f;
@@ -176,7 +176,7 @@ void UIMining::updateAvatarLiveliness() {
     s_state.count             = 0;
     s_state.last_update_ms    = now;
   }
-  if (bubble_active) {
+  if (bubbleActive) {
     avatar_.setGaze(0.0f, 0.0f);
   } else if (now - s_state.last_saccade_ms > s_state.saccade_interval) {
     s_state.vertical   = (((float)random(-1000, 1001)) / 1000.0f) * gazeAmp;
@@ -211,7 +211,7 @@ void UIMining::updateAvatarLiveliness() {
   s_state.count = (s_state.count + step) % 100;
   float breath = sinf(s_state.count * 2.0f * PI / 100.0f);
   avatar_.setBreath(breath * energy);
-  if (bubble_active) {
+  if (bubbleActive) {
     float t = millis() * 0.02f;
     float mouth = 0.35f + 0.35f * (sinf(t) * 0.5f + 0.5f);
     avatar_.setMouthOpenRatio(mouth);

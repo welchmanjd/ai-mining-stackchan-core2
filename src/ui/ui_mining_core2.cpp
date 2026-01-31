@@ -1,4 +1,4 @@
-﻿// src/ui_mining_core2.cpp
+// src/ui_mining_core2.cpp
 // Module implementation.
 #include "ui/ui_mining_core2.h"
 #include <WiFi.h>
@@ -46,7 +46,7 @@ void UIMining::begin(const char* appName, const char* appVer) {
   splashWifiText_ = "Connecting...";
   splashPoolText_ = "Waiting";
   splashWifiCol_  = 0xFD20;
-  splashPoolCol_  = COL_LABEL;
+  splashPoolCol_  = kColLabel;
   splashWifiHint_ = "";
   splashPoolHint_ = "";
   drawSplash(splashWifiText_,  splashWifiCol_,
@@ -130,7 +130,7 @@ void UIMining::drawAll(const PanelData& p, const String& tickerText, bool suppre
   if (splashActive_) {
     // Splash shows connection progress until Wi-Fi + pool are ready.
     wl_status_t w = WiFi.status();
-    uint32_t    dt_splash = now - splashStartMs_;
+    uint32_t    dtSplash = now - splashStartMs_;
     auto makeConnecting = [&](const char* base) -> String {
       uint32_t elapsed = now - splashStartMs_;
       const uint32_t period = 200;
@@ -149,10 +149,10 @@ void UIMining::drawAll(const PanelData& p, const String& tickerText, bool suppre
     if (w == WL_CONNECTED) {
       wifiText = "OK";
       wifiCol  = 0x07E0;
-    } else if (dt_splash < 10000) {
+    } else if (dtSplash < 10000) {
       wifiText = makeConnecting("Connecting");
       wifiCol  = 0xFD20;
-    } else if (dt_splash < 15000) {
+    } else if (dtSplash < 15000) {
       wifiText = makeConnecting("Retrying");
       wifiCol  = 0xFD20;
     } else {
@@ -161,20 +161,20 @@ void UIMining::drawAll(const PanelData& p, const String& tickerText, bool suppre
     }
     String   poolText;
     uint16_t poolCol;
-    bool     wifi_ok = (w == WL_CONNECTED);
-    if (!wifi_ok) {
+    bool     wifiOk = (w == WL_CONNECTED);
+    if (!wifiOk) {
       poolText = "Waiting";
-      poolCol  = COL_LABEL;
+      poolCol  = kColLabel;
     } else if (!p.miningEnabled_) {
       poolText = "OFF";
-      poolCol  = COL_LABEL;
+      poolCol  = kColLabel;
     } else if (p.poolAlive_) {
       poolText = "OK";
       poolCol  = 0x07E0;
-    } else if (dt_splash < 10000) {
+    } else if (dtSplash < 10000) {
       poolText = makeConnecting("Connecting");
       poolCol  = 0xFD20;
-    } else if (dt_splash < 15000) {
+    } else if (dtSplash < 15000) {
       poolText = makeConnecting("Retrying");
       poolCol  = 0xFD20;
     } else {
@@ -208,8 +208,8 @@ void UIMining::drawAll(const PanelData& p, const String& tickerText, bool suppre
                  splashPoolText_,  splashPoolCol_,
                  splashWifiHint_,  splashPoolHint_);
     }
-    bool ok_now = (w == WL_CONNECTED) && (p.miningEnabled_ ? p.poolAlive_ : true);
-    if (ok_now) {
+    bool okNow = (w == WL_CONNECTED) && (p.miningEnabled_ ? p.poolAlive_ : true);
+    if (okNow) {
       if (splashReadyMs_ == 0) {
         splashReadyMs_ = now;
       }
@@ -217,7 +217,7 @@ void UIMining::drawAll(const PanelData& p, const String& tickerText, bool suppre
       splashReadyMs_ = 0;
     }
     bool ready =
-      ok_now &&
+      okNow &&
       (now - splashStartMs_ > 3000) &&
       (splashReadyMs_ != 0) &&
       (now - splashReadyMs_ > 1000);
@@ -410,16 +410,16 @@ String UIMining::buildStackchanBubble(const PanelData& p) {
 UIMining::TextLayoutY UIMining::computeTextLayoutY() const {
   const int lines = 5;
   const int gap = 12;
-  const int block_h = lines * CHAR_H + (lines - 1) * gap;
-  int top = (INF_H - block_h) / 2;
+  const int blockH = lines * kCharH + (lines - 1) * gap;
+  int top = (INF_H - blockH) / 2;
   if (top < 6) top = 6;
   TextLayoutY ly;
   ly.header = top;
-  ly.y1 = ly.header + CHAR_H + gap;
-  ly.y2 = ly.y1 + CHAR_H + gap;
-  ly.y3 = ly.y2 + CHAR_H + gap;
-  ly.y4 = ly.y3 + CHAR_H + gap;
-  ly.ind_y = ly.header + (CHAR_H / 2);
+  ly.y1 = ly.header + kCharH + gap;
+  ly.y2 = ly.y1 + kCharH + gap;
+  ly.y3 = ly.y2 + kCharH + gap;
+  ly.y4 = ly.y3 + kCharH + gap;
+  ly.ind_y = ly.header + (kCharH / 2);
   return ly;
 }
 void UIMining::drawSplash(const String& wifiText,  uint16_t wifiCol,
@@ -447,7 +447,7 @@ void UIMining::drawSplash(const String& wifiText,  uint16_t wifiCol,
   auto drawCenter = [&](const String& s) {
     int tw = info_.textWidth(s);
     int x  = (INF_W - tw) / 2;
-    if (x < PAD_LR) x = PAD_LR;
+    if (x < kPadLr) x = kPadLr;
     info_.setCursor(x, y);
     info_.print(s);
     y += 18;
@@ -458,22 +458,22 @@ void UIMining::drawSplash(const String& wifiText,  uint16_t wifiCol,
   auto drawGroup = [&](const char* label, const String& status, uint16_t col,
                        const String& hint) {
     info_.setTextSize(1);
-    info_.setTextColor(COL_LABEL, BLACK);
-    info_.setCursor(PAD_LR, y);
+    info_.setTextColor(kColLabel, BLACK);
+    info_.setCursor(kPadLr, y);
     info_.print(label);
     y += 12;
     info_.setTextSize(2);
     info_.setTextColor(col, BLACK);
     int tw = info_.textWidth(status);
-    int sx = INF_W - PAD_LR - tw;
-    if (sx < PAD_LR) sx = PAD_LR;
+    int sx = INF_W - kPadLr - tw;
+    if (sx < kPadLr) sx = kPadLr;
     info_.setCursor(sx, y);
     info_.print(status);
     y += 22;
     if (hint.length()) {
       info_.setTextSize(1);
-      info_.setTextColor(COL_LABEL, BLACK);
-      int max_w = INF_W - PAD_LR * 2;
+      info_.setTextColor(kColLabel, BLACK);
+      int maxW = INF_W - kPadLr * 2;
       auto fillLine = [&](String& src, String& dest) {
         dest = "";
         while (src.length()) {
@@ -487,7 +487,7 @@ void UIMining::drawSplash(const String& wifiText,  uint16_t wifiCol,
             src.remove(0, spacePos + 1);
           }
           String candidate = dest + word;
-          if (info_.textWidth(candidate) > max_w) {
+          if (info_.textWidth(candidate) > maxW) {
             if (dest.length() == 0) {
               dest = candidate;
             } else {
@@ -506,12 +506,12 @@ void UIMining::drawSplash(const String& wifiText,  uint16_t wifiCol,
         fillLine(remaining, line2);
       }
       if (line1.length()) {
-        info_.setCursor(PAD_LR, y);
+        info_.setCursor(kPadLr, y);
         info_.print(line1);
         y += 12;
       }
       if (line2.length()) {
-        info_.setCursor(PAD_LR, y);
+        info_.setCursor(kPadLr, y);
         info_.print(line2);
         y += 12;
       }
@@ -522,12 +522,12 @@ void UIMining::drawSplash(const String& wifiText,  uint16_t wifiCol,
   drawGroup("WiFi", wifiText, wifiCol, wifiHint);
   drawGroup("Pool", poolText, poolCol, poolHint);
   info_.setTextSize(1);
-  info_.setTextColor(COL_LABEL, BLACK);
+  info_.setTextColor(kColLabel, BLACK);
   String ver = String("v") + appVer_;
   int tw = info_.textWidth(ver);
-  int vx = INF_W - PAD_LR - tw;
+  int vx = INF_W - kPadLr - tw;
   int vy = INF_H - 12;
-  if (vx < PAD_LR) vx = PAD_LR;
+  if (vx < kPadLr) vx = kPadLr;
   info_.setCursor(vx, vy);
   info_.print(ver);
   info_.pushSprite(X_INF, 0);
@@ -542,7 +542,7 @@ void UIMining::drawSleepMessage() {
   auto drawCenter = [&](const String& s, int lineHeight) {
     int tw = info_.textWidth(s);
     int x  = (INF_W - tw) / 2;
-    if (x < PAD_LR) x = PAD_LR;
+    if (x < kPadLr) x = kPadLr;
     info_.setCursor(x, y);
     info_.print(s);
     y += lineHeight;
@@ -606,3 +606,4 @@ uint32_t UIMining::lastShareAgeSec() const {
   if (lastShareMs_ == 0) return 99999;
   return (millis() - lastShareMs_) / 1000;
 }
+

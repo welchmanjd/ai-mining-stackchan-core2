@@ -7,15 +7,15 @@ static size_t utf8SeqLen_(uint8_t c) {
   if ((c & 0xF8) == 0xF0) return 4;
   return 1; // invalid lead -> treat as 1
 }
-String mcUtf8ClampBytes(const String& s, size_t max_bytes) {
+String mcUtf8ClampBytes(const String& s, size_t maxBytes) {
   const size_t n = s.length(); // bytes
-  if (n <= max_bytes) return s;
-  if (max_bytes == 0) return "";
+  if (n <= maxBytes) return s;
+  if (maxBytes == 0) return "";
   size_t i = 0;
-  while (i < n && i < max_bytes) {
+  while (i < n && i < maxBytes) {
     const uint8_t c = (uint8_t)s[i];
     const size_t L = utf8SeqLen_(c);
-    if (i + L > max_bytes) break;
+    if (i + L > maxBytes) break;
     bool ok = true;
     for (size_t k = 1; k < L; k++) {
       if (i + k >= n) { ok = false; break; }
@@ -36,6 +36,6 @@ String mcSanitizeOneLine(const String& s) {
   while (out.indexOf("  ") >= 0) out.replace("  ", " ");
   return out;
 }
-String mcLogHead(const String& s, size_t max_bytes) {
-  return mcUtf8ClampBytes(mcSanitizeOneLine(s), max_bytes);
+String mcLogHead(const String& s, size_t maxBytes) {
+  return mcUtf8ClampBytes(mcSanitizeOneLine(s), maxBytes);
 }
