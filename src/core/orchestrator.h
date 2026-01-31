@@ -1,8 +1,8 @@
-// ===== src/orchestrator.h（全文差し替え）=====
+﻿// ===== src/orchestrator.h（全文差し替え）=====
 #pragma once
 
 #include <Arduino.h>
-#include "logging.h"
+#include "core/logging.h"
 #include <vector>
 
 enum class AppState : uint8_t { Idle, React, ThinkWait, Speak, ErrorSafe };
@@ -105,3 +105,4 @@ private:
   uint32_t thinkWaitSinceMs_ = 0;
   bool timeoutLogged_ = false;
 };
+

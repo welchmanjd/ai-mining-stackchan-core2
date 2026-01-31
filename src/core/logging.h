@@ -1,11 +1,11 @@
-// === src/logging.h（全置換 / replace whole file）===
+﻿// === src/logging.h（全置換 / replace whole file）===
 #pragma once
 
 #include <Arduino.h>
 #include <stdarg.h>
 #include <stdio.h>
 
-#include "mc_log_limiter.h"  // Phase2: “使える入口”だけ用意（利用は任意）
+#include "core/mc_log_limiter.h"  // Phase2: “使える入口”だけ用意（利用は任意）
 
 // ================================
 //  mc_logf: printf互換の素ログ出力
@@ -149,3 +149,4 @@ inline void mc_logf(const char* fmt, ...) {
 #else
   #define MC_LOGI_RL(key, windowMs, tag, fmt, ...) do {} while (0)
 #endif
+

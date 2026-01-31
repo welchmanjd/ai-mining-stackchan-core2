@@ -1,6 +1,6 @@
 ﻿#include "ai/ai_talk_controller.h"
-#include "logging.h"
-#include "orchestrator.h"
+#include "core/logging.h"
+#include "core/orchestrator.h"
 #include "ai/openai_llm.h"
 #include "utils/mc_text_utils.h"
 #include <M5Unified.h>
@@ -680,5 +680,6 @@ void AiTalkController::updateOverlay_(uint32_t nowMs) {
       return;
   }
 }
+
 
 

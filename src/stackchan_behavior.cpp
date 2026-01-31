@@ -1,6 +1,6 @@
 ﻿// src/stackchan_behavior.cpp
 #include "stackchan_behavior.h"
-#include "logging.h"
+#include "core/logging.h"
 #include "config/config.h"   // ★追加：appConfig() を使う
 
 namespace {
@@ -276,4 +276,5 @@ void StackchanBehavior::triggerEvent(StackchanEventType ev, uint32_t nowMs) {
     }
   }
 }
+
 

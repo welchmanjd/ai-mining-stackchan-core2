@@ -1,9 +1,9 @@
-// src/stackchan_behavior.h
+﻿// src/stackchan_behavior.h
 #pragma once
 
 #include <Arduino.h>
 
-#include "ui_mining_core2.h"
+#include "ui/ui_mining_core2.h"
 
 // ===== Phase1 skeleton for stackchan behavior state machine =====
 // State/Detect/Decide are implemented as stubs for now; Present happens in main.cpp.
@@ -81,3 +81,4 @@ private:
   StackchanReaction pending_;
   uint32_t nextRid_ = 1;
 };
+

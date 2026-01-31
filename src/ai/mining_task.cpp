@@ -1,7 +1,7 @@
 ﻿// src/mining_task.cpp
 #include "ai/mining_task.h"
 #include "config/config.h"
-#include "logging.h"   // ★これが必要
+#include "core/logging.h"   // ★これが必要
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -9,7 +9,7 @@
 #include <ArduinoJson.h>
 #include <mbedtls/sha1.h>
 
-#include "runtime_features.h"
+#include "core/runtime_features.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -687,5 +687,6 @@ MiningYieldProfile getMiningYieldProfile() {
   p.delay_ms = g_yield_ms;
   return p;
 }
+
 
 

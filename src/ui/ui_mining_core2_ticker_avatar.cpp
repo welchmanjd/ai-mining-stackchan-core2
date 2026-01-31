@@ -1,5 +1,5 @@
-﻿#include "ui_mining_core2.h"
-#include "logging.h"
+﻿#include "ui/ui_mining_core2.h"
+#include "core/logging.h"
 #include "ai/mining_task.h"
 
 // ===== Ticker =====
@@ -357,4 +357,6 @@ void UIMining::updateAvatarLiveliness() {
     avatar_.setPosition((int)b.px, (int)b.py);
   }
 }
+
+
 

@@ -1,7 +1,7 @@
-// src/ui_mining_core2.cpp
-#include "ui_mining_core2.h"
+﻿// src/ui_mining_core2.cpp
+#include "ui/ui_mining_core2.h"
 #include <WiFi.h>
-#include "logging.h"
+#include "core/logging.h"
 
 // ===== Singleton / ctor =====
 
@@ -872,6 +872,8 @@ uint32_t UIMining::lastShareAgeSec() const {
   if (last_share_ms_ == 0) return 99999;
   return (millis() - last_share_ms_) / 1000;
 }
+
+
 
 
 

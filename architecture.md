@@ -63,13 +63,13 @@ Avoid reverse dependencies (e.g., ui -> ai) unless explicitly justified.
   - utils stays stateless and free of project-level deps.
 
 ## Current File Mapping (Draft)
-Status: config, utils, audio, and ai are already moved under `/src` subfolders.
+Status: config, utils, audio, ai, core, and ui are already moved under `/src` subfolders.
 - core
-  - main.cpp
-  - orchestrator.cpp / orchestrator.h
-  - runtime_features.cpp / runtime_features.h
-  - logging.h
-  - mc_log_limiter.cpp / mc_log_limiter.h
+  - core/main.cpp
+  - core/orchestrator.cpp / core/orchestrator.h
+  - core/runtime_features.cpp / core/runtime_features.h
+  - core/logging.h
+  - core/mc_log_limiter.cpp / core/mc_log_limiter.h
 - ai
   - ai/ai_interface.h
   - ai/ai_talk_controller.cpp / ai/ai_talk_controller.h
@@ -81,10 +81,10 @@ Status: config, utils, audio, and ai are already moved under `/src` subfolders.
   - audio/audio_recorder.cpp / audio/audio_recorder.h
   - audio/i2s_manager.cpp / audio/i2s_manager.h
 - ui
-  - ui_mining_core2.cpp / ui_mining_core2.h
-  - ui_mining_core2_text.cpp
-  - ui_mining_core2_ticker_avatar.cpp
-  - app_presenter.cpp / app_presenter.h
+  - ui/ui_mining_core2.cpp / ui/ui_mining_core2.h
+  - ui/ui_mining_core2_text.cpp
+  - ui/ui_mining_core2_ticker_avatar.cpp
+  - ui/app_presenter.cpp / ui/app_presenter.h
 - behavior
   - stackchan_behavior.cpp / stackchan_behavior.h
 - config

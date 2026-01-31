@@ -1,4 +1,4 @@
-﻿#include "runtime_features.h"
+﻿#include "core/runtime_features.h"
 
 #include "config/mc_config_store.h"
 
@@ -19,4 +19,5 @@ RuntimeFeatures getRuntimeFeatures() {
 
   return f;
 }
+
 

@@ -7,7 +7,7 @@
 #include <LittleFS.h>
 
 #include "config.h"   // config_private.h の読み込み条件(MC_DISABLE_CONFIG_PRIVATE)を尊重
-#include "logging.h"
+#include "core/logging.h"
 
 // ---- defaults (config_private.h で上書き可能) ----
 
@@ -454,5 +454,6 @@ const char* mcCfgHelloText()         { loadOnce_(); return g_rt.speech_hello.c_s
 
 // ★追加：CPU動作周波数 getter
 uint32_t mcCfgCpuMhz() { loadOnce_(); return (uint32_t)g_rt.cpu_mhz; }
+
 
 
