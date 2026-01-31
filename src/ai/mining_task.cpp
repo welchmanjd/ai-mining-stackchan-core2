@@ -57,7 +57,7 @@ struct DucoThreadStats {
 static DucoThreadStats   g_thr[kDucoMinerThreads];
 static SemaphoreHandle_t g_shaMutex = nullptr;
 
-// ★追加：スナップショット共有の排他用（duco_task / solver / updateMiningSummary で共通）
+// ★追加：スナップショット共有の排他用（ducoTask_ / solver / updateMiningSummary で共通）
 static portMUX_TYPE g_statsMux = portMUX_INITIALIZER_UNLOCKED;
 
 static String   g_node_name;
@@ -76,7 +76,7 @@ static volatile uint8_t  g_mining_active_threads = kDucoMinerThreads; // 0..kDuc
 static volatile uint16_t g_yield_every = 1024;   // power-of-two recommended
 static volatile uint8_t  g_yield_ms    = 1;      // delay in ms at yield points
 
-static inline uint16_t normalize_pow2(uint16_t v) {
+static inline uint16_t normalizePow2_(uint16_t v) {
   if (v < 8) v = 8;
   uint16_t p = 1;
   while ((uint16_t)(p << 1) != 0 && (uint16_t)(p << 1) <= v) p <<= 1;
@@ -91,7 +91,7 @@ static const uint32_t kDucoAborted = UINT32_MAX - 1;
 // ---------------- プール情報取得 ----------------
 // === src/mining_task.cpp : replace whole function ===
 // ---------------- プール情報取得 ----------------
-static bool duco_get_pool() {
+static bool ducoGetPool_() {
   WiFiClientSecure s;
   s.setInsecure();
   HTTPClient http;
@@ -138,8 +138,8 @@ static bool duco_get_pool() {
 }
 
 
-// ---------- util: u32_to_dec（固定バッファへ10進変換） ----------
-static inline int u32_to_dec(char* dst, uint32_t v) {
+// ---------- util: u32ToDec_（固定バッファへ10進変換） ----------
+static inline int u32ToDec_(char* dst, uint32_t v) {
   if (v == 0) {
     dst[0] = '0';
     return 1;
@@ -157,7 +157,7 @@ static inline int u32_to_dec(char* dst, uint32_t v) {
 }
 
 // ---------- SHA1 helper (mbedTLS) ----------
-static inline void sha1_calc(const unsigned char* data,
+static inline void sha1Calc_(const unsigned char* data,
                              size_t len,
                              unsigned char out[20]) {
 #if defined(MBEDTLS_VERSION_NUMBER) && (MBEDTLS_VERSION_NUMBER >= 0x03000000)
@@ -169,7 +169,7 @@ static inline void sha1_calc(const unsigned char* data,
 
 // ---------- solver: duco_s1（mbedTLS SHA1 + 固定バッファ） ----------
 // ★変更: stats を渡して「いま計算している out/nonce」をスナップショットする
-static uint32_t duco_solve_duco_s1(const String& seed,
+static uint32_t ducoSolveDucoS1_(const String& seed,
                                   const unsigned char* expected20,
                                   uint32_t difficulty,
                                   uint32_t& hashes_done,
@@ -202,11 +202,11 @@ if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
       }
     }
 
-    int nlen = u32_to_dec(nonce_ptr, nonce);
+    int nlen = u32ToDec_(nonce_ptr, nonce);
 
     // 修正案：Mutexを外してパフォーマンス増加を期待
     // if (g_shaMutex) xSemaphoreTake(g_shaMutex, portMAX_DELAY); // 削除
-    sha1_calc((const unsigned char*)buf, seed_len + nlen, out);
+    sha1Calc_((const unsigned char*)buf, seed_len + nlen, out);
     // if (g_shaMutex) xSemaphoreGive(g_shaMutex);               // 削除
 
     hashes_done++;
@@ -252,7 +252,7 @@ if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
 
 // ---------------- Miner Task 本体 ----------------
 // === src/mining_task.cpp : replace whole function ===
-static void duco_task(void* pv) {
+static void ducoTask_(void* pv) {
   int idx = (int)(intptr_t)pv;
   if (idx < 0 || idx >= kDucoMinerThreads) idx = 0;
   auto& me = g_thr[idx];
@@ -290,8 +290,8 @@ static void duco_task(void* pv) {
 
     // Pool
     if (g_port == 0) {
-      if (!duco_get_pool()) {
-        // duco_get_pool() 内で g_poolDiagText を設定済み
+      if (!ducoGetPool_()) {
+        // ducoGetPool_() 内で g_poolDiagText を設定済み
         vTaskDelay(pdMS_TO_TICKS(5000));
         continue;
       }
@@ -428,7 +428,7 @@ static void duco_task(void* pv) {
       uint32_t hashes = 0;
       unsigned long tStart = micros();
       uint32_t foundNonce =
-          duco_solve_duco_s1(prev, expBytes, (uint32_t)difficulty, hashes, &me);
+          ducoSolveDucoS1_(prev, expBytes, (uint32_t)difficulty, hashes, &me);
 
       if (foundNonce == kDucoAborted) {
         // mining control requested to stop this thread
@@ -559,7 +559,7 @@ void startMiner() {
     int core = (i == 0) ? 0 : 1;
     UBaseType_t prio = 1;
     String name = String("DucoMiner") + String(i);
-    xTaskCreatePinnedToCore(duco_task,
+    xTaskCreatePinnedToCore(ducoTask_,
                             name.c_str(),
                             8192,
                             (void*)(intptr_t)i,
@@ -676,7 +676,7 @@ uint8_t getMiningActiveThreads() {
 
 void setMiningYieldProfile(MiningYieldProfile p) {
   // normalize 'every' to power-of-two (fast bitmask check)
-  p.every = normalize_pow2(p.every);
+  p.every = normalizePow2_(p.every);
   g_yield_every = p.every;
   g_yield_ms    = p.delay_ms;
 }
@@ -687,6 +687,7 @@ MiningYieldProfile getMiningYieldProfile() {
   p.delay_ms = g_yield_ms;
   return p;
 }
+
 
 
 

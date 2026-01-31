@@ -108,7 +108,7 @@ static long getDisplaySleepSecondsFromStore_(long fallbackSec) {
 static uint32_t g_displaySleepTimeoutMs = (uint32_t)MC_DISPLAY_SLEEP_SECONDS * 1000UL;
 
 // === src/main.cpp : replace whole function ===
-static void handleSetupLine(const char* line) {
+static void handleSetupLine_(const char* line) {
   // 空行は無視
   if (!line || !*line) return;
 
@@ -244,14 +244,14 @@ static void handleSetupLine(const char* line) {
 }
 
 
-static void pollSetupSerial() {
+static void pollSetupSerial_() {
   while (Serial.available() > 0) {
     const char c = (char)Serial.read();
     if (c == '\r') continue;
 
     if (c == '\n') {
       g_setupLine[g_setupLineLen] = '\0';
-      handleSetupLine(g_setupLine);
+      handleSetupLine_(g_setupLine);
       g_setupLineLen = 0;
       continue;
     }
@@ -295,7 +295,7 @@ static int      g_bubbleOnlyEvType = 0;
 enum class BubbleSource : uint8_t { None = 0, Ai = 1, Behavior = 2, Info = 3, System = 4 };
 static BubbleSource g_bubbleOnlySource = BubbleSource::None;
 // 吹き出し表示時間を文字数に合わせて可変にする
-static uint32_t bubbleShowMs(const String& text) {
+static uint32_t bubbleShow_Ms(const String& text) {
   const size_t len = text.length();
   // ベース1.5s + 120ms/文字、上限8s（お好みで調整）
   uint32_t ms = 1500 + (uint32_t)(len * 120);
@@ -304,7 +304,7 @@ static uint32_t bubbleShowMs(const String& text) {
   return ms;
 }
 
-static void bubbleClear(const char* reason, bool forceUiClear = false) {
+static void bubbleClear_(const char* reason, bool forceUiClear = false) {
   if (!g_bubbleOnlyActive) return;
 
   const uint32_t oldRid = g_bubbleOnlyRid;
@@ -328,7 +328,7 @@ static void bubbleClear(const char* reason, bool forceUiClear = false) {
   g_bubbleOnlySource = BubbleSource::None;
 }
 
-static void bubbleShow(const String& text,
+static void bubbleShow_(const String& text,
                        uint32_t now,
                        uint32_t rid,
                        int evType,
@@ -340,7 +340,7 @@ static void bubbleShow(const String& text,
   UIMining::instance().setStackchanSpeech(text);
 
   g_bubbleOnlyActive = true;
-  const uint32_t showMs = bubbleShowMs(text);
+  const uint32_t showMs = bubbleShow_Ms(text);
   g_bubbleOnlyUntilMs = now + showMs;
   g_bubbleOnlyRid = rid;
   g_bubbleOnlyEvType = evType;
@@ -358,7 +358,7 @@ static void bubbleShow(const String& text,
 }
 
 // ReactionPriority -> OrchPrio 変換宣言
-static OrchPrio toOrchPrio(ReactionPriority p);
+static OrchPrio toOrchPrio_(ReactionPriority p);
 
 // ===== 自動スリープ関連 =====
 
@@ -394,7 +394,7 @@ static uint32_t g_zeroSince = 0;
 static bool g_pausedByTts = false;
 
 // === src/main.cpp : replace whole function ===
-static void applyMiningPolicyForTts(bool ttsBusy, bool aiBusy) {
+static void applyMiningPolicyForTts_(bool ttsBusy, bool aiBusy) {
   (void)ttsBusy;
 
   const bool speaking = M5.Speaker.isPlaying();
@@ -421,7 +421,7 @@ static void applyMiningPolicyForTts(bool ttsBusy, bool aiBusy) {
 //   - それまでは false を返す
 // ※接続に成功したかどうかは WiFi.status() == WL_CONNECTED で判定する。
 // === src/main.cpp : replace whole function ===
-static bool wifi_connect() {
+static bool wifiConnect_() {
   const auto& cfg = appConfig();
 
   // 状態を static で保持
@@ -469,7 +469,7 @@ static bool wifi_connect() {
 }
 
 
-static void setupTimeNTP() {
+static void setupTimeNtp_() {
   setenv("TZ", "JST-9", 1);
   tzset();
   configTime(9 * 3600, 0,
@@ -571,7 +571,7 @@ void loop() {
   M5.update();
 
   // Web setup serial commands
-  pollSetupSerial();
+  pollSetupSerial_();
 
   const uint32_t now = (uint32_t)millis();
 
@@ -581,7 +581,7 @@ void loop() {
   {
     String aiBubbleText;
     if (g_ai.consumeBubbleUpdate(&aiBubbleText)) {
-      bubbleShow(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
+      bubbleShow_(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
     }
   }
 
@@ -647,7 +647,7 @@ void loop() {
     g_orch.onAudioStart(g_ttsInflightId);
 
     if (g_bubbleOnlyActive) {
-      bubbleClear("tts_start");
+      bubbleClear_("tts_start");
     }
 
     if (g_ttsInflightSpeechId != 0 &&
@@ -738,7 +738,7 @@ void loop() {
 
 
   g_behavior.setTtsSpeaking(ttsBusyNow);
-  applyMiningPolicyForTts(ttsBusyNow, g_ai.isBusy());
+  applyMiningPolicyForTts_(ttsBusyNow, g_ai.isBusy());
 
 
   // pending があれば空きタイミングで1件だけ実行
@@ -876,7 +876,7 @@ void loop() {
         s_ttsFailSuppressed = 0;
       }
     } else {
-      bubbleShow(String(text), now, 0, 0, 0, BubbleSource::System);
+      bubbleShow_(String(text), now, 0, 0, 0, BubbleSource::System);
     }
   }
 
@@ -980,7 +980,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
     M5.Speaker.tone(1800, 30);
 
     if (g_bubbleOnlyActive) {
-      bubbleClear("attention_start", true);
+      bubbleClear_("attention_start", true);
     }
   }
 }
@@ -999,9 +999,9 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
   }
 
   // --- 起動時の WiFi 接続 & NTP 同期（ノンブロッキング） ---
-  const bool wifiDone = wifi_connect();
+  const bool wifiDone = wifiConnect_();
   if (wifiDone && !g_timeNtpDone && WiFi.status() == WL_CONNECTED) {
-    setupTimeNTP();
+    setupTimeNtp_();
     g_timeNtpDone = true;
   }
 
@@ -1014,7 +1014,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
 
     // bubble-only auto clear（期限切れ）
     if (g_bubbleOnlyActive && (int32_t)(g_bubbleOnlyUntilMs - now) <= 0) {
-      bubbleClear("timeout");
+      bubbleClear_("timeout");
     }
 
     UIMining::PanelData data;
@@ -1097,7 +1097,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
       // ---- bubble-only present (speak=0) ----
       if (g_mode == MODE_STACKCHAN) {
         if (reaction.speak && g_bubbleOnlyActive) {
-          bubbleClear("tts_event");
+          bubbleClear_("tts_event");
         }
 
         if (!reaction.speak &&
@@ -1112,7 +1112,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
             (reaction.evType == StackchanEventType::InfoMiningOff);
           const BubbleSource bubbleSource = isBubbleInfo ? BubbleSource::Info : BubbleSource::Behavior;
 
-          bubbleShow(reaction.speechText,
+          bubbleShow_(reaction.speechText,
                      now,
                      reaction.rid,
                      (int)reaction.evType,
@@ -1124,7 +1124,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
       // TTS
       if (reaction.speak && reaction.speechText.length() && features.ttsEnabled) {
         auto cmd = g_orch.makeSpeakStartCmd(reaction.rid, reaction.speechText,
-                                            toOrchPrio(reaction.priority),
+                                            toOrchPrio_(reaction.priority),
                                             Orchestrator::OrchKind::BehaviorSpeak);
         if (cmd.valid) {
           const bool canSpeakNow = (!ttsBusyNow) && (g_ttsInflightId == 0);
@@ -1238,7 +1238,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
 
 
 // ReactionPriority -> OrchPrio 変換
-static OrchPrio toOrchPrio(ReactionPriority p) {
+static OrchPrio toOrchPrio_(ReactionPriority p) {
   switch (p) {
     case ReactionPriority::Low:    return OrchPrio::Low;
     case ReactionPriority::High:   return OrchPrio::High;
@@ -1246,6 +1246,7 @@ static OrchPrio toOrchPrio(ReactionPriority p) {
     default:                       return OrchPrio::Normal;
   }
 }
+
 
 
 

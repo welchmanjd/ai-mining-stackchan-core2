@@ -111,6 +111,12 @@ Status: config, utils, audio, ai, core, ui, and behavior are already moved under
 - File-scope mutable statics use `g_` prefix: `g_tts`, `g_displaySleepTimeoutMs`.
 - Function-scope statics use `s_` prefix: `s_lastUiHbMs`.
 
+### Variables and Functions
+- Local variables: lowerCamelCase: `lastInputMs`, `wifiConnected`.
+- Member variables: lowerCamelCase with trailing underscore: `last_input_ms_` is **not** used; use `lastInputMs_`.
+- Functions and methods: lowerCamelCase verbs: `updateMiningSummary`, `setMiningPaused`.
+- Private helper functions at file scope use trailing underscore: `handleSetupLine_`.
+
 ## Extension Points
 - Add a new AI provider: place in `/src/ai` and expose a narrow interface.
 - Add a new UI screen: place in `/src/ui`, keep presenters thin.
