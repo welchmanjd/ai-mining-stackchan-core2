@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 #include <Arduino.h>
 #include "ai_interface.h"
 #include "audio_recorder.h"  // ★追加
 #include "azure_stt.h"       // ★追加
-#include "config.h"          // ★追加（MC_AI_* 定数）
+#include "config/config.h"          // ★追加（MC_AI_* 定数）
 
 // forward decl
 class Orchestrator;
@@ -118,3 +118,4 @@ private:
   char abortTtsReason_[24] = {0};
 
 };
+

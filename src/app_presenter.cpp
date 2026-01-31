@@ -1,10 +1,10 @@
-// src/app_presenter.cpp
+﻿// src/app_presenter.cpp
 
 #include "app_presenter.h"
 
 #include <WiFi.h>
 
-#include "config.h"  // appConfig()
+#include "config/config.h"  // appConfig()
 
 String buildTicker(const MiningSummary& s) {
   String t;
@@ -83,3 +83,4 @@ void buildPanelData(const MiningSummary& summary, UIMining& ui, UIMining::PanelD
   // Pool 診断メッセージ（mining_task から）
   data.poolDiag = summary.poolDiag;
 }
+

@@ -1,7 +1,7 @@
-// src/azure_tts.h
+﻿// src/azure_tts.h
 #pragma once
 #include <Arduino.h>
-#include "config.h"
+#include "config/config.h"
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <string.h>
@@ -153,3 +153,4 @@ private:
   uint32_t reject_last_log_ms_ = 0;  // optional: for debug/reminder throttling
 
 };
+

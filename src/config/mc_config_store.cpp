@@ -1,4 +1,4 @@
-// src/mc_config_store.cpp
+﻿// src/mc_config_store.cpp
 #include "mc_config_store.h"
 
 #include <Arduino.h>
@@ -454,3 +454,5 @@ const char* mcCfgHelloText()         { loadOnce_(); return g_rt.speech_hello.c_s
 
 // ★追加：CPU動作周波数 getter
 uint32_t mcCfgCpuMhz() { loadOnce_(); return (uint32_t)g_rt.cpu_mhz; }
+
+

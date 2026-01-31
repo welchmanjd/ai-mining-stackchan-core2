@@ -1,6 +1,6 @@
-#include "runtime_features.h"
+﻿#include "runtime_features.h"
 
-#include "mc_config_store.h"
+#include "config/mc_config_store.h"
 
 RuntimeFeatures getRuntimeFeatures() {
   RuntimeFeatures f;
@@ -19,3 +19,4 @@ RuntimeFeatures getRuntimeFeatures() {
 
   return f;
 }
+

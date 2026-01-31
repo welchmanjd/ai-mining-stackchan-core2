@@ -1,6 +1,6 @@
-// src/mining_task.cpp
+﻿// src/mining_task.cpp
 #include "mining_task.h"
-#include "config.h"
+#include "config/config.h"
 #include "logging.h"   // ★これが必要
 
 #include <WiFi.h>
@@ -687,3 +687,4 @@ MiningYieldProfile getMiningYieldProfile() {
   p.delay_ms = g_yield_ms;
   return p;
 }
+

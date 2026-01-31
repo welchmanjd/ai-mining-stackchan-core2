@@ -1,6 +1,6 @@
-#include "azure_stt.h"
+﻿#include "azure_stt.h"
 #include "logging.h"
-#include "mc_config_store.h"
+#include "config/mc_config_store.h"
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -266,3 +266,4 @@ SttResult transcribePcm16Mono(
 
 
 } // namespace AzureStt
+

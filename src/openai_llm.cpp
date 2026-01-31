@@ -1,14 +1,13 @@
-#include "openai_llm.h"
+﻿#include "openai_llm.h"
 #include "logging.h"
-#include "config_private.h"
-
-#include "mc_text_utils.h"
+#include "config/config_private.h"
+#include "utils/mc_text_utils.h"
 
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-#include "config.h"
+#include "config/config.h"
 
 
 #ifndef MC_OPENAI_ENDPOINT
@@ -336,3 +335,4 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
 
 
 } // namespace OpenAiLlm
+

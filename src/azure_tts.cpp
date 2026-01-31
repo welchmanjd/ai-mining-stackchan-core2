@@ -1,6 +1,6 @@
-// src/azure_tts.cpp
+﻿// src/azure_tts.cpp
 #include "azure_tts.h"
-#include "mc_config_store.h"
+#include "config/mc_config_store.h"
 #include "logging.h"
 #include <string.h>
 
@@ -1252,3 +1252,4 @@ void AzureTts::resetSession_() {
   token_ = "";
   tokenExpireMs_ = 0;
 }
+

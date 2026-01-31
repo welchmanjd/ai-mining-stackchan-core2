@@ -1,4 +1,4 @@
-// src/main.cpp
+﻿// src/main.cpp
 // ===== Mining-chan Core2 — main entry (UI + orchestrator) =====
 // Board   : M5Stack Core2
 // Libs    : M5Unified, ArduinoJson, WiFi, WiFiClientSecure, HTTPClient, m5stack-avatar
@@ -17,10 +17,10 @@
 
 #include "ui_mining_core2.h"
 #include "app_presenter.h"
-#include "config.h"
+#include "config/config.h"
 #include "mining_task.h"
 #include "logging.h"   // ← 他の #include と一緒に、ファイル先頭の方へ移動推奨
-#include "mc_config_store.h"
+#include "config/mc_config_store.h"
 
 #include "azure_tts.h"
 #include "stackchan_behavior.h"
@@ -1246,3 +1246,4 @@ static OrchPrio toOrchPrio(ReactionPriority p) {
     default:                       return OrchPrio::Normal;
   }
 }
+

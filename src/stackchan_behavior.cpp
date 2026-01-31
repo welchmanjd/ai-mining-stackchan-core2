@@ -1,7 +1,7 @@
-// src/stackchan_behavior.cpp
+﻿// src/stackchan_behavior.cpp
 #include "stackchan_behavior.h"
 #include "logging.h"
-#include "config.h"   // ★追加：appConfig() を使う
+#include "config/config.h"   // ★追加：appConfig() を使う
 
 namespace {
 const char* priorityName(ReactionPriority p) {
@@ -276,3 +276,4 @@ void StackchanBehavior::triggerEvent(StackchanEventType ev, uint32_t nowMs) {
     }
   }
 }
+

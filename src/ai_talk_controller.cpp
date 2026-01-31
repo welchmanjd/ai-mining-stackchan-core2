@@ -1,10 +1,10 @@
-#include "ai_talk_controller.h"
+﻿#include "ai_talk_controller.h"
 #include "logging.h"
 #include "orchestrator.h"
 #include "openai_llm.h"
-#include "mc_text_utils.h"
+#include "utils/mc_text_utils.h"
 #include <M5Unified.h>
-#include "config.h"
+#include "config/config.h"
 #include <string.h>
 
 // AiTalkController::AiState -> (ai_interface.h 側の) ::AiState へ安全に変換
@@ -680,3 +680,4 @@ void AiTalkController::updateOverlay_(uint32_t nowMs) {
       return;
   }
 }
+

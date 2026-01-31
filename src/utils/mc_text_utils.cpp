@@ -1,4 +1,4 @@
-#include "mc_text_utils.h"
+﻿#include "utils/mc_text_utils.h"
 
 static size_t utf8SeqLen_(uint8_t c) {
   if (c < 0x80) return 1;
@@ -45,3 +45,4 @@ String mcSanitizeOneLine(const String& s) {
 String mcLogHead(const String& s, size_t max_bytes) {
   return mcUtf8ClampBytes(mcSanitizeOneLine(s), max_bytes);
 }
+

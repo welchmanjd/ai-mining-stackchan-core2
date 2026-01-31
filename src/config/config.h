@@ -1,4 +1,4 @@
-// src/config.h
+﻿// src/config.h
 #pragma once
 #include <Arduino.h>
 
@@ -411,3 +411,5 @@ inline const AppConfig& appConfig() {
 
   return cfg;
 }
+
+
