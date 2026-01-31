@@ -1,4 +1,5 @@
-﻿#include "ai/azure_stt.h"
+﻿// Module implementation.
+#include "ai/azure_stt.h"
 #include "core/logging.h"
 #include "config/mc_config_store.h"
 #include <WiFi.h>
@@ -8,6 +9,7 @@
 namespace azure_stt {
 static const char* kTag = "STT";
 static String normalizeSpeechHost_(String host) {
+  // Normalize host: strip scheme/path and reject obvious TTS endpoints.
   host.trim();
   if (host.length() == 0) return "";
   if (host.startsWith("https://")) host = host.substring(strlen("https://"));
@@ -47,6 +49,7 @@ static void freeWav_(WavBuf& b) {
   b.len_ = 0;
 }
 static bool makeWav_(const int16_t* pcm, size_t samples, uint32_t sampleRate, WavBuf& out) {
+  // Build a minimal WAV buffer in memory for STT upload.
   freeWav_(out);
   if (!pcm || samples == 0) return false;
   const uint32_t dataBytes = (uint32_t)(samples * sizeof(int16_t));
@@ -85,6 +88,7 @@ SttResult transcribePcm16Mono(
     uint32_t timeoutMs) {
   SttResult r;
   if (!WiFi.isConnected()) {
+    // Fast-fail if network is down.
     r.ok_ = false;
     r.err_ = "Wi-Fiがつながってないよ";
     r.status_ = -10;

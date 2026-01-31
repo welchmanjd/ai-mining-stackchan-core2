@@ -1,4 +1,5 @@
 ﻿// src/app_presenter.cpp
+// Module implementation.
 #include "ui/app_presenter.h"
 #include <WiFi.h>
 #include "config/config.h"  // appConfig()

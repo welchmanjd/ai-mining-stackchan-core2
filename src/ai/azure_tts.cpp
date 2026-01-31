@@ -1,4 +1,5 @@
 ﻿// src/azure_tts.cpp
+// Module implementation.
 #include "ai/azure_tts.h"
 #include "config/mc_config_store.h"
 #include "core/logging.h"
@@ -17,6 +18,7 @@ static String trimCopy_(const String& s) {
   return t;
 }
 static bool readLineCRLF_(WiFiClient* s, String* out, uint32_t idleTimeoutMs) {
+  // Line reader used for both chunked decoding and HTTP header parsing.
   out->remove(0);
   uint32_t t0 = millis();
   while (true) {
@@ -51,6 +53,7 @@ static bool readExact_(WiFiClient* s, uint8_t* dst, size_t n, uint32_t idleTimeo
   return true;
 }
 static bool readChunkedBody_(WiFiClient* s, uint8_t** outBuf, size_t* outLen, uint32_t idleTimeoutMs) {
+  // Strict chunked reader used when the server properly frames payload.
   *outBuf = nullptr;
   *outLen = 0;
   const size_t kCapMax = 512 * 1024;
@@ -136,6 +139,7 @@ static bool looksLikeChunkedLeak_(const uint8_t* buf, size_t len) {
   return false;
 }
 static bool dechunkMemory_(const uint8_t* in, size_t inLen, uint8_t** outBuf, size_t* outLen) {
+  // Best-effort salvage for chunk markers accidentally embedded in the body.
   if (!outBuf || !outLen) return false;
   *outBuf = nullptr;
   *outLen = 0;
@@ -211,6 +215,7 @@ static void logHeadBytes_(const uint8_t* buf, size_t len);
 static uint32_t g_chunkedSalvageCount = 0;
 // === src/azure_tts.cpp : replace whole function ===
 static void salvageChunkedLeakIfNeeded_(uint8_t** pBuf, size_t* pLen) {
+  // Fix up cases where chunk framing leaked into the response body.
   if (!pBuf || !pLen) return;
   uint8_t* buf = *pBuf;
   size_t len = *pLen;
@@ -265,6 +270,7 @@ static uint16_t rd16le_(const uint8_t* p) {
   return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
 }
 static bool parseWavPcm_(const uint8_t* buf, size_t len, WavPcmInfo_* out) {
+  // Minimal WAV parser that accepts only PCM16 mono.
   if (!buf || len < 44 || !out) return false;
   // "RIFF" .... "WAVE"
   if (memcmp(buf, "RIFF", 4) != 0) return false;
@@ -325,6 +331,7 @@ static bool isCustomEndpoint_(const String& endpoint) {
   return endpoint.indexOf(".cognitiveservices.azure.com/tts/") >= 0;
 }
 void AzureTts::begin(uint8_t volume) {
+  // Pull settings from config and reset runtime state.
   cfg_ = RuntimeConfig{};
   keepaliveEnabled_ = true;
   region_ = trimCopy_(mcCfgAzRegion());
@@ -431,7 +438,7 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
                (unsigned long)speakId);
     return false;
   }
-  // Prepare request strings (same behavior as before)
+  // Prepare request strings (same behavior as before).
   reqText_  = text;
   reqVoice_ = voice ? String(voice) : defaultVoice_;
   if (!reqVoice_.length()) reqVoice_ = defaultVoice_;
@@ -489,6 +496,7 @@ void AzureTts::cancel(uint32_t speakId, const char* reason) {
   }
 }
 void AzureTts::poll() {
+  // Drive the playback state machine from the main loop.
   if (state_ == Idle) return;
   // waiting fetch
   if (state_ == Fetching) {
@@ -678,6 +686,7 @@ void AzureTts::warmupDnsOnce_() {
   }
 }
 bool AzureTts::fetchTokenOld_(String* outTok) {
+  // Legacy token fetch via regional STS endpoint (still used by some tenants).
   if (!outTok) return false;
   outTok->clear();
   if (key_.length() == 0) return false;
@@ -788,7 +797,11 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   if (WiFi.status() != WL_CONNECTED) return false;
   warmupDnsOnce_();
   // token
-  if (!ensureToken_()) return false;
+  const bool hasToken = ensureToken_();
+  if (!hasToken) {
+    MC_LOGI_RL("TTS_TOKEN_FALLBACK", 5000, "TTS",
+               "token unavailable -> use subscription key header");
+  }
   // keep-alive toggling
   bool useKeepAlive = keepaliveEnabled_;
   uint32_t now = millis();
@@ -806,7 +819,11 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   https_.addHeader("Accept", "audio/wav");
   https_.addHeader("Accept-Encoding", "identity");
   https_.addHeader("Connection", useKeepAlive ? "keep-alive" : "close");
-  https_.addHeader("Authorization", "Bearer " + token_);
+  if (hasToken) {
+    https_.addHeader("Authorization", "Bearer " + token_);
+  } else {
+    https_.addHeader("Ocp-Apim-Subscription-Key", key_);
+  }
   // custom endpoint requires extra region header sometimes
   if (isCustomEndpoint_(endpoint_) && region_.length()) {
     https_.addHeader("Ocp-Apim-Subscription-Region", region_);

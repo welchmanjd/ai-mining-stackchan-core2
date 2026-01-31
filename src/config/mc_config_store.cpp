@@ -1,4 +1,5 @@
 ﻿// src/mc_config_store.cpp
+// Module implementation.
 #include "mc_config_store.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -69,6 +70,14 @@ struct RuntimeCfg {
 static RuntimeCfg g_rt;
 static bool g_loaded = false;
 static bool g_dirty  = false;
+static bool isAllQuestionMarks_(const String& s) {
+  if (!s.length()) return false;
+  for (size_t i = 0; i < s.length(); ++i) {
+    const char c = s[i];
+    if (c != '?' && c != ' ') return false;
+  }
+  return true;
+}
 static void applyDefaults_() {
   g_rt.wifiSsid_ = MC_WIFI_SSID;
   g_rt.wifiPass_ = MC_WIFI_PASS;
@@ -160,6 +169,12 @@ static void loadOnce_() {
   setU8("spk_volume",       g_rt.spkVolume_);
   setStr("share_accepted_text", g_rt.speechShareAccepted_);
   setStr("hello_text",          g_rt.speechHello_);
+  if (isAllQuestionMarks_(g_rt.speechShareAccepted_)) {
+    g_rt.speechShareAccepted_ = MC_SPEECH_SHARE_ACCEPTED;
+  }
+  if (isAllQuestionMarks_(g_rt.speechHello_)) {
+    g_rt.speechHello_ = MC_SPEECH_HELLO;
+  }
   mc_logf("[CFG] loaded %s\n", kCfgPath);
 }
 } // namespace

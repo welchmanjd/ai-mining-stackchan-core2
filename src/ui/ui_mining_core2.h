@@ -1,4 +1,5 @@
 ﻿// src/ui_mining_core2.h
+// Module implementation.
 #pragma once
 // ===== Mining stackchan UI for Core2 (Spec-aligned + anti-flicker) =====
 // Layout:

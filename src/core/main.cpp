@@ -1,4 +1,5 @@
 ﻿// src/main.cpp
+// Module implementation.
 // ===== Mining-chan Core2 ? main entry (UI + orchestrator) =====
 // Board   : M5Stack Core2
 // Libs    : M5Unified, ArduinoJson, WiFi, WiFiClientSecure, HTTPClient, m5stack-avatar
@@ -29,6 +30,7 @@ enum AppMode : uint8_t {
   Stackchan = 1,
 };
 static AppMode g_mode = Dash;
+// Global mode switcher: dashboard vs. Stackchan avatar mode.
 // ---- AI busy / tap log aggregation (Step2) ----
 static const char* aiStateName_(AiTalkController::AiState s) {
   switch (s) {
@@ -51,6 +53,7 @@ static uint32_t g_aiTapFirstMs = 0;
 static AiTalkController::AiState g_aiTapLastState = AiTalkController::AiState::Idle;
 // "Attention" ("WHAT?") mode: short-lived focus state triggered by tap in Stackchan screen.
 static bool     g_attentionActive = false;
+// Tap-triggered short focus state; resets automatically on timeout.
 static uint32_t g_attentionUntilMs = 0;
 static MiningYieldProfile g_savedYield = MiningYieldNormal();
 static bool     g_savedYieldValid = false;
@@ -58,6 +61,7 @@ static bool     g_savedYieldValid = false;
 static char   g_setupLine[512];
 static size_t g_setupLineLen = 0;
 static long getDisplaySleepSecondsFromStore_(long fallbackSec) {
+  // Pull display timeout from stored JSON config (best-effort).
   String j = mcConfigGetMaskedJson(); // contains display_sleep_s, attention_text, etc.
   StaticJsonDocument<1024> doc;
   DeserializationError e = deserializeJson(doc, j);
@@ -79,6 +83,7 @@ static void handleSetupLine_(const char* line) {
   if (!line || !*line) return;
   String cmd(line);
   cmd.trim();
+  // Simple serial command handler for web setup tooling.
   if (cmd.equalsIgnoreCase("HELLO")) {
     Serial.println("@OK HELLO");
     return;
@@ -190,6 +195,7 @@ static void handleSetupLine_(const char* line) {
   Serial.println(line);
 }
 static void pollSetupSerial_() {
+  // Line-based parser with basic length guarding.
   while (Serial.available() > 0) {
     const char c = (char)Serial.read();
     if (c == '\r') continue;
@@ -222,6 +228,7 @@ static AppMode  g_lastPopEmptyMode = Dash;
 static bool     g_lastPopEmptyAttn = false;
 // ---- Stackchan bubble-only (no TTS) ----
 static bool     g_bubbleOnlyActive = false;
+// Bubble-only mode shows text without triggering TTS playback.
 static uint32_t g_bubbleOnlyUntilMs = 0;
 static uint32_t g_bubbleOnlyRid = 0;
 static int      g_bubbleOnlyEvType = 0;

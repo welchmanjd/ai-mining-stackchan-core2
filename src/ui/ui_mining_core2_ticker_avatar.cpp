@@ -1,4 +1,5 @@
-﻿#include "ui/ui_mining_core2.h"
+﻿// Module implementation.
+#include "ui/ui_mining_core2.h"
 #include "core/logging.h"
 #include "ai/mining_task.h"
 // ===== Ticker =====

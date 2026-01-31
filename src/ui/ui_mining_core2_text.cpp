@@ -1,4 +1,5 @@
 ﻿// UI for Mining stackchan avatar ticker.
+// Module implementation.
 // Uses M5Stack-Avatar library for Stack-chan style face rendering.
 // https://github.com/meganetaaan/m5stack-avatar
 #include "ui/ui_mining_core2.h"
@@ -248,6 +249,7 @@ String UIMining::vBatt() {
 }
 // ===== Pages =====
 void UIMining::drawPage0(const PanelData& p) {
+  // Mining summary page.
   auto ly = computeTextLayoutY();
   drawHeader("MINING STATUS", ly);
   drawLine(ly.y1, "HASH", vHash(p.hrKh_), COL_LABEL, cHash(p));
@@ -259,6 +261,7 @@ void UIMining::drawPage0(const PanelData& p) {
   drawLine(ly.y4, "LAST", vLast(age), COL_LABEL, cLast(age));
 }
 void UIMining::drawPage1(const PanelData& p) {
+  // Device health/status page.
   auto ly = computeTextLayoutY();
   drawHeader("DEVICE STATUS", ly);
   drawLine(ly.y1, "UP  ", vUp(p.elapsedS_), COL_LABEL, WHITE);
@@ -270,6 +273,7 @@ void UIMining::drawPage1(const PanelData& p) {
   drawLine(ly.y4, "HEAP", vHeap(), COL_LABEL, cHeap(free_kb));
 }
 void UIMining::drawPage2(const PanelData& p) {
+  // Network status page.
   auto ly = computeTextLayoutY();
   drawHeader("NETWORK", ly);
   String nv = vNet(p);

@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿// Module implementation.
+#pragma once
 #include <Arduino.h>
 #include "core/logging.h"
 #include <vector>

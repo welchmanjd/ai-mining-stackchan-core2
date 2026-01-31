@@ -1,4 +1,5 @@
 ﻿// src/mining_task.cpp
+// Module implementation.
 #include "ai/mining_task.h"
 #include "config/config.h"
 #include "core/logging.h"
@@ -11,6 +12,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 static volatile bool g_miningPaused = false;
+// Pause flag checked by mining loops to reduce CPU without tearing down connections.
 void setMiningPaused(bool paused) {
   g_miningPaused = paused;
 }
@@ -18,6 +20,7 @@ bool isMiningPaused() {
   return g_miningPaused;
 }
 static inline void waitWhilePaused_() {
+  // Busy wait with a tiny delay to keep WiFi alive without heavy load.
   while (g_miningPaused) {
     vTaskDelay(pdMS_TO_TICKS(10));
   }
@@ -56,6 +59,7 @@ static volatile uint8_t  g_mining_active_threads = kDucoMinerThreads; // 0..kDuc
 static volatile uint16_t g_yield_every = 1024;   // power-of-two recommended
 static volatile uint8_t  g_yield_ms    = 1;      // delay in ms at yield points
 static inline uint16_t normalizePow2_(uint16_t v) {
+  // Force to power-of-two for a cheap bitmask in the nonce loop.
   if (v < 8) v = 8;
   uint16_t p = 1;
   while ((uint16_t)(p << 1) != 0 && (uint16_t)(p << 1) <= v) p <<= 1;
@@ -130,6 +134,7 @@ static uint32_t ducoSolveDucoS1_(const String& seed,
                                   uint32_t difficulty,
                                   uint32_t& hashes_done,
                                   DucoThreadStats* stats) {
+  // Tight loop: compute SHA1(seed + nonce) until the hash matches expected20.
   const uint32_t maxNonce = difficulty * 100U;
   hashes_done = 0;
   char buf[96];
@@ -156,6 +161,7 @@ if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
     sha1Calc_((const unsigned char*)buf, seed_len + nlen, out);
     hashes_done++;
     if (memcmp(out, expected20, 20) == 0) {
+      // Found a valid share; publish progress atomically.
       if (stats) {
         portENTER_CRITICAL(&g_statsMux);
         stats->workNonce_     = nonce;
@@ -169,6 +175,7 @@ if (tidx >= 0 && tidx >= (int)g_mining_active_threads) {
     uint16_t every = g_yield_every;
     uint32_t mask  = (every >= 1) ? (uint32_t)(every - 1) : 0xFFFFFFFFu;
     if ((nonce & mask) == 0) {
+      // Periodic progress update and cooperative yield.
       if (stats) {
         portENTER_CRITICAL(&g_statsMux);
         stats->workNonce_     = nonce;
@@ -218,7 +225,7 @@ static void ducoTask_(void* pv) {
       g_poolDiagText = "Waiting for WiFi connection.";
       vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    // Pool
+    // Pool discovery / reconnect
     if (g_port == 0) {
       if (!ducoGetPool_()) {
         vTaskDelay(pdMS_TO_TICKS(5000));

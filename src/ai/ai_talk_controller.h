@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿// Module implementation.
+#pragma once
 #include <Arduino.h>
 #include "ai/ai_interface.h"
 #include "audio/audio_recorder.h"

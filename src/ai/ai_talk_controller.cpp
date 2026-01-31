@@ -1,4 +1,5 @@
-﻿#include "ai/ai_talk_controller.h"
+﻿// Module implementation.
+#include "ai/ai_talk_controller.h"
 #include "core/logging.h"
 #include "core/orchestrator.h"
 #include "ai/openai_llm.h"
@@ -17,6 +18,8 @@ static inline ::AiState mcToUiAiState_(AiTalkController::AiState s) {
     default:                                       return ::AiState::Idle;
   }
 }
+
+// Maps internal state to UI overlay status.
 // ---- timings ----
 // - LISTEN timeout / cancel window: MC_AI_LISTEN_TIMEOUT_MS / MC_AI_LISTEN_CANCEL_WINDOW_MS
 // - thinking mock / post-speak blank / cooldown: MC_AI_THINKING_MOCK_MS / MC_AI_POST_SPEAK_BLANK_MS / MC_AI_COOLDOWN_MS(+MC_AI_COOLDOWN_ERROR_EXTRA_MS)
@@ -31,6 +34,8 @@ static uint32_t calcTtsHardTimeoutMs_(size_t textBytes) {
   if (t > tMax) t = tMax;
   return t;
 }
+
+// Begin() does not allocate heavy resources; it only primes recorder + state.
 void AiTalkController::begin(Orchestrator* orch) {
   orch_ = orch;
   const bool recOk = recorder_.begin();
@@ -54,6 +59,7 @@ bool AiTalkController::onTap(int /*x*/, int y, int screenH) {
 }
 bool AiTalkController::onTap() {
   const uint32_t now = millis();
+  // Tap acts as a simple state toggle: idle->listen, listen->stop/think, others ignore.
   if (state_ == AiState::Thinking ||
       state_ == AiState::Speaking ||
       state_ == AiState::PostSpeakBlank ||
@@ -107,6 +113,7 @@ void AiTalkController::tick(uint32_t nowMs) {
       return;
     case AiState::Listening: {
       const uint32_t elapsed = nowMs - listenStartMs_;
+      // Auto-stop after timeout to avoid waiting forever.
       if (elapsed >= (uint32_t)MC_AI_LISTEN_TIMEOUT_MS) {
         lastRecOk_ = recorder_.stop(nowMs);
         const size_t samples = recorder_.samples();
@@ -122,6 +129,7 @@ void AiTalkController::tick(uint32_t nowMs) {
     }
     case AiState::Thinking: {
       const uint32_t elapsed = nowMs - thinkStartMs_;
+      // Wait for both the reply and the minimum "thinking" delay before speaking.
       if (replyReady_ && elapsed >= (uint32_t)MC_AI_THINKING_MOCK_MS) {
         replyText_ = mcUtf8ClampBytes(replyText_, MC_AI_TTS_MAX_CHARS);
         bubbleDirty_ = true;
@@ -175,6 +183,7 @@ void AiTalkController::tick(uint32_t nowMs) {
                 (unsigned long)activeRid_);
       }
       const uint32_t ttsIdNow = (orch_ && activeRid_ != 0) ? orch_->ttsIdForRid(activeRid_) : 0;
+      // Hard timeout protects against stuck TTS playback.
       if (elapsed >= speakHardTimeoutMs_) {
         MC_LOGE("AI", "TTS HARD TIMEOUT FIRE rid=%lu elapsed=%lums limit=%lums tts_id=%lu",
                 (unsigned long)activeRid_,

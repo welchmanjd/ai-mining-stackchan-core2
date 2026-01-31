@@ -1,4 +1,5 @@
-﻿#include "core/orchestrator.h"
+﻿// Module implementation.
+#include "core/orchestrator.h"
 const char* Orchestrator::sourceToStr_(CancelSource s) {
   switch (s) {
     case CancelSource::Ai:   return "AI";
@@ -6,6 +7,8 @@ const char* Orchestrator::sourceToStr_(CancelSource s) {
     default:                 return "OTHER";
   }
 }
+
+// Small ring buffer of canceled IDs to make cancel idempotent and debuggable.
 const Orchestrator::CancelRecord* Orchestrator::findCanceled_(uint32_t id) const {
   if (id == 0) return nullptr;
   for (const auto& r : canceled_) {
@@ -27,6 +30,8 @@ void Orchestrator::rememberCanceled_(uint32_t id, const char* reason, CancelSour
   }
   canceled_.push_back(rec);
 }
+
+// Initializes orchestration state to known defaults.
 void Orchestrator::init() {
   state_ = AppState::Idle;
   expectSpeakId_ = 0;
@@ -72,6 +77,7 @@ void Orchestrator::enqueueSpeakPending(const SpeakStartCmd& cmd) {
     LOG_EVT_INFO("EVT_ORCH_DROP_INVALID", "rid=%lu", (unsigned long)cmd.rid_);
     return;
   }
+  // Replace last item if it is the same kind, to avoid queueing stale speech.
   if (!pending_.empty() && pending_.back().kind_ == cmd.kind_) {
     SpeakStartCmd replaced = pending_.back();
     pending_.back() = cmd;
@@ -115,6 +121,7 @@ void Orchestrator::setExpectedSpeak(uint32_t speakId, uint32_t rid, OrchKind kin
   expectKind_ = kind;
   mismatchCount_ = 0;
   const AppState from = state_;
+  // ThinkWait bridges the time between LLM result and TTS completion.
   state_ = AppState::ThinkWait;
   LOG_EVT_INFO("EVT_ORCH_STATE",
                "from=%d to=%d reason=expect_speak rid=%lu speak_id=%lu kind=%d",
@@ -158,6 +165,7 @@ void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason, CancelSourc
   const AppState from = state_;
   const uint32_t oldExpect = expectSpeakId_;
   size_t removed = 0;
+  // Remove from pending queue to prevent later playback.
   if (!pending_.empty()) {
     for (auto it = pending_.begin(); it != pending_.end();) {
     if (it->ttsId_ == speakId) {
@@ -169,6 +177,7 @@ void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason, CancelSourc
     }
   }
   bool clearedExpect = false;
+  // Clear expected speak if this cancel matches the in-flight id.
   if (expectSpeakId_ != 0 && expectSpeakId_ == speakId) {
     expectSpeakId_ = 0;
     expectRid_ = 0;

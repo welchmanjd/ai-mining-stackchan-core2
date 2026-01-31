@@ -1,4 +1,5 @@
 ﻿// src/ui_mining_core2.cpp
+// Module implementation.
 #include "ui/ui_mining_core2.h"
 #include <WiFi.h>
 #include "core/logging.h"
@@ -20,6 +21,7 @@ void UIMining::begin(const char* appName, const char* appVer) {
   app_name_ = appName ? appName : "";
   app_ver_  = appVer  ? appVer  : "";
   auto& d = M5.Display;
+  // Base display setup: rotation, brightness, and sprite buffers.
   d.setRotation(1);
   d.setBrightness(128);
   avatar_.setScale(0.45f);
@@ -27,6 +29,7 @@ void UIMining::begin(const char* appName, const char* appVer) {
   // Use a Japanese-capable font (size ~8) so bubble text renders correctly.
   avatar_.setSpeechFont(&fonts::lgfxJapanMinchoP_8);
   avatar_.setSpeechText("");
+  // Off-screen sprites reduce flicker during partial redraws.
   info_.setColorDepth(8);
   info_.createSprite(INF_W, INF_H);
   info_.setTextWrap(false);
@@ -100,6 +103,7 @@ void UIMining::triggerAttention(uint32_t durationMs, const char* text) {
     }
     return;
   }
+  // "Attention" is a short-lived focus state that overrides bubble text.
   attention_active_   = true;
   attention_until_ms_ = millis() + durationMs;
   attention_text_     = (text && *text) ? String(text) : attention_default_text_;
@@ -124,6 +128,7 @@ bool UIMining::isAttentionActive() const {
 void UIMining::drawAll(const PanelData& p, const String& tickerText, bool suppressTouchBeep) {
   uint32_t now = millis();
   if (splash_active_) {
+    // Splash shows connection progress until Wi-Fi + pool are ready.
     wl_status_t w = WiFi.status();
     uint32_t    dt_splash = now - splash_start_ms_;
     auto makeConnecting = [&](const char* base) -> String {

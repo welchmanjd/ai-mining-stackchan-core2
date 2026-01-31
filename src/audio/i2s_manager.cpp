@@ -1,4 +1,5 @@
 ﻿// === src/i2s_manager.cpp : replace whole file ===
+// Module implementation.
 #include "audio/i2s_manager.h"
 #include "core/logging.h"
 I2SManager& I2SManager::instance() {
@@ -62,6 +63,7 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
   }
   const TaskHandle_t curTask = xTaskGetCurrentTaskHandle();
   if (depth_ > 0) {
+    // Recursive lock is allowed only by the same task and same owner type.
     const uint32_t heldMs = (owner_ == None) ? 0 : (millis() - owner_since_ms_);
     if (owner_task_ != curTask) {
       LOG_EVT_INFO("I2S_OWNER", "deny reason=cross_task cur=%s want=%s depth=%lu",
@@ -124,7 +126,7 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
     depth_++;
     return true;
   }
-  // first acquire => owner transition
+  // First acquire => owner transition.
   {
     const Owner prev = owner_;
     const uint32_t prevHeldMs = (prev == None) ? 0 : (millis() - owner_since_ms_);

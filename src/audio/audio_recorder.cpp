@@ -1,4 +1,5 @@
 ﻿// === src/audio_recorder.cpp : replace whole file ===
+// Module implementation.
 #include "audio/audio_recorder.h"
 #include "core/logging.h"
 #include "audio/i2s_manager.h"
@@ -13,6 +14,7 @@
 #include <esp_task_wdt.h>
 #include <esp_log.h>
 static void forceUninstallI2S_(const char* reason) {
+  // Defensive cleanup for stale I2S drivers after mode switching.
   MC_EVT("REC", "i2s_uninstall exec reason=%s", reason ? reason : "");
   // NOTE:
   esp_log_level_set("I2S", ESP_LOG_NONE);
@@ -32,6 +34,7 @@ static void forceUninstallI2S_(const char* reason) {
              (int)e1, (int)e0, reason ? reason : "");
 }
 static void waitMicIdle_(uint32_t timeoutMs) {
+  // Wait for the hardware FIFO to drain before stopping the mic.
   const uint32_t t0 = millis();
   while (M5.Mic.isRecording()) {
     if ((millis() - t0) >= timeoutMs) break;
@@ -39,6 +42,7 @@ static void waitMicIdle_(uint32_t timeoutMs) {
   }
 }
 static void writeWavHeader_(File& f, uint32_t sampleRate, uint32_t dataBytes) {
+  // Minimal WAV header for PCM16 mono.
   const uint32_t riffSize = 36 + dataBytes;
   const uint16_t audioFormat = 1;   // PCM
   const uint16_t numChannels = 1;   // mono
@@ -104,6 +108,7 @@ void AudioRecorder::restoreSpeakerAfterRec_() {
 }
 bool AudioRecorder::ensureMicBegun_() {
   if (micBegun_) return true;
+  // Match the recorder sample rate with the config.
   M5.Mic.setSampleRate(sampleRate_);
   bool ok = M5.Mic.begin();
   MC_LOGD("REC", "mic begin ok=%d sr=%u", ok ? 1 : 0, (unsigned)sampleRate_);
@@ -190,6 +195,7 @@ bool AudioRecorder::startTask_() {
 bool AudioRecorder::start(uint32_t nowMs) {
   if (!initialized_) begin();
   if (recording_) return false;
+  // Acquire the I2S lock before touching mic/speaker.
   if (!i2sLocked_) {
     if (!I2SManager::instance().lockForMic("REC.start", 2000)) {
       I2SManager& m = I2SManager::instance();

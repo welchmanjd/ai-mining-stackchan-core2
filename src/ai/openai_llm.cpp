@@ -1,4 +1,5 @@
-﻿#include "ai/openai_llm.h"
+﻿// Module implementation.
+#include "ai/openai_llm.h"
 #include "core/logging.h"
 #include "config/config_private.h"
 #include "utils/mc_text_utils.h"
@@ -15,6 +16,7 @@
 // ---- small helpers ----
 // Step2: moved UTF-8 clamp / one-line sanitize into mc_text_utils.*
 static String buildDiag_(JsonVariant root) {
+  // Create a compact, log-friendly summary of the response payload.
   String d;
   if (root.isNull()) return "null_root";
   const char* status = nullptr;
@@ -69,6 +71,7 @@ static String buildDiag_(JsonVariant root) {
   return mcLogHead(d, MC_AI_LOG_HEAD_BYTES_LLM_DIAG);
 }
 static String extractAnyText_(JsonVariant root) {
+  // Accept multiple response shapes (output_text or output[].content[]).
   if (root["output_text"].is<const char*>()) {
     String s = (const char*)root["output_text"];
     s = mcSanitizeOneLine(s);
@@ -133,6 +136,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
   MC_EVT_D("LLM", "start timeout=%lums in_len=%u",
            (unsigned long)timeoutMs, (unsigned)userText.length());
   // ---- request build ----
+  // Keep instructions short to reduce token use and response latency.
   DynamicJsonDocument req(2048);
   req["model"] = MC_OPENAI_MODEL;
   req["instructions"] =
@@ -178,6 +182,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     return r;
   }
  if (code < 200 || code >= 300) {
+  // HTTP error response: try to extract a short error message for logs.
   DynamicJsonDocument doc(4096);
   DeserializationError e = deserializeJson(doc, body);
   String msg = "";
@@ -212,6 +217,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     r.incompleteReason_ = (const char*)doc["incomplete_details"]["reason"];
   }
   if (doc["usage"].is<JsonObject>()) {
+    // Token accounting is optional; log only if present.
     JsonObject u = doc["usage"].as<JsonObject>();
     r.inTok_    = u["input_tokens"] | 0;
     r.outTok_   = u["output_tokens"] | 0;

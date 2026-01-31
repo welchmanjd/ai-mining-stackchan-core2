@@ -1,4 +1,5 @@
 ﻿// src/app_presenter.h
+// Module implementation.
 #pragma once
 #include <Arduino.h>
 #include "ai/mining_task.h"     // MiningSummary

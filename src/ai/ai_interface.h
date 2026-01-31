@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿// Module implementation.
+#pragma once
 #include <Arduino.h>
 enum class AiState {
   Idle,

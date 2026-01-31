@@ -1,4 +1,5 @@
 ﻿// src/azure_stt.h
+// Module implementation.
 #pragma once
 #include <Arduino.h>
 #include <stdint.h>

@@ -1,4 +1,5 @@
-﻿#include "core/runtime_features.h"
+﻿// Module implementation.
+#include "core/runtime_features.h"
 #include "config/mc_config_store.h"
 RuntimeFeatures getRuntimeFeatures() {
   RuntimeFeatures f;
