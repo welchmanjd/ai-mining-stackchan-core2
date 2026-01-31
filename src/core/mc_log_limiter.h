@@ -1,4 +1,4 @@
-// src/mc_log_limiter.h
+﻿// src/mc_log_limiter.h
 // Small rate-limit helper for noisy logs.
 //
 // Goal:
@@ -8,19 +8,13 @@
 // NOTE:
 // - This utility is intentionally tiny (no dynamic alloc, no STL).
 // - Keys should be stable string literals.
-
 #pragma once
-
 #include <Arduino.h>
-
-namespace McLogLimiter {
-
+namespace mc_log_limiter {
 // Returns true if caller should print the log now.
 // If suppressed logs existed and the window expired, out_suppressed will be set (>0)
 // and the caller should print a single summary line before the main log.
 bool shouldLog(const char* key, uint32_t windowMs, uint32_t nowMs, uint32_t* out_suppressed);
-
 // Manual reset (rarely needed).
 void resetAll();
-
-} // namespace McLogLimiter
+} // namespace mc_log_limiter

@@ -117,6 +117,40 @@ Status: config, utils, audio, ai, core, ui, and behavior are already moved under
 - Functions and methods: lowerCamelCase verbs: `updateMiningSummary`, `setMiningPaused`.
 - Private helper functions at file scope use trailing underscore: `handleSetupLine_`.
 
+### Types (class/struct/enum/typedef/using)
+- Types use UpperCamelCase: `AiTalkController`, `MiningSummary`.
+- Type aliases (`using`) use UpperCamelCase: `using DeviceId = uint32_t;`.
+- Enums use UpperCamelCase names: `enum class AppState`.
+
+### Enum Values
+- Prefer UpperCamelCase for `enum class` values: `Idle`, `Thinking`, `Speaking`.
+- If a legacy enum uses ALL_CAPS, keep it consistent within that enum (no mixed styles).
+
+### Namespaces
+- Use lower_snake_case for namespaces: `namespace azure_stt { ... }`.
+- Keep namespaces short and domain-scoped.
+
+### Macros
+- Macros are ALL_CAPS with project prefix: `MC_AI_TALK_ENABLED`.
+- Avoid new macros when `constexpr` or `enum` can be used.
+
+### Files and Folders
+- Folders are lower_snake_case: `core`, `ai`, `audio`.
+- Files are lower_snake_case with optional `mc_` prefix for shared utilities: `mc_text_utils.cpp`.
+- Avoid mixed casing in file names.
+
+### Config Keys (JSON / WebSerial / Stored)
+- Keys are lower_snake_case: `display_sleep_s`, `attention_text`.
+- Use stable keys; avoid renaming without a migration path.
+
+### Log Tags / Event Names
+- Tags are ALL_CAPS short tokens: `MAIN`, `AI`, `TTS`, `UI`.
+- Event names are ALL_CAPS with module prefix: `EVT_AI_STATE`, `EVT_PRESENT_TTS_START`.
+
+### Templates / Traits / Compile-Time Helpers
+- Template type names follow UpperCamelCase; template parameters use `T`/`U`/`T*` style: `template <typename T>`.
+- Traits names end with `Trait` or `Traits`: `AudioDeviceTraits`.
+
 ## Extension Points
 - Add a new AI provider: place in `/src/ai` and expose a narrow interface.
 - Add a new UI screen: place in `/src/ui`, keep presenters thin.

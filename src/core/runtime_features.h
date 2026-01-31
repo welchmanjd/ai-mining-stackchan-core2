@@ -1,10 +1,8 @@
-#pragma once
+﻿#pragma once
 #include <Arduino.h>
-
 struct RuntimeFeatures {
-  bool wifiConfigured = false;
-  bool miningEnabled  = false;
-  bool ttsEnabled     = false;
+  bool wifiConfigured_ = false;
+  bool miningEnabled_  = false;
+  bool ttsEnabled_     = false;
 };
-
 RuntimeFeatures getRuntimeFeatures();

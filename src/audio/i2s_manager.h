@@ -1,43 +1,29 @@
+﻿// src/i2s_manager.h
 #pragma once
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
-
-// Mic/Speaker の I2S begin/end を一本化するための排他
 class I2SManager {
 public:
-  // ※ i2s_manager.cpp が None/Mic/Speaker をそのまま使っているので enum class にしない
   enum Owner : uint8_t { None = 0, Mic = 1, Speaker = 2 };
-
-  // Policy:
-  // - I2S は Mic / Speaker のどちらかが owner として保持する（None/Mic/Speaker）。
-  // - recursive mutex を使うが、再入（同一タスク）は owner が一致する場合のみ許可する。
-  //   例: owner=Speaker の間に lockForMic が同一タスクから来ても DENY して false を返す。
-
   static I2SManager& instance();
-
-
   bool lockForMic(const char* callsite, uint32_t timeoutMs = 2000);
   bool lockForSpeaker(const char* callsite, uint32_t timeoutMs = 2000);
   void unlock(const char* callsite);
-
   Owner owner() const { return owner_; }
   const char* ownerCallsite() const { return owner_callsite_; }
   uint32_t ownerSinceMs() const { return owner_since_ms_; }
   uint32_t depth() const { return depth_; }
-
 private:
   I2SManager();
   bool lock_(Owner want, const char* callsite, uint32_t timeoutMs);
   const char* ownerStr_(Owner o) const;
-
 private:
-  SemaphoreHandle_t mutex_ = nullptr;     // recursive mutex
+  SemaphoreHandle_t mutex_ = nullptr; // recursive mutex
   volatile Owner owner_ = None;
   const char* owner_callsite_ = "";
   uint32_t owner_since_ms_ = 0;
   TaskHandle_t owner_task_ = nullptr;
   uint32_t depth_ = 0;
-
 };
