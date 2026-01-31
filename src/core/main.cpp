@@ -23,7 +23,7 @@
 #include "config/mc_config_store.h"
 
 #include "ai/azure_tts.h"
-#include "stackchan_behavior.h"
+#include "behavior/stackchan_behavior.h"
 #include "core/orchestrator.h"
 #include "ai/ai_talk_controller.h"
 
@@ -1246,6 +1246,7 @@ static OrchPrio toOrchPrio(ReactionPriority p) {
     default:                       return OrchPrio::Normal;
   }
 }
+
 
 
 

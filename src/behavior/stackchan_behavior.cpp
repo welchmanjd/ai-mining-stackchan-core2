@@ -1,5 +1,5 @@
 ﻿// src/stackchan_behavior.cpp
-#include "stackchan_behavior.h"
+#include "behavior/stackchan_behavior.h"
 #include "core/logging.h"
 #include "config/config.h"   // ★追加：appConfig() を使う
 
@@ -276,5 +276,6 @@ void StackchanBehavior::triggerEvent(StackchanEventType ev, uint32_t nowMs) {
     }
   }
 }
+
 
 

@@ -63,7 +63,7 @@ Avoid reverse dependencies (e.g., ui -> ai) unless explicitly justified.
   - utils stays stateless and free of project-level deps.
 
 ## Current File Mapping (Draft)
-Status: config, utils, audio, ai, core, and ui are already moved under `/src` subfolders.
+Status: config, utils, audio, ai, core, ui, and behavior are already moved under `/src` subfolders.
 - core
   - core/main.cpp
   - core/orchestrator.cpp / core/orchestrator.h
@@ -86,7 +86,7 @@ Status: config, utils, audio, ai, core, and ui are already moved under `/src` su
   - ui/ui_mining_core2_ticker_avatar.cpp
   - ui/app_presenter.cpp / ui/app_presenter.h
 - behavior
-  - stackchan_behavior.cpp / stackchan_behavior.h
+  - behavior/stackchan_behavior.cpp / behavior/stackchan_behavior.h
 - config
   - config/config.h
   - config/config_private.h
