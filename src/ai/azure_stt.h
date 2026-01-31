@@ -1,8 +1,9 @@
 ﻿// src/azure_stt.h
 // Module implementation.
 #pragma once
-#include <Arduino.h>
 #include <stdint.h>
+#include <Arduino.h>
+
 #include "config/config.h"
 namespace azure_stt {
 struct SttResult {

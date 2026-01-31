@@ -2,10 +2,10 @@
 // Module implementation.
 #pragma once
 #include <Arduino.h>
-#include "config/config.h"
-#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <string.h>
+#include <WiFiClientSecure.h>
+
+#include "config/config.h"
 //
 class AzureTts {
 public:

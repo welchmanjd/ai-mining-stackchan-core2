@@ -1,7 +1,7 @@
 ﻿// src/stackchan_behavior.cpp
 // Module implementation.
 #include "behavior/stackchan_behavior.h"
-#include "core/logging.h"
+#include "utils/logging.h"
 #include "config/config.h"
 namespace {
 const char* priorityName(ReactionPriority p) {
@@ -37,7 +37,7 @@ String shortenText(const String& s, size_t maxChars, size_t& lenOut) {
   return out;
 }
 }  // namespace
-void StackchanBehavior::update(const UIMining::PanelData& panel, uint32_t nowMs) {
+void StackchanBehavior::update(const MiningPanelData& panel, uint32_t nowMs) {
   // snapshot (for bubble-only formatting)
   infoHrKh_     = panel.hrKh_;
   infoPingMs_   = panel.pingMs_;

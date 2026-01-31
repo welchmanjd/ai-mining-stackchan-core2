@@ -1,16 +1,19 @@
 // src/mining_task.cpp
 // Module implementation.
 #include "ai/mining_task.h"
-#include "config/config.h"
-#include "core/logging.h"
+
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
 #include <mbedtls/sha1.h>
-#include "core/runtime_features.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+#include "config/config.h"
+#include "utils/logging.h"
+#include "config/runtime_features.h"
 static volatile bool g_miningPaused = false;
 // Pause flag checked by mining loops to reduce CPU without tearing down connections.
 void setMiningPaused(bool paused) {

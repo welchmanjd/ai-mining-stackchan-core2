@@ -3,25 +3,26 @@
 // ===== Mining-chan Core2 ? main entry (UI + orchestrator) =====
 // Board   : M5Stack Core2
 // Libs    : M5Unified, ArduinoJson, WiFi, WiFiClientSecure, HTTPClient, m5stack-avatar
-#include <M5Unified.h>
-#include <Arduino.h>
-#include <WiFi.h>
 #include <time.h>
-#include <stdarg.h>
-#include <esp32-hal-cpu.h>
+
+#include <Arduino.h>
 #include <ArduinoJson.h>
+#include <M5Unified.h>
+#include <WiFi.h>
+#include <esp32-hal-cpu.h>
 #include <esp_log.h>
+
 #include "ui/ui_mining_core2.h"
 #include "ui/app_presenter.h"
 #include "config/config.h"
 #include "ai/mining_task.h"
-#include "core/logging.h"
+#include "utils/logging.h"
 #include "config/mc_config_store.h"
 #include "ai/azure_tts.h"
 #include "behavior/stackchan_behavior.h"
 #include "core/orchestrator.h"
 #include "ai/ai_talk_controller.h"
-#include "core/runtime_features.h"
+#include "config/runtime_features.h"
 // Azure TTS
 static AzureTts g_tts;
 static unsigned long g_lastUiMs = 0;

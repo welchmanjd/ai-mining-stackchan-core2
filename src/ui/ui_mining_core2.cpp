@@ -1,8 +1,11 @@
 // src/ui_mining_core2.cpp
 // Module implementation.
 #include "ui/ui_mining_core2.h"
+
+#include <M5Unified.h>
 #include <WiFi.h>
-#include "core/logging.h"
+
+#include "utils/logging.h"
 // ===== Singleton / ctor =====
 UIMining& UIMining::instance() {
   static UIMining s_instance;

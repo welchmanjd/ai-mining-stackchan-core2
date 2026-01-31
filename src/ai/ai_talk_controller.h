@@ -1,12 +1,10 @@
 ﻿// Module implementation.
 #pragma once
 #include <Arduino.h>
+
 #include "ai/ai_interface.h"
 #include "audio/audio_recorder.h"
-#include "ai/azure_stt.h"
-#include "config/config.h"
-// forward decl
-class Orchestrator;
+#include "utils/orchestrator_api.h"
 class AiTalkController {
 public:
   enum class AiState : uint8_t {
@@ -17,7 +15,7 @@ public:
     PostSpeakBlank,
     Cooldown,
   };
-  void begin(Orchestrator* orch = nullptr);
+  void begin(OrchestratorApi* orch = nullptr);
   bool onTap();
   bool onTap(int x, int y, int screenH);
   void injectText(const String& text);
@@ -40,7 +38,7 @@ private:
   void enterCooldown_(uint32_t nowMs, bool error, const char* reason);
   void updateOverlay_(uint32_t nowMs);
 private:
-  Orchestrator* orch_ = nullptr;
+  OrchestratorApi* orch_ = nullptr;
   AiState  state_ = AiState::Idle;
   uint32_t listenStartMs_   = 0;
   uint32_t thinkStartMs_    = 0;

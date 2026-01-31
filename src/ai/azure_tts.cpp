@@ -1,12 +1,15 @@
 ﻿// src/azure_tts.cpp
 // Module implementation.
 #include "ai/azure_tts.h"
-#include "config/mc_config_store.h"
-#include "core/logging.h"
+
 #include <string.h>
+
 #include <M5Unified.h>
 #include <WiFi.h>
+
 #include "audio/i2s_manager.h"
+#include "config/mc_config_store.h"
+#include "utils/logging.h"
 // TTS debug switch (optional): define -DTTS_DEBUG_ENABLED=1 to restore very chatty logs.
 #ifndef TTS_DEBUG_ENABLED
 #define TTS_DEBUG_ENABLED 0

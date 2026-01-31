@@ -23,7 +23,7 @@ dependencies consistent as the project grows.
 - core
   - System startup and lifecycle
   - Orchestration between subsystems
-  - Cross-cutting policies (logging, feature flags)
+  - Cross-cutting policies (feature flags, timeouts)
 - ai
   - Dialogue control and AI integration
   - LLM/STT/TTS providers
@@ -39,7 +39,7 @@ dependencies consistent as the project grows.
   - Configuration schemas and persistence
   - Private keys and user overrides
 - utils
-  - Small utilities that do not own lifecycle
+  - Small utilities that do not own lifecycle (text, logging, shared DTOs)
 
 ## Dependency Direction (Rule of Thumb)
 - core -> ai/audio/ui/behavior/config/utils
@@ -67,9 +67,6 @@ Status: config, utils, audio, ai, core, ui, and behavior are already moved under
 - core
   - core/main.cpp
   - core/orchestrator.cpp / core/orchestrator.h
-  - core/runtime_features.cpp / core/runtime_features.h
-  - core/logging.h
-  - core/mc_log_limiter.cpp / core/mc_log_limiter.h
 - ai
   - ai/ai_interface.h
   - ai/ai_talk_controller.cpp / ai/ai_talk_controller.h
@@ -93,8 +90,15 @@ Status: config, utils, audio, ai, core, ui, and behavior are already moved under
   - config/config_private.sample.h
   - config/user_config.h
   - config/mc_config_store.cpp / config/mc_config_store.h
+  - config/runtime_features.cpp / config/runtime_features.h
 - utils
+  - utils/logging.h
+  - utils/mc_log_limiter.cpp / utils/mc_log_limiter.h
   - utils/mc_text_utils.cpp / utils/mc_text_utils.h
+  - utils/mining_panel_data.h
+  - utils/mining_status.h
+  - utils/mining_summary.h
+  - utils/orchestrator_api.h
 
 ## Configuration and Secrets
 - `config_private.h` is not committed and must be sourced from

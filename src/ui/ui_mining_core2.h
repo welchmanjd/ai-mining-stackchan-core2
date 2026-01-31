@@ -16,33 +16,15 @@
 // Anti-flicker:
 //   - Draw right panel into sprite then push once
 //   - Draw ticker into sprite then push once
-#include <M5Unified.h>
 #include <Arduino.h>
 #include <Avatar.h>
-#include <WiFi.h>
 #include <M5GFX.h>
-#include <math.h>
+
 #include "ai/ai_interface.h"
+#include "utils/mining_panel_data.h"
 class UIMining {
 public:
-  struct PanelData {
-    float    hrKh_      = 0.0f;
-    uint32_t accepted_  = 0;
-    uint32_t rejected_  = 0;
-    float    pingMs_    = -1.0f;
-    float    rejPct_    = 0.0f;
-    float    bestShare_ = -1.0f;
-    bool     poolAlive_     = false;
-    bool     miningEnabled_ = false;
-    float    diff_          = 0.0f;
-    uint32_t elapsedS_  = 0;
-    String   sw_;
-    String   fw_;
-    String   poolName_;
-    String   worker_;
-    String   wifiDiag_;
-    String   poolDiag_;
-  };
+  using PanelData = MiningPanelData;
   enum : int {
     W = 320, H = 240,
     LOG_H = 24,

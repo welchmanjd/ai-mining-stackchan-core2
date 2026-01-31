@@ -1,6 +1,7 @@
-﻿// src/mc_log_limiter.cpp
+// src/mc_log_limiter.cpp
 // Module implementation.
-#include "core/mc_log_limiter.h"
+#include "utils/mc_log_limiter.h"
+
 #include <string.h>
 namespace mc_log_limiter {
 // Keep this small; we only need a few noisy keys.

@@ -2,7 +2,9 @@
 // Module implementation.
 #pragma once
 #include <Arduino.h>
-#include "ui/ui_mining_core2.h"
+#include <Avatar.h>
+
+#include "utils/mining_panel_data.h"
 // ===== Phase1 skeleton for stackchan behavior state machine =====
 // State/Detect/Decide are implemented as stubs for now; Present happens in main.cpp.
 enum class ReactionPriority : uint8_t {
@@ -34,7 +36,7 @@ struct StackchanReaction {
 class StackchanBehavior {
 public:
   // Observe the latest panel snapshot and time.
-  void update(const UIMining::PanelData& panel, uint32_t nowMs);
+  void update(const MiningPanelData& panel, uint32_t nowMs);
   // Notify current TTS playback state.
   void setTtsSpeaking(bool speaking);
   // Pop next reaction (Phase1: always false).

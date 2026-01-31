@@ -1,12 +1,14 @@
 ﻿// Module implementation.
 #include "ai/openai_llm.h"
-#include "core/logging.h"
-#include "config/config_private.h"
-#include "utils/mc_text_utils.h"
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>
+
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+
 #include "config/config.h"
+#include "config/config_private.h"
+#include "utils/logging.h"
+#include "utils/mc_text_utils.h"
 #ifndef MC_OPENAI_ENDPOINT
 #define MC_OPENAI_ENDPOINT "https://api.openai.com/v1/responses"
 #endif

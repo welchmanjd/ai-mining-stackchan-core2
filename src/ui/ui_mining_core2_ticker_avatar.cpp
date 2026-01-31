@@ -1,7 +1,10 @@
 // Module implementation.
 #include "ui/ui_mining_core2.h"
-#include "core/logging.h"
-#include "ai/mining_task.h"
+
+#include <WiFi.h>
+
+#include "utils/logging.h"
+#include "utils/mining_status.h"
 // ===== Ticker =====
 void UIMining::drawTicker(const String& text) {
   String incoming = text;

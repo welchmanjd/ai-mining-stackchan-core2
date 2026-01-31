@@ -1,12 +1,12 @@
 ﻿// src/mc_config_store.cpp
 // Module implementation.
 #include "mc_config_store.h"
-#include <Arduino.h>
+
 #include <ArduinoJson.h>
 #include <FS.h>
 #include <LittleFS.h>
+
 #include "config.h"
-#include "core/logging.h"
 #ifndef MC_WIFI_SSID
   #define MC_WIFI_SSID ""
 #endif
@@ -99,23 +99,23 @@ static void loadOnce_() {
   g_loaded = true;
   applyDefaults_();
   if (!LittleFS.begin(true)) {
-    mc_logf("[CFG] LittleFS.begin failed (format attempted)\n");
+    Serial.printf("[CFG] LittleFS.begin failed (format attempted)\n");
     return;
   }
   if (!LittleFS.exists(kCfgPath)) {
-    mc_logf("[CFG] %s not found -> defaults\n", kCfgPath);
+    Serial.printf("[CFG] %s not found -> defaults\n", kCfgPath);
     return;
   }
   File f = LittleFS.open(kCfgPath, "r");
   if (!f) {
-    mc_logf("[CFG] open failed: %s\n", kCfgPath);
+    Serial.printf("[CFG] open failed: %s\n", kCfgPath);
     return;
   }
   DynamicJsonDocument doc(5120);
   DeserializationError err = deserializeJson(doc, f);
   f.close();
   if (err) {
-    mc_logf("[CFG] JSON parse failed: %s\n", err.c_str());
+    Serial.printf("[CFG] JSON parse failed: %s\n", err.c_str());
     return;
   }
   auto setStr = [&](const char* key, String& dst) {
@@ -161,7 +161,7 @@ static void loadOnce_() {
     setCpuMhz("cpu_mhz", g_rt.cpuMhz_);
   } else {
     if (!doc["cpu_freq_mhz"].isNull()) {
-      mc_logf("[CFG] deprecated key ignored: cpu_freq_mhz\n");
+      Serial.printf("[CFG] deprecated key ignored: cpu_freq_mhz\n");
     }
   }
   setU32("display_sleep_s", g_rt.displaySleepS_);
@@ -175,7 +175,7 @@ static void loadOnce_() {
   if (isAllQuestionMarks_(g_rt.speechHello_)) {
     g_rt.speechHello_ = MC_SPEECH_HELLO;
   }
-  mc_logf("[CFG] loaded %s\n", kCfgPath);
+  Serial.printf("[CFG] loaded %s\n", kCfgPath);
 }
 } // namespace
 void mcConfigBegin() {
@@ -286,7 +286,7 @@ bool mcConfigSave(String& err) {
   }
   f.close();
   g_dirty = false;
-  mc_logf("[CFG] saved %s\n", kCfgPath);
+  Serial.printf("[CFG] saved %s\n", kCfgPath);
   return true;
 }
 String mcConfigGetMaskedJson() {

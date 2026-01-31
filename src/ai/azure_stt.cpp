@@ -1,11 +1,13 @@
 ﻿// Module implementation.
 #include "ai/azure_stt.h"
-#include "core/logging.h"
-#include "config/mc_config_store.h"
+
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
+
+#include "config/mc_config_store.h"
+#include "utils/logging.h"
 namespace azure_stt {
 static const char* kTag = "STT";
 static String normalizeSpeechHost_(String host) {

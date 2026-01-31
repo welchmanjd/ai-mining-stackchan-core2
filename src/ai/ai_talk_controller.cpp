@@ -1,12 +1,13 @@
 ﻿// Module implementation.
 #include "ai/ai_talk_controller.h"
-#include "core/logging.h"
-#include "core/orchestrator.h"
-#include "ai/openai_llm.h"
-#include "utils/mc_text_utils.h"
-#include <M5Unified.h>
-#include "config/config.h"
+
 #include <string.h>
+
+#include "ai/azure_stt.h"
+#include "ai/openai_llm.h"
+#include "config/config.h"
+#include "utils/logging.h"
+#include "utils/mc_text_utils.h"
 static inline ::AiState mcToUiAiState_(AiTalkController::AiState s) {
   switch (s) {
     case AiTalkController::AiState::Idle:          return ::AiState::Idle;
@@ -36,7 +37,7 @@ static uint32_t calcTtsHardTimeoutMs_(size_t textBytes) {
 }
 
 // Begin() does not allocate heavy resources; it only primes recorder + state.
-void AiTalkController::begin(Orchestrator* orch) {
+void AiTalkController::begin(OrchestratorApi* orch) {
   orch_ = orch;
   const bool recOk = recorder_.begin();
   MC_LOGI("REC", "begin ok=%d", recOk ? 1 : 0);
@@ -141,8 +142,8 @@ void AiTalkController::tick(uint32_t nowMs) {
           if (nextRid_ == 0) nextRid_ = 1;
           auto cmd = orch_->makeSpeakStartCmd(
               rid, replyText_,
-              OrchPrio::High,
-              Orchestrator::OrchKind::AiSpeak
+              OrchestratorApi::OrchPrio::High,
+              OrchestratorApi::OrchKind::AiSpeak
           );
           if (cmd.valid_) {
             orch_->enqueueSpeakPending(cmd);
@@ -193,7 +194,7 @@ void AiTalkController::tick(uint32_t nowMs) {
         static constexpr const char* reason = "ai_tts_timeout";
         uint32_t canceledId = 0;
         if (orch_ && activeRid_ != 0) {
-          orch_->cancelSpeakByRid(activeRid_, reason, Orchestrator::CancelSource::Ai, &canceledId);
+          orch_->cancelSpeakByRid(activeRid_, reason, OrchestratorApi::CancelSource::Ai, &canceledId);
         }
         if (canceledId != 0) {
           abortTtsId_ = canceledId;

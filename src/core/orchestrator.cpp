@@ -1,5 +1,6 @@
 ﻿// Module implementation.
 #include "core/orchestrator.h"
+#include "utils/logging.h"
 const char* Orchestrator::sourceToStr_(CancelSource s) {
   switch (s) {
     case CancelSource::Ai:   return "AI";

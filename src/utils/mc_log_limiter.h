@@ -1,4 +1,4 @@
-﻿// src/mc_log_limiter.h
+// src/mc_log_limiter.h
 // Module implementation.
 // Small rate-limit helper for noisy logs.
 //

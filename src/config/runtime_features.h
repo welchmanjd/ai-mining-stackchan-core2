@@ -1,4 +1,4 @@
-﻿// Module implementation.
+// Module implementation.
 #pragma once
 #include <Arduino.h>
 struct RuntimeFeatures {

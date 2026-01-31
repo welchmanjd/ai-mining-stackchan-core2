@@ -1,9 +1,10 @@
 ﻿// src/audio_recorder.h
 // Module implementation.
 #pragma once
-#include <Arduino.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <Arduino.h>
+
 #include "config/config.h"
 class AudioRecorder {
 public:

@@ -1,7 +1,7 @@
 ﻿// === src/i2s_manager.cpp : replace whole file ===
 // Module implementation.
 #include "audio/i2s_manager.h"
-#include "core/logging.h"
+#include "utils/logging.h"
 I2SManager& I2SManager::instance() {
   static I2SManager g;
   return g;

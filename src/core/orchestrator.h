@@ -1,30 +1,21 @@
 ﻿// Module implementation.
 #pragma once
-#include <Arduino.h>
-#include "core/logging.h"
 #include <vector>
+
+#include <Arduino.h>
+
+#include "utils/orchestrator_api.h"
 enum class AppState : uint8_t { Idle, React, ThinkWait, Speak, ErrorSafe };
-enum class OrchPrio : uint8_t { Low = 0, Normal = 1, High = 2 };
-class Orchestrator {
+using OrchPrio = OrchestratorApi::OrchPrio;
+class Orchestrator : public OrchestratorApi {
 public:
-  enum class OrchKind : uint8_t {
-    None = 0,
-    BehaviorSpeak = 1,
-    AiSpeak = 2,
-  };
-  enum class CancelSource : uint8_t { Ai = 0, Main = 1, Other = 2 };
-  struct SpeakStartCmd {
-    bool valid_ = false;
-    uint32_t ttsId_ = 0;
-    uint32_t rid_ = 0;
-    OrchKind kind_ = OrchKind::None;
-    String text_;
-    OrchPrio prio_ = OrchPrio::Normal;
-  };
+  using OrchKind = OrchestratorApi::OrchKind;
+  using CancelSource = OrchestratorApi::CancelSource;
+  using SpeakStartCmd = OrchestratorApi::SpeakStartCmd;
   void init();
   SpeakStartCmd makeSpeakStartCmd(uint32_t rid, const String& text, OrchPrio prio,
-                                  OrchKind kind = OrchKind::BehaviorSpeak);
-  void enqueueSpeakPending(const SpeakStartCmd& cmd);
+                                  OrchKind kind = OrchKind::BehaviorSpeak) override;
+  void enqueueSpeakPending(const SpeakStartCmd& cmd) override;
   bool hasPendingSpeak() const;
   SpeakStartCmd popNextPending();
   void setExpectedSpeak(uint32_t speakId, uint32_t rid);
@@ -39,11 +30,11 @@ public:
                  uint32_t* doneRid,
                  OrchKind* doneKind,
                  bool* desyncOut = nullptr);
-  uint32_t ttsIdForRid(uint32_t rid) const;
+  uint32_t ttsIdForRid(uint32_t rid) const override;
   bool cancelSpeakByRid(uint32_t rid,
                         const char* reason,
                         CancelSource source,
-                        uint32_t* outCanceledSpeakId = nullptr);
+                        uint32_t* outCanceledSpeakId = nullptr) override;
   AppState state() const { return state_; }
   bool tick(uint32_t nowMs);
 private:

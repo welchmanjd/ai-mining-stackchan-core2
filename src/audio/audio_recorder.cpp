@@ -1,18 +1,21 @@
 ﻿// === src/audio_recorder.cpp : replace whole file ===
 // Module implementation.
 #include "audio/audio_recorder.h"
-#include "core/logging.h"
-#include "audio/i2s_manager.h"
-#include "config/config.h"
-#include <M5Unified.h>
-#include <LittleFS.h>
+
 #include <type_traits>
+
+#include <LittleFS.h>
+#include <M5Unified.h>
 // Arduino-ESP32 ships ESP-IDF's I2S driver headers.
 // We use these *only* to force-uninstall stale drivers after switching Mic <-> Speaker.
 #include <driver/i2s.h>
 #include <esp_err.h>
-#include <esp_task_wdt.h>
 #include <esp_log.h>
+#include <esp_task_wdt.h>
+
+#include "audio/i2s_manager.h"
+#include "config/config.h"
+#include "utils/logging.h"
 static void forceUninstallI2S_(const char* reason) {
   // Defensive cleanup for stale I2S drivers after mode switching.
   MC_EVT("REC", "i2s_uninstall exec reason=%s", reason ? reason : "");
