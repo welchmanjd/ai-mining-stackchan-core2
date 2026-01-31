@@ -50,7 +50,20 @@ dependencies consistent as the project grows.
 
 Avoid reverse dependencies (e.g., ui -> ai) unless explicitly justified.
 
+## Dependency Exceptions (Allowed Cases)
+- ui -> ai
+  - OK for read-only state exposure via a narrow interface (e.g., view-model or DTO).
+  - Not OK to call AI actions or business logic directly from UI.
+- behavior -> ai
+  - OK for consuming high-level intent/state (e.g., "speaking", "idle").
+  - Not OK for invoking AI providers directly.
+- config -> (none)
+  - config remains dependency-free at the project layer.
+- utils -> (none)
+  - utils stays stateless and free of project-level deps.
+
 ## Current File Mapping (Draft)
+Status: config, utils, audio, and ai are already moved under `/src` subfolders.
 - core
   - main.cpp
   - orchestrator.cpp / orchestrator.h
@@ -58,16 +71,15 @@ Avoid reverse dependencies (e.g., ui -> ai) unless explicitly justified.
   - logging.h
   - mc_log_limiter.cpp / mc_log_limiter.h
 - ai
-  - ai_interface.h
-  - ai_talk_controller.cpp / ai_talk_controller.h
-  - openai_llm.cpp / openai_llm.h
-  - azure_stt.cpp / azure_stt.h
-  - azure_tts.cpp / azure_tts.h
-  - mining_task.cpp / mining_task.h
-  - ai_sandbox_main.cpp
+  - ai/ai_interface.h
+  - ai/ai_talk_controller.cpp / ai/ai_talk_controller.h
+  - ai/openai_llm.cpp / ai/openai_llm.h
+  - ai/azure_stt.cpp / ai/azure_stt.h
+  - ai/azure_tts.cpp / ai/azure_tts.h
+  - ai/mining_task.cpp / ai/mining_task.h
 - audio
-  - audio_recorder.cpp / audio_recorder.h
-  - i2s_manager.cpp / i2s_manager.h
+  - audio/audio_recorder.cpp / audio/audio_recorder.h
+  - audio/i2s_manager.cpp / audio/i2s_manager.h
 - ui
   - ui_mining_core2.cpp / ui_mining_core2.h
   - ui_mining_core2_text.cpp
@@ -76,13 +88,13 @@ Avoid reverse dependencies (e.g., ui -> ai) unless explicitly justified.
 - behavior
   - stackchan_behavior.cpp / stackchan_behavior.h
 - config
-  - config.h
-  - config_private.h
-  - config_private.sample.h
-  - user_config.h
-  - mc_config_store.cpp / mc_config_store.h
+  - config/config.h
+  - config/config_private.h
+  - config/config_private.sample.h
+  - config/user_config.h
+  - config/mc_config_store.cpp / config/mc_config_store.h
 - utils
-  - mc_text_utils.cpp / mc_text_utils.h
+  - utils/mc_text_utils.cpp / utils/mc_text_utils.h
 
 ## Configuration and Secrets
 - `config_private.h` is not committed and must be sourced from

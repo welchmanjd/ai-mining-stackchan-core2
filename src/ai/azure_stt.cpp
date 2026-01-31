@@ -1,4 +1,4 @@
-﻿#include "azure_stt.h"
+﻿#include "ai/azure_stt.h"
 #include "logging.h"
 #include "config/mc_config_store.h"
 
@@ -266,4 +266,5 @@ SttResult transcribePcm16Mono(
 
 
 } // namespace AzureStt
+
 

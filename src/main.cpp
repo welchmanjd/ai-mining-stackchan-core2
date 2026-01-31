@@ -18,14 +18,14 @@
 #include "ui_mining_core2.h"
 #include "app_presenter.h"
 #include "config/config.h"
-#include "mining_task.h"
+#include "ai/mining_task.h"
 #include "logging.h"   // ← 他の #include と一緒に、ファイル先頭の方へ移動推奨
 #include "config/mc_config_store.h"
 
-#include "azure_tts.h"
+#include "ai/azure_tts.h"
 #include "stackchan_behavior.h"
 #include "orchestrator.h"
-#include "ai_talk_controller.h"
+#include "ai/ai_talk_controller.h"
 
 #include "runtime_features.h"
 
@@ -1246,4 +1246,5 @@ static OrchPrio toOrchPrio(ReactionPriority p) {
     default:                       return OrchPrio::Normal;
   }
 }
+
 

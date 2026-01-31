@@ -1,7 +1,7 @@
 ﻿// === src/audio_recorder.cpp : replace whole file ===
-#include "audio_recorder.h"
+#include "audio/audio_recorder.h"
 #include "logging.h"
-#include "i2s_manager.h"
+#include "audio/i2s_manager.h"
 #include "config/config.h"
 
 #include <M5Unified.h>
@@ -625,4 +625,5 @@ void AudioRecorder::taskLoop_() {
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
+
 

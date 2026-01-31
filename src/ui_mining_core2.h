@@ -1,4 +1,4 @@
-// src/ui_mining_core2.h
+﻿// src/ui_mining_core2.h
 #pragma once
 // ===== Mining stackchan UI for Core2 (Spec-aligned + anti-flicker) =====
 // Layout:
@@ -23,7 +23,7 @@
 #include <WiFi.h>
 #include <M5GFX.h>
 #include <math.h>
-#include "ai_interface.h"
+#include "ai/ai_interface.h"
 
 class UIMining {
 public:
@@ -329,3 +329,4 @@ private:
   void updateAvatarMood(const PanelData& p);
   String buildStackchanBubble(const PanelData& p);
 };
+

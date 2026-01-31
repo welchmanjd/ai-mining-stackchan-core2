@@ -1,5 +1,5 @@
 ﻿// src/mining_task.cpp
-#include "mining_task.h"
+#include "ai/mining_task.h"
 #include "config/config.h"
 #include "logging.h"   // ★これが必要
 
@@ -687,4 +687,5 @@ MiningYieldProfile getMiningYieldProfile() {
   p.delay_ms = g_yield_ms;
   return p;
 }
+
 

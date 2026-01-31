@@ -1,8 +1,8 @@
 ﻿#pragma once
 #include <Arduino.h>
-#include "ai_interface.h"
-#include "audio_recorder.h"  // ★追加
-#include "azure_stt.h"       // ★追加
+#include "ai/ai_interface.h"
+#include "audio/audio_recorder.h"  // ★追加
+#include "ai/azure_stt.h"       // ★追加
 #include "config/config.h"          // ★追加（MC_AI_* 定数）
 
 // forward decl
@@ -118,4 +118,6 @@ private:
   char abortTtsReason_[24] = {0};
 
 };
+
+
 

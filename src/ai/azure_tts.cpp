@@ -1,12 +1,12 @@
 ﻿// src/azure_tts.cpp
-#include "azure_tts.h"
+#include "ai/azure_tts.h"
 #include "config/mc_config_store.h"
 #include "logging.h"
 #include <string.h>
 
 #include <M5Unified.h>
 #include <WiFi.h>
-#include "i2s_manager.h"
+#include "audio/i2s_manager.h"
 
 // TTS debug switch (optional): define -DTTS_DEBUG_ENABLED=1 to restore very chatty logs.
 #ifndef TTS_DEBUG_ENABLED
@@ -1252,4 +1252,6 @@ void AzureTts::resetSession_() {
   token_ = "";
   tokenExpireMs_ = 0;
 }
+
+
 

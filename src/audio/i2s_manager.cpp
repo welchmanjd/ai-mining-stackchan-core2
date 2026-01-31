@@ -1,5 +1,5 @@
-// === src/i2s_manager.cpp : replace whole file ===
-#include "i2s_manager.h"
+﻿// === src/i2s_manager.cpp : replace whole file ===
+#include "audio/i2s_manager.h"
 #include "logging.h"
 
 I2SManager& I2SManager::instance() {
@@ -241,3 +241,4 @@ void I2SManager::unlock(const char* callsite) {
 
   xSemaphoreGiveRecursive(mutex_);
 }
+
