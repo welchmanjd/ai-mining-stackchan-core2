@@ -33,8 +33,8 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
   const uint32_t t0 = millis();
   const TickType_t ticks = (timeoutMs == 0) ? 0 : pdMS_TO_TICKS(timeoutMs);
   const Owner snapOwner = owner_;
-  const char* snapSite = owner_callsite_;
-  const uint32_t snapSince = owner_since_ms_;
+  const char* snapSite = ownerCallsite_;
+  const uint32_t snapSince = ownerSinceMs_;
   const BaseType_t ok = xSemaphoreTakeRecursive(mutex_, ticks);
   const uint32_t waited = millis() - t0;
   if (ok != pdTRUE) {
@@ -64,8 +64,8 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
   const TaskHandle_t curTask = xTaskGetCurrentTaskHandle();
   if (depth_ > 0) {
     // Recursive lock is allowed only by the same task and same owner type.
-    const uint32_t heldMs = (owner_ == None) ? 0 : (millis() - owner_since_ms_);
-    if (owner_task_ != curTask) {
+    const uint32_t heldMs = (owner_ == None) ? 0 : (millis() - ownerSinceMs_);
+    if (ownerTask_ != curTask) {
       LOG_EVT_INFO("I2S_OWNER", "deny reason=cross_task cur=%s want=%s depth=%lu",
                    ownerStr_(owner_),
                    ownerStr_(want),
@@ -77,7 +77,7 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
                     (unsigned long)depth_,
                     (unsigned long)waited,
                     (unsigned long)heldMs,
-                    owner_callsite_ ? owner_callsite_ : "",
+                    ownerCallsite_ ? ownerCallsite_ : "",
                     callsite ? callsite : "");
       MC_LOGD("I2S",
               "lock DENY cross_task cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
@@ -86,7 +86,7 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
               (unsigned long)depth_,
               (unsigned long)waited,
               (unsigned long)heldMs,
-              owner_callsite_ ? owner_callsite_ : "",
+              ownerCallsite_ ? ownerCallsite_ : "",
               callsite ? callsite : "");
       xSemaphoreGiveRecursive(mutex_);
       return false;
@@ -103,7 +103,7 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
                     (unsigned long)depth_,
                     (unsigned long)waited,
                     (unsigned long)heldMs,
-                    owner_callsite_ ? owner_callsite_ : "",
+                    ownerCallsite_ ? ownerCallsite_ : "",
                     callsite ? callsite : "");
       MC_LOGD("I2S",
               "lock DENY reenter_mismatch cur=%s want=%s depth=%lu waited=%lums held=%lums curSite=%s reqSite=%s",
@@ -112,7 +112,7 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
               (unsigned long)depth_,
               (unsigned long)waited,
               (unsigned long)heldMs,
-              owner_callsite_ ? owner_callsite_ : "",
+              ownerCallsite_ ? ownerCallsite_ : "",
               callsite ? callsite : "");
       xSemaphoreGiveRecursive(mutex_);
       return false;
@@ -122,34 +122,34 @@ bool I2SManager::lock_(Owner want, const char* callsite, uint32_t timeoutMs) {
             (unsigned long)depth_,
             (unsigned long)waited,
             callsite ? callsite : "",
-            owner_callsite_ ? owner_callsite_ : "");
+            ownerCallsite_ ? ownerCallsite_ : "");
     depth_++;
     return true;
   }
   // First acquire => owner transition.
   {
     const Owner prev = owner_;
-    const uint32_t prevHeldMs = (prev == None) ? 0 : (millis() - owner_since_ms_);
+    const uint32_t prevHeldMs = (prev == None) ? 0 : (millis() - ownerSinceMs_);
     owner_ = want;
-    owner_callsite_ = callsite ? callsite : "";
-    owner_since_ms_ = millis();
-    owner_task_ = curTask;
+    ownerCallsite_ = callsite ? callsite : "";
+    ownerSinceMs_ = millis();
+    ownerTask_ = curTask;
     LOG_EVT_INFO("I2S_OWNER", "acquire owner=%s waited=%lums site=%s",
                  ownerStr_(want),
                  (unsigned long)waited,
-                 owner_callsite_);
+                 ownerCallsite_);
     LOG_EVT_DEBUG("I2S_OWNER", "acquire_d prev=%s owner=%s waited=%lums prevHeld=%lums site=%s",
                   ownerStr_(prev),
                   ownerStr_(want),
                   (unsigned long)waited,
                   (unsigned long)prevHeldMs,
-                  owner_callsite_);
+                  ownerCallsite_);
     MC_LOGD("I2S", "owner %s -> %s waited=%lums prevHeld=%lums site=%s",
             ownerStr_(prev),
             ownerStr_(want),
             (unsigned long)waited,
             (unsigned long)prevHeldMs,
-            owner_callsite_);
+            ownerCallsite_);
   }
   depth_ = 1;
   return true;
@@ -163,11 +163,11 @@ void I2SManager::unlock(const char* callsite) {
   depth_--;
   if (depth_ == 0) {
     const Owner prev = owner_;
-    const uint32_t heldMs = (prev == None) ? 0 : (millis() - owner_since_ms_);
+    const uint32_t heldMs = (prev == None) ? 0 : (millis() - ownerSinceMs_);
     owner_ = None;
-    owner_callsite_ = "";
-    owner_since_ms_ = 0;
-    owner_task_ = nullptr;
+    ownerCallsite_ = "";
+    ownerSinceMs_ = 0;
+    ownerTask_ = nullptr;
     LOG_EVT_INFO("I2S_OWNER", "release owner=%s held=%lums unlockSite=%s",
                  ownerStr_(prev),
                  (unsigned long)heldMs,

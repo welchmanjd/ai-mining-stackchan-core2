@@ -13,8 +13,8 @@ public:
   bool lockForSpeaker(const char* callsite, uint32_t timeoutMs = 2000);
   void unlock(const char* callsite);
   Owner owner() const { return owner_; }
-  const char* ownerCallsite() const { return owner_callsite_; }
-  uint32_t ownerSinceMs() const { return owner_since_ms_; }
+  const char* ownerCallsite() const { return ownerCallsite_; }
+  uint32_t ownerSinceMs() const { return ownerSinceMs_; }
   uint32_t depth() const { return depth_; }
 private:
   I2SManager();
@@ -23,8 +23,8 @@ private:
 private:
   SemaphoreHandle_t mutex_ = nullptr; // recursive mutex
   volatile Owner owner_ = None;
-  const char* owner_callsite_ = "";
-  uint32_t owner_since_ms_ = 0;
-  TaskHandle_t owner_task_ = nullptr;
+  const char* ownerCallsite_ = "";
+  uint32_t ownerSinceMs_ = 0;
+  TaskHandle_t ownerTask_ = nullptr;
   uint32_t depth_ = 0;
 };

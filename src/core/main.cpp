@@ -316,32 +316,32 @@ static bool wifiConnect_() {
     WIFI_CONNECTING,
     WIFI_DONE
   };
-  static WifiState   state   = WIFI_NOT_STARTED;
-  static uint32_t    t_start = 0;
-  static const uint32_t WIFI_CONNECT_TIMEOUT_MS = 20000UL;
-  switch (state) {
-    case WIFI_NOT_STARTED: {
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(cfg.wifiSsid_, cfg.wifiPass_);
-      t_start = millis();
-      MC_LOGI("WIFI", "begin connect (ssid=%s)", cfg.wifiSsid_);
-      state = WIFI_CONNECTING;
-      return false;
-    }
-    case WIFI_CONNECTING: {
-      wl_status_t st = WiFi.status();
-      if (st == WL_CONNECTED) {
-        MC_EVT("WIFI", "connected: %s", WiFi.localIP().toString().c_str());
-        state = WIFI_DONE;
-        return true;
+    static WifiState   s_state   = WIFI_NOT_STARTED;
+    static uint32_t    s_startMs = 0;
+    static const uint32_t wifiConnectTimeoutMs = 20000UL;
+    switch (s_state) {
+      case WIFI_NOT_STARTED: {
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(cfg.wifiSsid_, cfg.wifiPass_);
+        s_startMs = millis();
+        MC_LOGI("WIFI", "begin connect (ssid=%s)", cfg.wifiSsid_);
+        s_state = WIFI_CONNECTING;
+        return false;
       }
-      if (millis() - t_start > WIFI_CONNECT_TIMEOUT_MS) {
-        MC_LOGW("WIFI", "connect timeout (status=%d)", (int)st);
-        state = WIFI_DONE;
-        return true;
+      case WIFI_CONNECTING: {
+        wl_status_t st = WiFi.status();
+        if (st == WL_CONNECTED) {
+          MC_EVT("WIFI", "connected: %s", WiFi.localIP().toString().c_str());
+          s_state = WIFI_DONE;
+          return true;
+        }
+        if (millis() - s_startMs > wifiConnectTimeoutMs) {
+          MC_LOGW("WIFI", "connect timeout (status=%d)", (int)st);
+          s_state = WIFI_DONE;
+          return true;
+        }
+        return false;
       }
-      return false;
-    }
     case WIFI_DONE:
     default:
       return true;
@@ -569,7 +569,7 @@ void loop() {
     anyInput = true;
     g_suppressTouchBeepOnce = true;
   }
-  static bool prevTouchPressed = false;
+  static bool s_prevTouchPressed = false;
   bool touchPressed = false;
   bool touchDown    = false;
   int touchX = 0;
@@ -592,8 +592,8 @@ void loop() {
     touchPressed = s_touchPressed;
     touchX = s_touchX;
     touchY = s_touchY;
-    touchDown = touchPressed && !prevTouchPressed;
-    prevTouchPressed = touchPressed;
+      touchDown = touchPressed && !s_prevTouchPressed;
+      s_prevTouchPressed = touchPressed;
     if (touchPressed) anyInput = true;
   }
   // Cache touch state for UI

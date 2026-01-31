@@ -190,19 +190,19 @@ void AiTalkController::tick(uint32_t nowMs) {
                 (unsigned long)elapsed,
                 (unsigned long)speakHardTimeoutMs_,
                 (unsigned long)ttsIdNow);
-        static constexpr const char* kReason = "ai_tts_timeout";
+        static constexpr const char* reason = "ai_tts_timeout";
         uint32_t canceledId = 0;
         if (orch_ && activeRid_ != 0) {
-          orch_->cancelSpeakByRid(activeRid_, kReason, Orchestrator::CancelSource::Ai, &canceledId);
+          orch_->cancelSpeakByRid(activeRid_, reason, Orchestrator::CancelSource::Ai, &canceledId);
         }
         if (canceledId != 0) {
           abortTtsId_ = canceledId;
-          strncpy(abortTtsReason_, kReason, sizeof(abortTtsReason_) - 1);
+          strncpy(abortTtsReason_, reason, sizeof(abortTtsReason_) - 1);
           abortTtsReason_[sizeof(abortTtsReason_) - 1] = 0;
         }
         awaitingOrchSpeak_ = false;
         activeRid_ = 0;
-        enterCooldown_(nowMs, true, kReason);
+        enterCooldown_(nowMs, true, reason);
       } else {
         updateOverlay_(nowMs);
       }

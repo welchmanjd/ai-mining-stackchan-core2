@@ -17,7 +17,7 @@
 // ---------------------------------------------------------
 // ---------------------------------------------------------
 #ifndef MC_DISPLAY_SLEEP_SECONDS
-  #define MC_DISPLAY_SLEEP_SECONDS 600
+  #define MC_DISPLAY_SLEEP_SECONDS 60 //default:600
 #endif
 #ifndef MC_TTS_ACTIVE_THREADS_DURING_TTS
   #define MC_TTS_ACTIVE_THREADS_DURING_TTS 0

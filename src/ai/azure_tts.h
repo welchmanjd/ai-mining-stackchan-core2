@@ -90,8 +90,8 @@ private:
   HTTPClient       https_;
   bool             keepaliveEnabled_ = true;
   volatile bool sessionResetPending_ = false;
-  uint32_t last_ok_ms_ = 0;
-  uint32_t disable_keepalive_until_ms_ = 0;
+  uint32_t lastOkMs_ = 0;
+  uint32_t disableKeepaliveUntilMs_ = 0;
   RuntimeConfig cfg_;
   bool playbackEnabled_ = true;
   uint32_t seq_ = 0;
@@ -99,9 +99,9 @@ private:
   bool i2sLocked_ = false;
   uint8_t defaultVolume_ = MC_SPK_VOLUME;
   // speakAsync() reject suppression (INFO wallpaper guard)
-  uint32_t reject_first_ms_    = 0;
-  uint32_t reject_last_ms_     = 0;
-  uint32_t reject_count_       = 0;
-  uint8_t  reject_reason_      = 0;  // 0=none (see azure_tts.cpp)
-  uint32_t reject_last_log_ms_ = 0;  // optional: for debug/reminder throttling
+  uint32_t rejectFirstMs_    = 0;
+  uint32_t rejectLastMs_     = 0;
+  uint32_t rejectCount_      = 0;
+  uint8_t  rejectReason_     = 0;  // 0=none (see azure_tts.cpp)
+  uint32_t rejectLastLogMs_  = 0;  // optional: for debug/reminder throttling
 };

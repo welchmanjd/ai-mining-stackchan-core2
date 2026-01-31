@@ -805,7 +805,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   // keep-alive toggling
   bool useKeepAlive = keepaliveEnabled_;
   uint32_t now = millis();
-  if (disable_keepalive_until_ms_ && now < disable_keepalive_until_ms_) useKeepAlive = false;
+  if (disableKeepaliveUntilMs_ && now < disableKeepaliveUntilMs_) useKeepAlive = false;
   https_.setTimeout(cfg_.httpTimeoutMs);
   https_.setReuse(useKeepAlive);
   // begin
@@ -836,7 +836,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
     (void)body;
     MC_LOGD("TTS", "HTTP %d body_len=%u", code, (unsigned)bodyLen);
     https_.end();
-    disable_keepalive_until_ms_ = millis() + 5000;
+    disableKeepaliveUntilMs_ = millis() + 5000;
     return false;
   }
   // read body (chunked or content-length)
@@ -983,7 +983,7 @@ void AzureTts::taskBody() {
     }
     wav_ = buf;
     wavLen_ = len;
-    last_ok_ms_ = millis();
+    lastOkMs_ = millis();
     state_ = Ready;
   }
 }

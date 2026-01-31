@@ -5,21 +5,21 @@
 #include "core/logging.h"
 // ===== Singleton / ctor =====
 UIMining& UIMining::instance() {
-  static UIMining inst;
-  return inst;
+  static UIMining s_instance;
+  return s_instance;
 }
 UIMining::UIMining()
   : avatar_()
   , info_(&M5.Display)
   , tick_(&M5.Display)
 {
-  in_stackchan_mode_    = false;
-  stackchan_needs_clear_ = false;
+  inStackchanMode_    = false;
+  stackchanNeedsClear_ = false;
 }
 // ===== Public API =====
 void UIMining::begin(const char* appName, const char* appVer) {
-  app_name_ = appName ? appName : "";
-  app_ver_  = appVer  ? appVer  : "";
+  appName_ = appName ? appName : "";
+  appVer_  = appVer  ? appVer  : "";
   auto& d = M5.Display;
   // Base display setup: rotation, brightness, and sprite buffers.
   d.setRotation(1);
@@ -36,22 +36,22 @@ void UIMining::begin(const char* appName, const char* appVer) {
   tick_.setColorDepth(8);
   tick_.createSprite(W, LOG_H);
   tick_.setTextWrap(false);
-  last_page_ms_      = millis();
-  last_share_ms_     = 0;
-  last_total_shares_ = 0;
-  ticker_offset_ = W;
-  splash_active_   = true;
-  splash_start_ms_ = millis();
-  splash_ready_ms_ = 0;
-  splash_wifi_text_  = "Connecting...";
-  splash_pool_text_  = "Waiting";
-  splash_wifi_col_   = 0xFD20;
-  splash_pool_col_   = COL_LABEL;
-  splash_wifi_hint_  = "";
-  splash_pool_hint_  = "";
-  drawSplash(splash_wifi_text_,  splash_wifi_col_,
-             splash_pool_text_,  splash_pool_col_,
-             splash_wifi_hint_,  splash_pool_hint_);
+  lastPageMs_      = millis();
+  lastShareMs_     = 0;
+  lastTotalShares_ = 0;
+  tickerOffset_ = W;
+  splashActive_   = true;
+  splashStartMs_  = millis();
+  splashReadyMs_  = 0;
+  splashWifiText_ = "Connecting...";
+  splashPoolText_ = "Waiting";
+  splashWifiCol_  = 0xFD20;
+  splashPoolCol_  = COL_LABEL;
+  splashWifiHint_ = "";
+  splashPoolHint_ = "";
+  drawSplash(splashWifiText_,  splashWifiCol_,
+             splashPoolText_,  splashPoolCol_,
+             splashWifiHint_,  splashPoolHint_);
   tick_.fillScreen(BLACK);
   tick_.pushSprite(0, Y_LOG);
 }
@@ -65,29 +65,29 @@ uint32_t UIMining::uptimeSeconds() const {
   return static_cast<uint32_t>(millis() / 1000);
 }
 void UIMining::setHashrateReference(float kh) {
-  hr_ref_kh_ = kh;
+  hrRefKh_ = kh;
 }
 void UIMining::setAutoPageMs(uint32_t ms) {
-  auto_page_ms_ = ms;
+  autoPageMs_ = ms;
 }
 void UIMining::onEnterStackchanMode() {
-  in_stackchan_mode_     = true;
-  stackchan_needs_clear_ = true;
-  stackchan_talking_        = false;
-  stackchan_phase_start_ms_ = millis();
-  stackchan_phase_dur_ms_   = 0;
-  stackchan_bubble_text_    = "";
+  inStackchanMode_     = true;
+  stackchanNeedsClear_ = true;
+  stackchanTalking_        = false;
+  stackchanPhaseStartMs_   = millis();
+  stackchanPhaseDurMs_     = 0;
+  stackchanBubbleText_     = "";
   avatar_.setScale(1.0f);
   avatar_.setPosition(0, 0);
   avatar_.setSpeechText("");
 }
 void UIMining::onLeaveStackchanMode() {
-  in_stackchan_mode_     = false;
-  stackchan_needs_clear_ = false;
-  stackchan_talking_        = false;
-  stackchan_phase_start_ms_ = 0;
-  stackchan_phase_dur_ms_   = 0;
-  stackchan_bubble_text_    = "";
+  inStackchanMode_     = false;
+  stackchanNeedsClear_ = false;
+  stackchanTalking_        = false;
+  stackchanPhaseStartMs_   = 0;
+  stackchanPhaseDurMs_     = 0;
+  stackchanBubbleText_     = "";
   avatar_.setSpeechText("");
   avatar_.setScale(0.45f);
   avatar_.setPosition(-12, -88);
@@ -95,44 +95,44 @@ void UIMining::onLeaveStackchanMode() {
 void UIMining::triggerAttention(uint32_t durationMs, const char* text) {
   if (durationMs == 0) {
     LOG_EVT_INFO("EVT_ATTENTION_EXIT", "attn=0");
-    attention_active_   = false;
-    attention_until_ms_ = 0;
-    attention_text_     = attention_default_text_;
-    if (in_stackchan_mode_) {
+    attentionActive_   = false;
+    attentionUntilMs_  = 0;
+    attentionText_     = attentionDefaultText_;
+    if (inStackchanMode_) {
       setStackchanSpeech("");
     }
     return;
   }
   // "Attention" is a short-lived focus state that overrides bubble text.
-  attention_active_   = true;
-  attention_until_ms_ = millis() + durationMs;
-  attention_text_     = (text && *text) ? String(text) : attention_default_text_;
-  LOG_EVT_INFO("EVT_ATTENTION_ENTER", "attn=1 text=%s", attention_text_.c_str());
-  if (in_stackchan_mode_) {
-    setStackchanSpeech(attention_text_);
-    stackchan_speech_text_ = attention_text_;
-    stackchan_speech_seq_++;
+  attentionActive_   = true;
+  attentionUntilMs_  = millis() + durationMs;
+  attentionText_     = (text && *text) ? String(text) : attentionDefaultText_;
+  LOG_EVT_INFO("EVT_ATTENTION_ENTER", "attn=1 text=%s", attentionText_.c_str());
+  if (inStackchanMode_) {
+    setStackchanSpeech(attentionText_);
+    stackchanSpeechText_ = attentionText_;
+    stackchanSpeechSeq_++;
   }
 }
 void UIMining::setAttentionDefaultText(const char* text) {
-  attention_default_text_ = (text && *text) ? String(text) : String("WHAT?");
-  if (!attention_active_) {
-    attention_text_ = attention_default_text_;
+  attentionDefaultText_ = (text && *text) ? String(text) : String("WHAT?");
+  if (!attentionActive_) {
+    attentionText_ = attentionDefaultText_;
   }
 }
 bool UIMining::isAttentionActive() const {
-  if (!attention_active_) return false;
+  if (!attentionActive_) return false;
   // handle millis wrap-around safely
-  return (int32_t)(attention_until_ms_ - millis()) > 0;
+  return (int32_t)(attentionUntilMs_ - millis()) > 0;
 }
 void UIMining::drawAll(const PanelData& p, const String& tickerText, bool suppressTouchBeep) {
   uint32_t now = millis();
-  if (splash_active_) {
+  if (splashActive_) {
     // Splash shows connection progress until Wi-Fi + pool are ready.
     wl_status_t w = WiFi.status();
-    uint32_t    dt_splash = now - splash_start_ms_;
+    uint32_t    dt_splash = now - splashStartMs_;
     auto makeConnecting = [&](const char* base) -> String {
-      uint32_t elapsed = now - splash_start_ms_;
+      uint32_t elapsed = now - splashStartMs_;
       const uint32_t period = 200;
       uint32_t phase = (elapsed / period) % 6;
       uint8_t dots;
@@ -195,45 +195,45 @@ void UIMining::drawAll(const PanelData& p, const String& tickerText, bool suppre
     } else {
       poolHint = "";
     }
-    if (wifiText  != splash_wifi_text_  || wifiCol  != splash_wifi_col_  ||
-        poolText  != splash_pool_text_  || poolCol  != splash_pool_col_  ||
-        wifiHint  != splash_wifi_hint_  || poolHint != splash_pool_hint_) {
-      splash_wifi_text_  = wifiText;
-      splash_pool_text_  = poolText;
-      splash_wifi_col_   = wifiCol;
-      splash_pool_col_   = poolCol;
-      splash_wifi_hint_  = wifiHint;
-      splash_pool_hint_  = poolHint;
-      drawSplash(splash_wifi_text_,  splash_wifi_col_,
-                 splash_pool_text_,  splash_pool_col_,
-                 splash_wifi_hint_,  splash_pool_hint_);
+    if (wifiText  != splashWifiText_  || wifiCol  != splashWifiCol_  ||
+        poolText  != splashPoolText_  || poolCol  != splashPoolCol_  ||
+        wifiHint  != splashWifiHint_  || poolHint != splashPoolHint_) {
+      splashWifiText_  = wifiText;
+      splashPoolText_  = poolText;
+      splashWifiCol_   = wifiCol;
+      splashPoolCol_   = poolCol;
+      splashWifiHint_  = wifiHint;
+      splashPoolHint_  = poolHint;
+      drawSplash(splashWifiText_,  splashWifiCol_,
+                 splashPoolText_,  splashPoolCol_,
+                 splashWifiHint_,  splashPoolHint_);
     }
     bool ok_now = (w == WL_CONNECTED) && (p.miningEnabled_ ? p.poolAlive_ : true);
     if (ok_now) {
-      if (splash_ready_ms_ == 0) {
-        splash_ready_ms_ = now;
+      if (splashReadyMs_ == 0) {
+        splashReadyMs_ = now;
       }
     } else {
-      splash_ready_ms_ = 0;
+      splashReadyMs_ = 0;
     }
     bool ready =
       ok_now &&
-      (now - splash_start_ms_ > 3000) &&
-      (splash_ready_ms_ != 0) &&
-      (now - splash_ready_ms_ > 1000);
+      (now - splashStartMs_ > 3000) &&
+      (splashReadyMs_ != 0) &&
+      (now - splashReadyMs_ > 1000);
     if (!ready) {
       return;
     }
-    splash_active_ = false;
+    splashActive_ = false;
     drawStaticFrame();
   }
   handlePageInput(suppressTouchBeep);
   drawTicker(tickerText);
-  static uint32_t last = 0;
-  if (now - last < 80) {
+  static uint32_t s_lastDrawMs = 0;
+  if (now - s_lastDrawMs < 80) {
     return;
   }
-  last = now;
+  s_lastDrawMs = now;
   updateLastShareClock(p);
   drawInfo(p);
 #ifndef DISABLE_AVATAR
@@ -251,20 +251,20 @@ void UIMining::drawAll(const PanelData& p, const String& tickerText, bool suppre
 void UIMining::drawStackchanScreen(const PanelData& p) {
   auto& d = M5.Display;
   uint32_t now = millis();
-  static uint32_t lastFrameMs = 0;
-  if (now - lastFrameMs < 80) {
+  static uint32_t s_lastFrameMs = 0;
+  if (now - s_lastFrameMs < 80) {
     return;
   }
-  lastFrameMs = now;
+  s_lastFrameMs = now;
   updateLastShareClock(p);
-  if (stackchan_needs_clear_) {
+  if (stackchanNeedsClear_) {
     d.fillScreen(BLACK);
-    stackchan_needs_clear_ = false;
+    stackchanNeedsClear_ = false;
   }
   avatar_.setScale(1.0f);
   int bubbleLines = 1;
-  for (int i = 0; i < stackchan_bubble_text_.length(); ++i) {
-    if (stackchan_bubble_text_.charAt(i) == '\n') bubbleLines++;
+  for (int i = 0; i < stackchanBubbleText_.length(); ++i) {
+    if (stackchanBubbleText_.charAt(i) == '\n') bubbleLines++;
   }
   const int bubbleHeight = 32 + bubbleLines * 16;
   int offsetY = 0;
@@ -279,32 +279,32 @@ void UIMining::drawStackchanScreen(const PanelData& p) {
   // Log only on attention state changes and with low-rate heartbeat.
   static uint32_t s_lastUiHbMs = 0;
   static bool s_prevAttnActive = false;
-  const uint32_t UI_HEARTBEAT_MS = 5000;
-  bool attnActiveNow = attention_active_ && ((int32_t)(attention_until_ms_ - now) > 0);
+  const uint32_t uiHeartbeatMs = 5000;
+  bool attnActiveNow = attentionActive_ && ((int32_t)(attentionUntilMs_ - now) > 0);
   bool attnChanged = (attnActiveNow != s_prevAttnActive);
-  if (attnChanged || (now - s_lastUiHbMs) >= UI_HEARTBEAT_MS) {
+  if (attnChanged || (now - s_lastUiHbMs) >= uiHeartbeatMs) {
     LOG_EVT_HEARTBEAT("EVT_UI_HEARTBEAT", "screen=stackchan attn=%d", attnActiveNow ? 1 : 0);
     s_lastUiHbMs = now;
     s_prevAttnActive = attnActiveNow;
   }
   // ===== REPLACE START: Attention override block (disable) =====
-  if (attention_active_) {
+  if (attentionActive_) {
   }
   // ===== REPLACE END =====
   // normal stackchan draw
   // ---- Apply deferred avatar updates (safe point) ----
-  if (stackchan_expr_pending_) {
+  if (stackchanExprPending_) {
     // Avoid noisy logs: only when changed/pending.
-    LOG_EVT_DEBUG("EVT_UI_AVATAR_SET_EXP", "exp=%d", (int)stackchan_expr_desired_);
-    avatar_.setExpression(stackchan_expr_desired_);
-    stackchan_expr_pending_ = false;
+    LOG_EVT_DEBUG("EVT_UI_AVATAR_SET_EXP", "exp=%d", (int)stackchanExprDesired_);
+    avatar_.setExpression(stackchanExprDesired_);
+    stackchanExprPending_ = false;
   }
-  if (stackchan_speech_pending_) {
+  if (stackchanSpeechPending_) {
     // NOTE: This is the most suspicious freeze point; log before/after.
-    LOG_EVT_INFO("EVT_UI_AVATAR_SET_SPEECH", "len=%u", (unsigned)stackchan_speech_desired_.length());
-    avatar_.setSpeechText(stackchan_speech_desired_.c_str());
+    LOG_EVT_INFO("EVT_UI_AVATAR_SET_SPEECH", "len=%u", (unsigned)stackchanSpeechDesired_.length());
+    avatar_.setSpeechText(stackchanSpeechDesired_.c_str());
     LOG_EVT_INFO("EVT_UI_AVATAR_SET_SPEECH_DONE", "ok=1");
-    stackchan_speech_pending_ = false;
+    stackchanSpeechPending_ = false;
   }
   updateAvatarMood(p);
   updateAvatarLiveliness();
@@ -350,25 +350,25 @@ void UIMining::setStackchanSpeech(const String& text) {
     }
     return s;
   };
-  stackchan_bubble_text_ = formatBubble(text);
-  stackchan_speech_desired_ = stackchan_bubble_text_;
-  stackchan_speech_pending_ = true;
-  stackchan_needs_clear_ = true;
+  stackchanBubbleText_ = formatBubble(text);
+  stackchanSpeechDesired_ = stackchanBubbleText_;
+  stackchanSpeechPending_ = true;
+  stackchanNeedsClear_ = true;
 }
 void UIMining::setAiOverlay(const AiUiOverlay& ov) {
   aiOverlay_ = ov;
 }
 void UIMining::setStackchanExpression(m5avatar::Expression exp) {
   // Defer avatar touching to drawStackchanScreen().
-  stackchan_expr_desired_ = exp;
-  stackchan_expr_pending_ = true;
+  stackchanExprDesired_ = exp;
+  stackchanExprPending_ = true;
 }
 void UIMining::setStackchanSpeechTiming(uint32_t talkMinMs, uint32_t talkVarMs,
                                         uint32_t silentMinMs, uint32_t silentVarMs) {
-  stackchan_talk_min_ms_   = talkMinMs;
-  stackchan_talk_var_ms_   = talkVarMs;
-  stackchan_silent_min_ms_ = silentMinMs;
-  stackchan_silent_var_ms_ = silentVarMs;
+  stackchanTalkMinMs_   = talkMinMs;
+  stackchanTalkVarMs_   = talkVarMs;
+  stackchanSilentMinMs_ = silentMinMs;
+  stackchanSilentVarMs_ = silentVarMs;
 }
 String UIMining::buildStackchanBubble(const PanelData& p) {
   int kind = random(0, 6);  // 0?5
@@ -523,7 +523,7 @@ void UIMining::drawSplash(const String& wifiText,  uint16_t wifiCol,
   drawGroup("Pool", poolText, poolCol, poolHint);
   info_.setTextSize(1);
   info_.setTextColor(COL_LABEL, BLACK);
-  String ver = String("v") + app_ver_;
+  String ver = String("v") + appVer_;
   int tw = info_.textWidth(ver);
   int vx = INF_W - PAD_LR - tw;
   int vy = INF_H - 12;
@@ -562,47 +562,47 @@ void UIMining::drawStaticFrame() {
 }
 // ===== Page input =====
 void UIMining::handlePageInput(bool suppressTouchBeep) {
-  static bool prevPressed = false;
+  static bool s_prevPressed = false;
   // NOTE: Touch is read in main loop (I2C) and cached via setTouchSnapshot().
   // UI must not touch I2C to avoid rare freezes/hangs.
   if (!touch_.enabled_) {
-    prevPressed = false;
+    s_prevPressed = false;
     return;
   }
   bool pressed = touch_.pressed_;
   int x = touch_.x_;
   int y = touch_.y_;
-  if (pressed != prevPressed) {
+  if (pressed != s_prevPressed) {
     LOG_TOUCH_DEBUG("pressed=%d x=%d y=%d",
                     static_cast<int>(pressed), x, y);
   }
-  if (pressed && !prevPressed) {
+  if (pressed && !s_prevPressed) {
     if (!suppressTouchBeep) {
       M5.Speaker.tone(1500, 50);
     }
     if (x >= X_INF && x < X_INF + INF_W &&
         y >= 0     && y < INF_H) {
-      info_page_    = (info_page_ + 1) % 3;
-      last_page_ms_ = millis();
+      infoPage_   = (infoPage_ + 1) % 3;
+      lastPageMs_ = millis();
     }
   }
-  prevPressed = pressed;
+  s_prevPressed = pressed;
 }
 // ===== Last share age =====
 void UIMining::updateLastShareClock(const PanelData& p) {
   uint32_t total = p.accepted_ + p.rejected_;
   uint32_t now   = millis();
-  if (last_share_ms_ == 0) {
-    last_share_ms_    = now;
-    last_total_shares_ = total;
+  if (lastShareMs_ == 0) {
+    lastShareMs_     = now;
+    lastTotalShares_ = total;
     return;
   }
-  if (total > last_total_shares_) {
-    last_total_shares_ = total;
-    last_share_ms_     = now;
+  if (total > lastTotalShares_) {
+    lastTotalShares_ = total;
+    lastShareMs_     = now;
   }
 }
 uint32_t UIMining::lastShareAgeSec() const {
-  if (last_share_ms_ == 0) return 99999;
-  return (millis() - last_share_ms_) / 1000;
+  if (lastShareMs_ == 0) return 99999;
+  return (millis() - lastShareMs_) / 1000;
 }

@@ -22,7 +22,7 @@ void UIMining::drawDots(const TextLayoutY& ly) {
   uint16_t inactive = COL_DARK;
   const int xs[3] = { IND_X1, IND_X2, IND_X3 };
   for (int i = 0; i < 3; ++i) {
-    if (i == info_page_) info_.fillCircle(xs[i], ly.ind_y, IND_R, active);
+    if (i == infoPage_) info_.fillCircle(xs[i], ly.ind_y, IND_R, active);
     else                 info_.drawCircle(xs[i], ly.ind_y, IND_R, inactive);
   }
 }
@@ -156,8 +156,8 @@ String UIMining::vPool(const String& name) const {
 // ===== Color helpers =====
 uint16_t UIMining::cHash(const PanelData& p) const {
   if (p.hrKh_ <= 0.05f) return 0xF800;
-  if (hr_ref_kh_ > 0.1f) {
-    float r = p.hrKh_ / hr_ref_kh_;
+  if (hrRefKh_ > 0.1f) {
+    float r = p.hrKh_ / hrRefKh_;
     if (r >= 0.90f && r <= 1.10f) return TFT_CYAN;
     if (r >= 0.70f) return WHITE;
     return 0xFD20;
@@ -220,20 +220,20 @@ float UIMining::readTempC() {
   return t;
 }
 int UIMining::batteryPct() {
-  static int last = -1;
+  static int s_lastPct = -1;
   int raw = static_cast<int>(M5.Power.getBatteryLevel());
   if (raw < 0 || raw > 100) {
-    return (last < 0) ? 0 : last;
+    return (s_lastPct < 0) ? 0 : s_lastPct;
   }
-  if (last < 0) {
-    last = raw;
-    return last;
+  if (s_lastPct < 0) {
+    s_lastPct = raw;
+    return s_lastPct;
   }
-  if (abs(raw - last) > 20) {
-    return last;
+  if (abs(raw - s_lastPct) > 20) {
+    return s_lastPct;
   }
-  last = raw;
-  return last;
+  s_lastPct = raw;
+  return s_lastPct;
 }
 bool UIMining::isExternalPower() {
   if (M5.Power.isCharging()) return true;
@@ -310,7 +310,7 @@ void UIMining::drawPoolNameSmall(const TextLayoutY& ly, const String& name) {
 void UIMining::drawInfo(const PanelData& p) {
   // Clear only the text block area (header + 4 rows)
   info_.fillScreen(BLACK);
-  switch (info_page_) {
+  switch (infoPage_) {
     case 0: drawPage0(p); break;
     case 1: drawPage1(p); break;
     default: drawPage2(p); break;

@@ -81,8 +81,8 @@ public:
   void updateAvatarLiveliness();
   void setStackchanSpeechTiming(uint32_t talkMinMs, uint32_t talkVarMs,
                                 uint32_t silentMinMs, uint32_t silentVarMs);
-  uint32_t stackchanSpeechSeq() const { return stackchan_speech_seq_; }
-  const String& stackchanSpeechText() const { return stackchan_speech_text_; }
+  uint32_t stackchanSpeechSeq() const { return stackchanSpeechSeq_; }
+  const String& stackchanSpeechText() const { return stackchanSpeechText_; }
   void setStackchanSpeech(const String& text);
   void setStackchanExpression(m5avatar::Expression exp);
   void setAiOverlay(const AiUiOverlay& ov);
@@ -117,59 +117,59 @@ private:
   TextLayoutY computeTextLayoutY() const;
   TouchSnapshot touch_;
   // ---------- State ----------
-  String app_name_;
-  String app_ver_;
+  String appName_;
+  String appVer_;
   m5avatar::Avatar avatar_;
   M5Canvas info_;
   M5Canvas tick_;
-  int      info_page_      = 0;
-  uint32_t last_page_ms_   = 0;
-  uint32_t auto_page_ms_   = 0;
-  uint32_t last_total_shares_ = 0;
-  uint32_t last_share_ms_     = 0;
+  int      infoPage_      = 0;
+  uint32_t lastPageMs_    = 0;
+  uint32_t autoPageMs_    = 0;
+  uint32_t lastTotalShares_ = 0;
+  uint32_t lastShareMs_     = 0;
   // ticker
-  String   ticker_last_;
-  String   ticker_log_;
-  int32_t  ticker_offset_ = 0;
-  uint32_t last_tick_ms_  = 0;
-  float hr_ref_kh_ = 0.0f;
-  bool     splash_active_   = false;
-  uint32_t splash_start_ms_ = 0;
-  uint32_t splash_ready_ms_ = 0;
-  String   splash_wifi_text_;
-  String   splash_pool_text_;
-  String   splash_wifi_hint_;
-  String   splash_pool_hint_;
-  uint16_t splash_wifi_col_  = WHITE;
-  uint16_t splash_pool_col_  = WHITE;
-  bool   in_stackchan_mode_   = false;
-  bool   stackchan_needs_clear_ = false;
-  bool     stackchan_talking_        = false;
-  uint32_t stackchan_phase_start_ms_ = 0;
-  uint32_t stackchan_phase_dur_ms_   = 0;
-  String   stackchan_bubble_text_;
+  String   tickerLast_;
+  String   tickerLog_;
+  int32_t  tickerOffset_ = 0;
+  uint32_t lastTickMs_   = 0;
+  float hrRefKh_ = 0.0f;
+  bool     splashActive_   = false;
+  uint32_t splashStartMs_  = 0;
+  uint32_t splashReadyMs_  = 0;
+  String   splashWifiText_;
+  String   splashPoolText_;
+  String   splashWifiHint_;
+  String   splashPoolHint_;
+  uint16_t splashWifiCol_  = WHITE;
+  uint16_t splashPoolCol_  = WHITE;
+  bool   inStackchanMode_    = false;
+  bool   stackchanNeedsClear_ = false;
+  bool     stackchanTalking_        = false;
+  uint32_t stackchanPhaseStartMs_   = 0;
+  uint32_t stackchanPhaseDurMs_     = 0;
+  String   stackchanBubbleText_;
   // ---- Stackchan avatar updates (deferred) ----
   // M5Stack-Avatar sometimes freezes when setExpression/setSpeechText is called
   // from outside the draw loop. So we only *request* updates here and apply them
   // inside drawStackchanScreen().
-  bool                  stackchan_expr_pending_   = false;
-  m5avatar::Expression  stackchan_expr_desired_   = m5avatar::Expression::Neutral;
-  bool                  stackchan_speech_pending_ = false;
-  String                stackchan_speech_desired_;
-  uint32_t stackchan_speech_seq_ = 0;
-  String   stackchan_speech_text_;
+  bool                  stackchanExprPending_   = false;
+  m5avatar::Expression  stackchanExprDesired_   = m5avatar::Expression::Neutral;
+  bool                  stackchanSpeechPending_ = false;
+  String                stackchanSpeechDesired_;
+  uint32_t stackchanSpeechSeq_ = 0;
+  String   stackchanSpeechText_;
   // "attention" state ("WHAT?" mode)
-  bool     attention_active_    = false;
-  uint32_t attention_until_ms_  = 0;
-  String   attention_default_text_ = "WHAT?";
-  String   attention_text_         = "WHAT?";
-  uint32_t stackchan_talk_min_ms_   = 2500;
-  uint32_t stackchan_talk_var_ms_   = 1500;
-  uint32_t stackchan_silent_min_ms_ = 10000;
-  uint32_t stackchan_silent_var_ms_ = 0;
-  int8_t   mood_level_        = 0;
-  uint32_t mood_last_calc_ms_ = 0;
-  uint32_t mood_last_report_ms_ = 0;
+  bool     attentionActive_       = false;
+  uint32_t attentionUntilMs_      = 0;
+  String   attentionDefaultText_  = "WHAT?";
+  String   attentionText_         = "WHAT?";
+  uint32_t stackchanTalkMinMs_    = 2500;
+  uint32_t stackchanTalkVarMs_    = 1500;
+  uint32_t stackchanSilentMinMs_  = 10000;
+  uint32_t stackchanSilentVarMs_  = 0;
+  int8_t   moodLevel_        = 0;
+  uint32_t moodLastCalcMs_   = 0;
+  uint32_t moodLastReportMs_ = 0;
   // ---------- Static frame ----------
   void drawStaticFrame();
   // ---------- Page input ----------
