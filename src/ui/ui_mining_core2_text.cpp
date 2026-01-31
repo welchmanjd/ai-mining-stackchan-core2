@@ -22,8 +22,8 @@ void UIMining::drawDots(const TextLayoutY& ly) {
   uint16_t inactive = kColDark;
   const int xs[3] = { kIndX1, kIndX2, kIndX3 };
   for (int i = 0; i < 3; ++i) {
-    if (i == infoPage_) info_.fillCircle(xs[i], ly.ind_y, kIndR, active);
-    else                 info_.drawCircle(xs[i], ly.ind_y, kIndR, inactive);
+    if (i == infoPage_) info_.fillCircle(xs[i], ly.indY, kIndR, active);
+    else                 info_.drawCircle(xs[i], ly.indY, kIndR, inactive);
   }
 }
 void UIMining::drawHeader(const char* title, const TextLayoutY& ly) {

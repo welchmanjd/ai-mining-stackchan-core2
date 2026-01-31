@@ -112,7 +112,7 @@ private:
   static constexpr uint16_t kColDark  = 0x4208;
   struct TextLayoutY {
     int header, y1, y2, y3, y4;
-    int ind_y;
+    int indY;
   };
   TextLayoutY computeTextLayoutY() const;
   TouchSnapshot touch_;

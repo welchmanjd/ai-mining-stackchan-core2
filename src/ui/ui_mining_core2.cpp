@@ -419,7 +419,7 @@ UIMining::TextLayoutY UIMining::computeTextLayoutY() const {
   ly.y2 = ly.y1 + kCharH + gap;
   ly.y3 = ly.y2 + kCharH + gap;
   ly.y4 = ly.y3 + kCharH + gap;
-  ly.ind_y = ly.header + (kCharH / 2);
+  ly.indY = ly.header + (kCharH / 2);
   return ly;
 }
 void UIMining::drawSplash(const String& wifiText,  uint16_t wifiCol,

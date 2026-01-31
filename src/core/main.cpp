@@ -311,41 +311,41 @@ static void applyMiningPolicyForTts_(bool ttsBusy, bool aiBusy) {
 // === src/main.cpp : replace whole function ===
 static bool wifiConnect_() {
   const auto& cfg = appConfig();
-  enum WifiState {
-    WIFI_NOT_STARTED,
-    WIFI_CONNECTING,
-    WIFI_DONE
-  };
-    static WifiState   s_state   = WIFI_NOT_STARTED;
+    enum WifiState {
+      NotStarted,
+      Connecting,
+      Done
+    };
+    static WifiState   s_state   = NotStarted;
     static uint32_t    s_startMs = 0;
     static const uint32_t wifiConnectTimeoutMs = 20000UL;
     switch (s_state) {
-      case WIFI_NOT_STARTED: {
+      case NotStarted: {
         WiFi.mode(WIFI_STA);
         WiFi.begin(cfg.wifiSsid_, cfg.wifiPass_);
         s_startMs = millis();
         MC_LOGI("WIFI", "begin connect (ssid=%s)", cfg.wifiSsid_);
-        s_state = WIFI_CONNECTING;
+        s_state = Connecting;
         return false;
       }
-      case WIFI_CONNECTING: {
+      case Connecting: {
         wl_status_t st = WiFi.status();
         if (st == WL_CONNECTED) {
           MC_EVT("WIFI", "connected: %s", WiFi.localIP().toString().c_str());
-          s_state = WIFI_DONE;
+          s_state = Done;
           return true;
         }
         if (millis() - s_startMs > wifiConnectTimeoutMs) {
           MC_LOGW("WIFI", "connect timeout (status=%d)", (int)st);
-          s_state = WIFI_DONE;
+          s_state = Done;
           return true;
         }
         return false;
       }
-    case WIFI_DONE:
-    default:
-      return true;
-  }
+      case Done:
+      default:
+        return true;
+    }
 }
 static void setupTimeNtp_() {
   setenv("TZ", "JST-9", 1);

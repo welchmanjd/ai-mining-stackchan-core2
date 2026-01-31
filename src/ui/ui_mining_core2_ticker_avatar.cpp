@@ -153,32 +153,32 @@ void UIMining::updateAvatarLiveliness() {
   else { /* -2 */            energy = 0.60f; eyeOpen = 0.75f; gazeAmp = 0.55f; }
   struct State {
     bool     initialized;
-    uint32_t saccade_interval;
-    uint32_t last_saccade_ms;
+    uint32_t saccadeInterval;
+    uint32_t lastSaccadeMs;
     float    vertical;
     float    horizontal;
-    uint32_t blink_interval;
-    uint32_t last_blink_ms;
-    bool     eye_open;
+    uint32_t blinkInterval;
+    uint32_t lastBlinkMs;
+    bool     eyeOpen;
     int      count;
-    uint32_t last_update_ms;
+    uint32_t lastUpdateMs;
   };
   static State s_state;
   if (!s_state.initialized) {
     s_state.initialized       = true;
-    s_state.saccade_interval  = 1000;
-    s_state.last_saccade_ms   = now;
+    s_state.saccadeInterval   = 1000;
+    s_state.lastSaccadeMs     = now;
     s_state.vertical          = 0.0f;
     s_state.horizontal        = 0.0f;
-    s_state.blink_interval    = 2500;
-    s_state.last_blink_ms     = now;
-    s_state.eye_open          = true;
+    s_state.blinkInterval     = 2500;
+    s_state.lastBlinkMs       = now;
+    s_state.eyeOpen           = true;
     s_state.count             = 0;
-    s_state.last_update_ms    = now;
+    s_state.lastUpdateMs      = now;
   }
   if (bubbleActive) {
     avatar_.setGaze(0.0f, 0.0f);
-  } else if (now - s_state.last_saccade_ms > s_state.saccade_interval) {
+  } else if (now - s_state.lastSaccadeMs > s_state.saccadeInterval) {
     s_state.vertical   = (((float)random(-1000, 1001)) / 1000.0f) * gazeAmp;
     s_state.horizontal = (((float)random(-1000, 1001)) / 1000.0f) * gazeAmp;
     // clamp
@@ -187,25 +187,25 @@ void UIMining::updateAvatarLiveliness() {
     if (s_state.horizontal > 1.0f) s_state.horizontal = 1.0f;
     if (s_state.horizontal < -1.0f) s_state.horizontal = -1.0f;
     avatar_.setGaze(s_state.vertical, s_state.horizontal);
-    if (moodLevel_ >= 2)      s_state.saccade_interval = 350 + 80  * (uint32_t)random(0, 15);
-    else if (moodLevel_ == 1) s_state.saccade_interval = 450 + 90  * (uint32_t)random(0, 15);
-    else if (moodLevel_ == 0) s_state.saccade_interval = 500 + 100 * (uint32_t)random(0, 20);
-    else                       s_state.saccade_interval = 900 + 150 * (uint32_t)random(0, 20);
-    s_state.last_saccade_ms  = now;
+    if (moodLevel_ >= 2)      s_state.saccadeInterval = 350 + 80  * (uint32_t)random(0, 15);
+    else if (moodLevel_ == 1) s_state.saccadeInterval = 450 + 90  * (uint32_t)random(0, 15);
+    else if (moodLevel_ == 0) s_state.saccadeInterval = 500 + 100 * (uint32_t)random(0, 20);
+    else                       s_state.saccadeInterval = 900 + 150 * (uint32_t)random(0, 20);
+    s_state.lastSaccadeMs  = now;
   }
-  if (now - s_state.last_blink_ms > s_state.blink_interval) {
-    if (s_state.eye_open) {
+  if (now - s_state.lastBlinkMs > s_state.blinkInterval) {
+    if (s_state.eyeOpen) {
       avatar_.setEyeOpenRatio(0.0f);
-      s_state.blink_interval = 300 + 10 * (uint32_t)random(0, 20);
+      s_state.blinkInterval = 300 + 10 * (uint32_t)random(0, 20);
     } else {
       avatar_.setEyeOpenRatio(eyeOpen);
-      s_state.blink_interval = 2500 + 100 * (uint32_t)random(0, 20);
+      s_state.blinkInterval = 2500 + 100 * (uint32_t)random(0, 20);
     }
-    s_state.eye_open       = !s_state.eye_open;
-    s_state.last_blink_ms  = now;
+    s_state.eyeOpen       = !s_state.eyeOpen;
+    s_state.lastBlinkMs   = now;
   }
-  uint32_t dt   = now - s_state.last_update_ms;
-  s_state.last_update_ms = now;
+  uint32_t dt   = now - s_state.lastUpdateMs;
+  s_state.lastUpdateMs = now;
   int step = dt / 33;
   if (step < 1) step = 1;
   s_state.count = (s_state.count + step) % 100;
@@ -225,21 +225,21 @@ void UIMining::updateAvatarLiveliness() {
       bool     initialized;
       float    px, py;
       float    tx, ty;
-      uint32_t next_change_ms;
+      uint32_t nextChangeMs;
     };
     static BodyState s_bodyState;
     if (!s_bodyState.initialized) {
       s_bodyState.initialized     = true;
       s_bodyState.px = s_bodyState.py       = 0.0f;
       s_bodyState.tx = s_bodyState.ty       = 0.0f;
-      s_bodyState.next_change_ms  = now + 2000;
+      s_bodyState.nextChangeMs  = now + 2000;
     }
-    if ((int32_t)(now - s_bodyState.next_change_ms) >= 0) {
+    if ((int32_t)(now - s_bodyState.nextChangeMs) >= 0) {
       float rangeX = 20.0f * energy;
       float rangeY = 12.0f * energy;
       s_bodyState.tx = ((float)random(-1000, 1001)) / 1000.0f * rangeX;
       s_bodyState.ty = ((float)random(-1000, 1001)) / 1000.0f * rangeY;
-      s_bodyState.next_change_ms = now + 1000 + (uint32_t)random(0, 4000);
+      s_bodyState.nextChangeMs = now + 1000 + (uint32_t)random(0, 4000);
     }
     float follow = 0.1f* energy;
     s_bodyState.px += (s_bodyState.tx - s_bodyState.px) * follow;
