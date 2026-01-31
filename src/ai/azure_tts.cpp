@@ -1,4 +1,4 @@
-ï»¿// src/azure_tts.cpp
+// src/azure_tts.cpp
 #include "ai/azure_tts.h"
 #include "config/mc_config_store.h"
 #include "core/logging.h"
@@ -250,7 +250,7 @@ static bool dechunkMemory_(const uint8_t* in, size_t inLen, uint8_t** outBuf, si
 
 static void logHeadBytes_(const uint8_t* buf, size_t len);
 
-static uint32_t s_chunkedSalvageCount = 0;
+static uint32_t g_chunkedSalvageCount = 0;
 
 
 // === src/azure_tts.cpp : replace whole function ===
@@ -263,7 +263,7 @@ static void salvageChunkedLeakIfNeeded_(uint8_t** pBuf, size_t* pLen) {
   if (memcmp(buf, "RIFF", 4) == 0) return; // already OK
   if (!looksLikeChunkedLeak_(buf, len)) return;
 
-  // ç•°å¸¸ç³»ãªã®ã§ L1(WARN) ã§æ®‹ã™ã€‚è©³ç´°ã¯ DIAG/TRACE ã«å¯„ã›ã‚‹ã€‚
+  // ˆÙíŒn‚È‚Ì‚Å L1(WARN) ‚Åc‚·BÚ×‚Í DIAG/TRACE ‚ÉŠñ‚¹‚éB
   MC_LOGW("TTS", "chunked markers leaked into body -> salvage");
   MC_LOGT("TTS", "chunked leak head dump follows");
 
@@ -272,9 +272,9 @@ static void salvageChunkedLeakIfNeeded_(uint8_t** pBuf, size_t* pLen) {
   uint8_t* fixed = nullptr;
   size_t fixedLen = 0;
   if (dechunkMemory_(buf, len, &fixed, &fixedLen)) {
-    s_chunkedSalvageCount++;
+    g_chunkedSalvageCount++;
     MC_LOGD("TTS", "salvaged #%lu: %u -> %u bytes",
-            (unsigned long)s_chunkedSalvageCount,
+            (unsigned long)g_chunkedSalvageCount,
             (unsigned)len, (unsigned)fixedLen);
 
     free(buf);
@@ -289,31 +289,31 @@ static void salvageChunkedLeakIfNeeded_(uint8_t** pBuf, size_t* pLen) {
 
 
 
-// å…¥åŠ›ãŒ
-// - "my-speech-app"ï¼ˆã‚µãƒ–ãƒ‰ãƒ¡ã‚¤ãƒ³ã ã‘ï¼‰
-// - "my-speech-app.cognitiveservices.azure.com"ï¼ˆhostï¼‰
-// - "https://my-speech-app.cognitiveservices.azure.com/..."ï¼ˆURLï¼‰
-// ã®ã©ã‚Œã§ã‚‚OKã«ã—ã¦ã€host ã ã‘è¿”ã™
+// “ü—Í‚ª
+// - "my-speech-app"iƒTƒuƒhƒƒCƒ“‚¾‚¯j
+// - "my-speech-app.cognitiveservices.azure.com"ihostj
+// - "https://my-speech-app.cognitiveservices.azure.com/..."iURLj
+// ‚Ì‚Ç‚ê‚Å‚àOK‚É‚µ‚ÄAhost ‚¾‚¯•Ô‚·
 static String normalizeCustomHost_(const String& inRaw) {
   String s = trimCopy_(inRaw);
 
-  // Webå´ã®ã‚¯ãƒªã‚¢æŒ‡å®šç”¨
+  // Web‘¤‚ÌƒNƒŠƒAw’è—p
   if (s == "-" || s.equalsIgnoreCase("none")) return "";
 
   if (!s.length()) return "";
 
-  // schemeé™¤å»
+  // schemeœ‹
   if (s.startsWith("https://")) s = s.substring(8);
   else if (s.startsWith("http://")) s = s.substring(7);
 
-  // pathé™¤å»
+  // pathœ‹
   int slash = s.indexOf('/');
   if (slash >= 0) s = s.substring(0, slash);
 
   s.trim();
   if (!s.length()) return "";
 
-  // "xxx" ã ã‘ãªã‚‰ ".cognitiveservices.azure.com" ã‚’è£œã†
+  // "xxx" ‚¾‚¯‚È‚ç ".cognitiveservices.azure.com" ‚ğ•â‚¤
   if (s.indexOf('.') < 0) {
     s += ".cognitiveservices.azure.com";
   }
@@ -391,7 +391,7 @@ static bool parseWavPcm_(const uint8_t* buf, size_t len, WavPcmInfo_* out) {
 static void logHeadBytes_(const uint8_t* buf, size_t len) {
   if (!buf || len == 0) return;
 
-  // å£ç´™åŒ–ã—ã†ã‚‹ã®ã§ TRACE ã«å¯„ã›ã‚‹
+  // •Ç†‰»‚µ‚¤‚é‚Ì‚Å TRACE ‚ÉŠñ‚¹‚é
   char s[64];
   size_t n = (len < 12) ? len : 12;
   for (size_t i = 0; i < n; i++) {
@@ -418,18 +418,18 @@ void AzureTts::begin(uint8_t volume) {
   cfg_ = RuntimeConfig{};
   keepaliveEnabled_ = true;
 
-  // â˜…runtime config (LittleFS) â†’ fallback (config_private)
+  // šruntime config (LittleFS) ¨ fallback (config_private)
   region_ = trimCopy_(mcCfgAzRegion());
   key_    = trimCopy_(mcCfgAzKey());
   defaultVoice_ = trimCopy_(mcCfgAzVoice());
 
-  // ä»»æ„ï¼šcustom host / endpoint
+  // ”CˆÓFcustom host / endpoint
   customHost_ = normalizeCustomHost_(mcCfgAzEndpoint());
 
   if (customHost_.length()) {
     // custom endpoint
     endpoint_ = "https://" + customHost_ + "/tts/cognitiveservices/v1";
-    // URL/hostã¯ãƒ­ã‚°ã«å‡ºã•ãªã„ï¼ˆç’°å¢ƒæƒ…å ±ã®å£ç´™åŒ–é˜²æ­¢ï¼‰
+    // URL/host‚ÍƒƒO‚Éo‚³‚È‚¢iŠÂ‹«î•ñ‚Ì•Ç†‰»–h~j
     MC_LOGD("TTS", "endpoint: custom (len=%u)", (unsigned)endpoint_.length());
   } else if (region_.length()) {
     // region endpoint
@@ -440,7 +440,7 @@ void AzureTts::begin(uint8_t volume) {
     MC_LOGD("TTS", "endpoint: (not set)");
   }
 
-  // è¨­å®šè©³ç´°ã¯ DIAGï¼ˆé‹ç”¨ã§ã¯ä¸è¦ï¼‰
+  // İ’èÚ×‚Í DIAGi‰^—p‚Å‚Í•s—vj
   MC_LOGD("TTS", "azure key: %s", key_.length() ? "set" : "(not set)");
   MC_LOGD("TTS", "voice: %s", defaultVoice_.length() ? defaultVoice_.c_str() : "(not set)");
   MC_LOGD("TTS", "cfg lens: region=%u voice=%u key=%u endpoint=%u",
@@ -529,7 +529,7 @@ void AzureTts::taskEntry(void* pv) {
 
 bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voice) {
 #if TTS_DEBUG_ENABLED
-  // DEBUGã§ã‚‚ã€Œå…¨æ–‡/å…ˆé ­(head)ã€ã¯å‡ºã•ãªã„ï¼ˆç§˜å¯†ãƒ»å€‹äººæƒ…å ±ä¿è­·ï¼‰
+  // DEBUG‚Å‚àu‘S•¶/æ“ª(head)v‚Ío‚³‚È‚¢i”é–§EŒÂlî•ñ•ÛŒìj
   MC_LOGD("TTS", "speakAsync call id=%lu text_bytes=%u",
           (unsigned long)speakId,
           (unsigned)text.length());
@@ -566,7 +566,7 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
     return false;
   }
 
-  // Acceptedï¼ˆEVTã¯å¸¸æ™‚ï¼šãƒ‘ã‚¤ãƒ—ãƒ©ã‚¤ãƒ³è¿½è·¡ç”¨ / ãŸã ã— textå†…å®¹ã¯å‡ºã•ãªã„ï¼‰
+  // AcceptediEVT‚ÍíFƒpƒCƒvƒ‰ƒCƒ“’ÇÕ—p / ‚½‚¾‚µ text“à—e‚Ío‚³‚È‚¢j
   MC_EVT("TTS", "accepted id=%lu text_bytes=%u",
          (unsigned long)speakId,
          (unsigned)text.length());
@@ -741,7 +741,7 @@ void AzureTts::poll() {
       M5.Speaker.begin();
     }
 
-    // volume safetyï¼ˆè©³ç´°ã¯D/Tï¼‰
+    // volume safetyiÚ×‚ÍD/Tj
     {
       const int vol = (int)M5.Speaker.getVolume();
       MC_LOGT("TTS", "spk state: enabled=%d playing=%d vol=%d defaultVol=%d",
@@ -778,7 +778,7 @@ void AzureTts::poll() {
       return;
     }
 
-    // play startedï¼ˆEVTï¼‰
+    // play startediEVTj
     MC_EVT("TTS", "play start id=%lu bytes=%u",
            (unsigned long)currentSpeakId_, (unsigned)wavLen_);
 
@@ -820,7 +820,7 @@ void AzureTts::poll() {
         i2sLocked_ = false;
       }
 
-      // playback okï¼ˆEVTï¼‰
+      // playback okiEVTj
       MC_EVT("TTS", "play done id=%lu", (unsigned long)currentSpeakId_);
 
       last_.ok = true;
@@ -871,7 +871,7 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
   constexpr uint32_t kTokenTimeoutMs = 6000;
 
   auto tryUrl = [&](const String& url) -> bool {
-    (void)url; // URLè‡ªä½“ã¯ãƒ­ã‚°ã«å‡ºã•ãªã„ï¼ˆç’°å¢ƒä¾å­˜æƒ…å ±ã®å£ç´™åŒ–é˜²æ­¢ï¼‰
+    (void)url; // URL©‘Ì‚ÍƒƒO‚Éo‚³‚È‚¢iŠÂ‹«ˆË‘¶î•ñ‚Ì•Ç†‰»–h~j
 
     WiFiClientSecure c;
     c.setInsecure();
@@ -898,14 +898,14 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
       tok.trim();
       h.end();
       if (tok.length()) {
-        *outTok = tok; // â˜…ãƒ­ã‚°ã«å‡ºã•ãªã„
+        *outTok = tok; // šƒƒO‚Éo‚³‚È‚¢
         return true;
       }
       MC_LOGD("TTS_TOKEN", "HTTP 200 but empty body");
       return false;
     }
 
-    // æœ¬æ–‡ã¯ãƒˆãƒ¼ã‚¯ãƒ³ç³»ã®å¯èƒ½æ€§ãŒã‚ã‚‹ã®ã§çµ¶å¯¾ãƒ­ã‚°ã«å‡ºã•ãªã„
+    // –{•¶‚Íƒg[ƒNƒ“Œn‚Ì‰Â”\«‚ª‚ ‚é‚Ì‚Åâ‘ÎƒƒO‚Éo‚³‚È‚¢
     (void)h.getString();
     MC_LOGD("TTS_TOKEN", "HTTP %d", code);
     h.end();
@@ -944,11 +944,11 @@ bool AzureTts::ensureToken_() {
   String tok;
   bool ok = fetchTokenOld_(&tok);
   if (ok && tok.length()) {
-    token_ = tok; // â˜…ç§˜å¯†ï¼šãƒ­ã‚°ã«å‡ºã•ãªã„
+    token_ = tok; // š”é–§FƒƒO‚Éo‚³‚È‚¢
     tokenExpireMs_ = now + 9 * 60 * 1000; // 9min cache
     tokenFailCount_ = 0;
 
-    // ãƒˆãƒ¼ã‚¯ãƒ³æ›´æ–°ã¯é »åº¦ä½ã„ã®ã§ L1+ ã«ã‚µãƒãƒªOKï¼ˆå†…å®¹ã¯å‡ºã•ãªã„ï¼‰
+    // ƒg[ƒNƒ“XV‚Í•p“x’á‚¢‚Ì‚Å L1+ ‚ÉƒTƒ}ƒŠOKi“à—e‚Ío‚³‚È‚¢j
     MC_LOGI("TTS_TOKEN", "ok (cached 9min)");
     return true;
   }
@@ -958,7 +958,7 @@ bool AzureTts::ensureToken_() {
   uint32_t backoff = 1000u * (1u << min<int>(tokenFailCount_, 6)); // up to ~64s
   tokenFailUntilMs_ = now + backoff;
 
-  // é€£ç¶šå¤±æ•—ã¯å£ç´™åŒ–ã—ã‚„ã™ã„ã®ã§ RL
+  // ˜A‘±¸”s‚Í•Ç†‰»‚µ‚â‚·‚¢‚Ì‚Å RL
   MC_LOGI_RL("TTS.token.fail", 5000, "TTS_TOKEN",
              "fail (cooldown=%us)", (unsigned)(backoff / 1000));
   return false;
@@ -1032,7 +1032,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   https_.addHeader("Accept-Encoding", "identity");
   https_.addHeader("Connection", useKeepAlive ? "keep-alive" : "close");
 
-  // Authorizationï¼ˆâ˜…tokenã¯ãƒ­ã‚°ã«å‡ºã•ãªã„ï¼‰
+  // Authorizationištoken‚ÍƒƒO‚Éo‚³‚È‚¢j
   https_.addHeader("Authorization", "Bearer " + token_);
 
   // custom endpoint requires extra region header sometimes
@@ -1044,7 +1044,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   last_.httpCode = code;
 
   if (code != 200) {
-    // æœ¬æ–‡ã¯ãƒ­ã‚°ã«å‡ºã•ãªã„ï¼ˆå€‹äººæƒ…å ±/ç§˜å¯†ã®æ··å…¥å¯èƒ½æ€§ã‚’ã‚¼ãƒ­ã«ã™ã‚‹ï¼‰
+    // –{•¶‚ÍƒƒO‚Éo‚³‚È‚¢iŒÂlî•ñ/”é–§‚Ì¬“ü‰Â”\«‚ğƒ[ƒ‚É‚·‚éj
     String body = https_.getString();
     const size_t bodyLen = body.length();
     (void)body;
@@ -1053,7 +1053,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
 
     https_.end();
 
-    // å¤±æ•—æ™‚ã¯ã—ã°ã‚‰ã keep-alive ã‚’ç„¡åŠ¹åŒ–ï¼ˆã‚»ãƒƒã‚·ãƒ§ãƒ³ç ´æã£ã½ã„å¯¾ç­–ï¼‰
+    // ¸”s‚Í‚µ‚Î‚ç‚­ keep-alive ‚ğ–³Œø‰»iƒZƒbƒVƒ‡ƒ“”j‘¹‚Á‚Û‚¢‘Îôj
     disable_keepalive_until_ms_ = millis() + 5000;
     return false;
   }
@@ -1075,7 +1075,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
     delay(1);
   }
 
-  // content-length ãŒå–ã‚Œãªã„å ´åˆã¯ chunked ã¨ã¿ãªã™
+  // content-length ‚ªæ‚ê‚È‚¢ê‡‚Í chunked ‚Æ‚İ‚È‚·
   int total = https_.getSize(); // -1 means unknown (chunked)
   if (total <= 0) {
     uint8_t* buf = nullptr;
@@ -1088,7 +1088,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
       return false;
     }
 
-    // â˜… extra safety
+    // š extra safety
     salvageChunkedLeakIfNeeded_(&buf, &used);
 
     MC_LOGT("TTS", "rx wav bytes=%u (chunked keepAlive=%d)",
@@ -1126,7 +1126,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
     return false;
   }
 
-  // â˜… safety
+  // š safety
   size_t outN = got;
   salvageChunkedLeakIfNeeded_(&buf, &outN);
 
@@ -1152,10 +1152,10 @@ void AzureTts::taskBody() {
     last_.seq = seq_;
     uint32_t t0 = millis();
 
-    // fetché–‹å§‹ï¼ˆEVTï¼šæ™‚ç³»åˆ—ã§è¿½ãˆã‚‹ã‚ˆã†ã«ï¼‰
+    // fetchŠJniEVTFŒn—ñ‚Å’Ç‚¦‚é‚æ‚¤‚Éj
     MC_EVT("TTS", "fetch start id=%lu", (unsigned long)currentSpeakId_);
 
-    String ssml = buildSsml_(reqText_, reqVoice_); // â˜…SSMLå…¨æ–‡ã¯ãƒ­ã‚°ã«å‡ºã•ãªã„
+    String ssml = buildSsml_(reqText_, reqVoice_); // šSSML‘S•¶‚ÍƒƒO‚Éo‚³‚È‚¢
     uint8_t* buf = nullptr;
     size_t len = 0;
 
@@ -1164,7 +1164,7 @@ void AzureTts::taskBody() {
     last_.ok = ok;
     last_.bytes = (uint32_t)len;
 
-    // fetchçµæœï¼ˆEVTï¼šè¦ç‚¹ï¼‰
+    // fetchŒ‹‰ÊiEVTF—v“_j
     MC_EVT("TTS", "fetch done id=%lu ok=%d http=%d bytes=%lu took=%lums",
            (unsigned long)currentSpeakId_,
            ok ? 1 : 0,
@@ -1252,6 +1252,7 @@ void AzureTts::resetSession_() {
   token_ = "";
   tokenExpireMs_ = 0;
 }
+
 
 
 

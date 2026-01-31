@@ -2,20 +2,21 @@
 #pragma once
 #include <Arduino.h>
 
-// 起動時に一度だけLittleFSから設定をロード
+// LittleFS にある設定を読み込み、ランタイムに反映する。
 void mcConfigBegin();
 
-// WebSerial等から key/value をセット（未保存）
+// WebSerial からの key/value を検証して一時反映する（保存はしない）。
 bool mcConfigSetKV(const String& key, const String& val, String& err);
 
-// LittleFSへ保存
+// LittleFS に保存する。
 bool mcConfigSave(String& err);
 
-// 現在の設定を“マスク付き”JSONで返す（秘密は *_set の bool で表現）
+// 設定値をマスクした JSON を返す（@CFG 用）。
+// *_set 系の bool は含めない。
 String mcConfigGetMaskedJson();
 
 // ---- getters ----
-// runtime(=LittleFS)が空なら、config_private.h のマクロへフォールバック（distでは無効化される）
+// runtime(=LittleFS) で上書きできない値は config_private.h の値を優先して返す。
 const char* mcCfgWifiSsid();
 const char* mcCfgWifiPass();
 
@@ -26,7 +27,7 @@ const char* mcCfgAzRegion();
 const char* mcCfgAzKey();
 const char* mcCfgAzVoice();
 
-// 任意：カスタムサブドメイン/エンドポイント（未設定なら空）
+// カスタムサブドメイン/エンドポイント（未設定なら空文字）。
 const char* mcCfgAzEndpoint();
 
 const char* mcCfgAttentionText();

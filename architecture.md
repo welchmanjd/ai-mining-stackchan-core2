@@ -101,6 +101,16 @@ Status: config, utils, audio, ai, core, ui, and behavior are already moved under
   `config_private.sample.h`.
 - Runtime and persisted settings should be centralized in `config`.
 
+## Naming Rules (Code Style)
+### Constants
+- File-scope constants use `k` prefix + UpperCamelCase: `kDisplaySleepMessageMs`.
+- Compile-time config macros keep `MC_` prefix + ALL_CAPS: `MC_AI_TALK_ENABLED`.
+- Enum constants follow the enum’s naming style; avoid mixing styles inside one enum.
+
+### Statics
+- File-scope mutable statics use `g_` prefix: `g_tts`, `g_displaySleepTimeoutMs`.
+- Function-scope statics use `s_` prefix: `s_lastUiHbMs`.
+
 ## Extension Points
 - Add a new AI provider: place in `/src/ai` and expose a narrow interface.
 - Add a new UI screen: place in `/src/ui`, keep presenters thin.

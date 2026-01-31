@@ -1,9 +1,9 @@
-ï»¿// src/main.cpp
-// ===== Mining-chan Core2 â€” main entry (UI + orchestrator) =====
+// src/main.cpp
+// ===== Mining-chan Core2 ? main entry (UI + orchestrator) =====
 // Board   : M5Stack Core2
 // Libs    : M5Unified, ArduinoJson, WiFi, WiFiClientSecure, HTTPClient, m5stack-avatar
-// Notes   : ãƒã‚¤ãƒ‹ãƒ³ã‚°å‡¦ç†ã¯ mining_task.* ã«åˆ†é›¢ã€‚
-//           ç”»é¢æç”»ã¯ ui_mining_core2.h ã«é›†ç´„ã€‚
+// Notes   : ƒ}ƒCƒjƒ“ƒOˆ—‚Í mining_task.* ‚É•ª—£B
+//           ‰æ–Ê•`‰æ‚Í ui_mining_core2.h ‚ÉW–ñB
 
 #include <M5Unified.h>
 #include <Arduino.h>
@@ -19,7 +19,7 @@
 #include "ui/app_presenter.h"
 #include "config/config.h"
 #include "ai/mining_task.h"
-#include "core/logging.h"   // â† ä»–ã® #include ã¨ä¸€ç·’ã«ã€ãƒ•ã‚¡ã‚¤ãƒ«å…ˆé ­ã®æ–¹ã¸ç§»å‹•æ¨å¥¨
+#include "core/logging.h"   // © ‘¼‚Ì #include ‚Æˆê‚ÉAƒtƒ@ƒCƒ‹æ“ª‚Ì•û‚ÖˆÚ“®„§
 #include "config/mc_config_store.h"
 
 #include "ai/azure_tts.h"
@@ -33,10 +33,10 @@
 static AzureTts g_tts;
 
 
-// UI æ›´æ–°ç”¨ã®å‰å›æ™‚åˆ» [ms]
-static unsigned long lastUiMs = 0;
+// UI XV—p‚Ì‘O‰ñ [ms]
+static unsigned long g_lastUiMs = 0;
 
-// ç”»é¢ãƒ¢ãƒ¼ãƒ‰ã¨åˆ‡ã‚Šæ›¿ãˆ
+// ‰æ–Êƒ‚[ƒh‚ÆØ‚è‘Ö‚¦
 enum AppMode : uint8_t {
   MODE_DASH = 0,
   MODE_STACKCHAN = 1,
@@ -58,12 +58,12 @@ static const char* aiStateName_(AiTalkController::AiState s) {
   }
 }
 
-// Step2-1: suppress Behavior log => çŠ¶æ…‹å¤‰åŒ–æ™‚ã®ã¿
+// Step2-1: suppress Behavior log => ó‘Ô•Ï‰»‚Ì‚İ
 static bool     g_prevAiBusyForBehavior = false;
 static uint32_t g_aiBusyStartMs = 0;
-static uint32_t g_aiBusyDebugLastMs = 0; // DEBUGã§æ¯ç§’ã‚’å¾©æ´»ã•ã›ã‚‹å ´åˆç”¨
+static uint32_t g_aiBusyDebugLastMs = 0; // DEBUG‚Å–ˆ•b‚ğ•œŠˆ‚³‚¹‚éê‡—p
 
-// Step2-2: tap consumed => è¦ç´„ãƒ­ã‚°ç”¨ã«é›†ç´„
+// Step2-2: tap consumed => —v–ñƒƒO—p‚ÉW–ñ
 static uint32_t g_aiTapConsumedCount = 0;
 static int      g_aiTapFirstX = 0, g_aiTapFirstY = 0;
 static int      g_aiTapLastX  = 0, g_aiTapLastY  = 0;
@@ -80,13 +80,13 @@ static bool     g_savedYieldValid = false;
 
 
 // ===== Web setup serial commands (simple line protocol) =====
-// Webå´ã‹ã‚‰ 1è¡Œã‚³ãƒãƒ³ãƒ‰ã‚’é€ã‚Šã€æœ¬ä½“ãŒ @ ã§å§‹ã¾ã‚‹1è¡Œãƒ¬ã‚¹ãƒãƒ³ã‚¹ã‚’è¿”ã™ã€‚
-// ä¾‹: "HELLO\n" -> "@OK HELLO"
+// Web‘¤‚©‚ç 1sƒRƒ}ƒ“ƒh‚ğ‘—‚èA–{‘Ì‚ª @ ‚Ån‚Ü‚é1sƒŒƒXƒ|ƒ“ƒX‚ğ•Ô‚·B
+// —á: "HELLO\n" -> "@OK HELLO"
 
 static char   g_setupLine[512];
 static size_t g_setupLineLen = 0;
 
-// Read display_sleep_s from mc_config_store JSON (@CFGç›¸å½“) with fallback
+// Read display_sleep_s from mc_config_store JSON (@CFG‘Š“–) with fallback
 static long getDisplaySleepSecondsFromStore_(long fallbackSec) {
   String j = mcConfigGetMaskedJson(); // contains display_sleep_s, attention_text, etc.
   StaticJsonDocument<1024> doc;
@@ -109,14 +109,14 @@ static uint32_t g_displaySleepTimeoutMs = (uint32_t)MC_DISPLAY_SLEEP_SECONDS * 1
 
 // === src/main.cpp : replace whole function ===
 static void handleSetupLine(const char* line) {
-  // ç©ºè¡Œã¯ç„¡è¦–
+  // ‹ós‚Í–³‹
   if (!line || !*line) return;
 
-  // ã‚³ãƒãƒ³ãƒ‰ã¯å¤§æ–‡å­—å°æ–‡å­—ã‚†ã‚‹ãï¼ˆå¿…è¦ãªã‚‰å³æ ¼ã«ã—ã¦OKï¼‰
+  // ƒRƒ}ƒ“ƒh‚Í‘å•¶š¬•¶š‚ä‚é‚­i•K—v‚È‚çŒµŠi‚É‚µ‚ÄOKj
   String cmd(line);
   cmd.trim();
 
-  // ã¾ãšã¯æœ€å°ã‚»ãƒƒãƒˆ
+  // ‚Ü‚¸‚ÍÅ¬ƒZƒbƒg
   if (cmd.equalsIgnoreCase("HELLO")) {
     Serial.println("@OK HELLO");
     return;
@@ -206,7 +206,7 @@ static void handleSetupLine(const char* line) {
 
       if (key.equalsIgnoreCase("cpu_mhz")) {
         int mhz = val.toInt();
-        // mcConfigSetKV å´ã§ 80/160/240 ã®ã¿è¨±å¯ã—ã¦ã„ã‚‹å‰æ
+        // mcConfigSetKV ‘¤‚Å 80/160/240 ‚Ì‚İ‹–‰Â‚µ‚Ä‚¢‚é‘O’ñ
         setCpuFrequencyMhz(mhz);
         MC_LOGI("MAIN", "cpu_mhz set: %d (now=%d)", mhz, getCpuFrequencyMhz());
       }
@@ -238,7 +238,7 @@ static void handleSetupLine(const char* line) {
     return;
   }
 
-  // æœªçŸ¥ã‚³ãƒãƒ³ãƒ‰
+  // –¢’mƒRƒ}ƒ“ƒh
   Serial.print("@ERR unknown_cmd: ");
   Serial.println(line);
 }
@@ -256,7 +256,7 @@ static void pollSetupSerial() {
       continue;
     }
 
-    // ãƒãƒƒãƒ•ã‚¡æº€æ¯ãªã‚‰æ¨ã¦ã¦ERRè¿”ã™ï¼ˆæš´èµ°é˜²æ­¢ï¼‰
+    // ƒoƒbƒtƒ@–”t‚È‚çÌ‚Ä‚ÄERR•Ô‚·i–\‘––h~j
     if (g_setupLineLen + 1 >= sizeof(g_setupLine)) {
       g_setupLineLen = 0;
       Serial.println("@ERR line_too_long");
@@ -287,17 +287,17 @@ static AppMode  g_lastPopEmptyMode = MODE_DASH;
 static bool     g_lastPopEmptyAttn = false;
 
 // ---- Stackchan bubble-only (no TTS) ----
-// speak=false ã§å‡ºã™å¹ãå‡ºã—ï¼ˆä¸€å®šæ™‚é–“ã§è‡ªå‹•ã‚¯ãƒªã‚¢ï¼‰
+// speak=false ‚Åo‚·‚«o‚µiˆê’èŠÔ‚Å©“®ƒNƒŠƒAj
 static bool     g_bubbleOnlyActive = false;
 static uint32_t g_bubbleOnlyUntilMs = 0;
 static uint32_t g_bubbleOnlyRid = 0;
 static int      g_bubbleOnlyEvType = 0;
 enum class BubbleSource : uint8_t { None = 0, Ai = 1, Behavior = 2, Info = 3, System = 4 };
 static BubbleSource g_bubbleOnlySource = BubbleSource::None;
-// å¹ãå‡ºã—è¡¨ç¤ºæ™‚é–“ã‚’æ–‡å­—æ•°ã«åˆã‚ã›ã¦å¯å¤‰ã«ã™ã‚‹
+// ‚«o‚µ•\¦ŠÔ‚ğ•¶š”‚É‡‚í‚¹‚Ä‰Â•Ï‚É‚·‚é
 static uint32_t bubbleShowMs(const String& text) {
   const size_t len = text.length();
-  // ãƒ™ãƒ¼ã‚¹1.5s + 120ms/æ–‡å­—ã€ä¸Šé™8sï¼ˆãŠå¥½ã¿ã§èª¿æ•´ï¼‰
+  // ƒx[ƒX1.5s + 120ms/•¶šAãŒÀ8si‚¨D‚İ‚Å’²®j
   uint32_t ms = 1500 + (uint32_t)(len * 120);
   const uint32_t maxMs = 8000;
   if (ms > maxMs) ms = maxMs;
@@ -357,41 +357,41 @@ static void bubbleShow(const String& text,
                text.c_str());
 }
 
-// ReactionPriority -> OrchPrio å¤‰æ›å®£è¨€
+// ReactionPriority -> OrchPrio •ÏŠ·éŒ¾
 static OrchPrio toOrchPrio(ReactionPriority p);
 
-// ===== è‡ªå‹•ã‚¹ãƒªãƒ¼ãƒ—é–¢é€£ =====
+// ===== ©“®ƒXƒŠ[ƒvŠÖ˜A =====
 
-// æœ€å¾Œã«ã€Œãƒ¦ãƒ¼ã‚¶ãƒ¼å…¥åŠ›ã€ãŒã‚ã£ãŸæ™‚åˆ» [ms]
-static unsigned long lastInputMs = 0;
+// ÅŒã‚Éuƒ†[ƒU[“ü—Ív‚ª‚ ‚Á‚½ [ms]
+static unsigned long g_lastInputMs = 0;
 
-// ç”»é¢ãŒã‚¹ãƒªãƒ¼ãƒ—ï¼ˆæ¶ˆç¯ï¼‰ä¸­ã‹ã©ã†ã‹
-static bool displaySleeping = false;
+// ‰æ–Ê‚ªƒXƒŠ[ƒviÁ“”j’†‚©‚Ç‚¤‚©
+static bool g_displaySleeping = false;
 
-// BtnA/B/C ã®æŠ¼ä¸‹ã«ä¼´ã†ã€ã‚¿ãƒƒãƒé–‹å§‹ãƒ“ãƒ¼ãƒ—ã€ã‚’æ¬¡ã®UIæ›´æ–°ã§1å›ã ã‘æŠ‘æ­¢ã™ã‚‹
+// BtnA/B/C ‚Ì‰Ÿ‰º‚É”º‚¤wƒ^ƒbƒ`ŠJnƒr[ƒvx‚ğŸ‚ÌUIXV‚Å1‰ñ‚¾‚¯—}~‚·‚é
 static bool g_suppressTouchBeepOnce = false;
 
 
-// NTP ãŒä¸€åº¦è¨­å®šã•ã‚ŒãŸã‹ã©ã†ã‹
+// NTP ‚ªˆê“xİ’è‚³‚ê‚½‚©‚Ç‚¤‚©
 static bool g_timeNtpDone = false;
 
-// ç”»é¢é–¢é€£ã®å®šæ•°
-static const uint8_t  DISPLAY_ACTIVE_BRIGHTNESS = 128;     // é€šå¸¸æ™‚ã®æ˜ã‚‹ã•
+// ‰æ–ÊŠÖ˜A‚Ì’è”
+static const uint8_t  kDisplayActiveBrightness = 128;     // ’Êí‚Ì–¾‚é‚³
 
 
-// ã‚¹ãƒªãƒ¼ãƒ—å‰ã®ã€ŒZzzâ€¦ã€è¡¨ç¤ºæ™‚é–“ [ms]
-static const uint32_t DISPLAY_SLEEP_MESSAGE_MS  = 5000UL;  // ã“ã“ã‚’å¤‰ãˆã‚Œã°å¥½ããªç§’æ•°ã«
+// ƒXƒŠ[ƒv‘O‚ÌuZzzcv•\¦ŠÔ [ms]
+static const uint32_t kDisplaySleepMessageMs  = 5000UL;  // ‚±‚±‚ğ•Ï‚¦‚ê‚ÎD‚«‚È•b”‚É
 
 
-// ---- TTSä¸­ã®ãƒã‚¤ãƒ‹ãƒ³ã‚°åˆ¶å¾¡ï¼ˆå®‰å…¨å´ï¼‰ ----
-static int s_baseThreads = -1;      // é€šå¸¸æ™‚ã®threadsã‚’è¨˜æ†¶
-static int s_appliedThreads = -999;
-static uint32_t s_zeroSince = 0;
+// ---- TTS’†‚Ìƒ}ƒCƒjƒ“ƒO§ŒäiˆÀ‘S‘¤j ----
+static int g_baseThreads = -1;      // ’Êí‚Ìthreads‚ğ‹L‰¯
+static int g_appliedThreads = -999;
+static uint32_t g_zeroSince = 0;
 
-// ---- TTSä¸­ã®ãƒã‚¤ãƒ‹ãƒ³ã‚°åˆ¶å¾¡ï¼ˆæ¨ã¦ãªã„ pause ç‰ˆï¼‰ ----
-// ãƒã‚¤ãƒ³ãƒˆï¼šã‚¹ãƒ¬ãƒƒãƒ‰æ•°ã‚’ 0 ã«ã—ãªã„ï¼ˆJOBã‚’æ¨ã¦ãªã„ï¼‰
-// å†ç”Ÿä¸­ï¼ˆTTSï¼‰ã¨AI busyä¸­ã¯ã€Œpauseã€ã—ã¦ã€çµ‚ã‚ã£ãŸã‚‰å†é–‹ã™ã‚‹
-static bool s_pausedByTts = false;
+// ---- TTS’†‚Ìƒ}ƒCƒjƒ“ƒO§ŒäiÌ‚Ä‚È‚¢ pause ”Åj ----
+// ƒ|ƒCƒ“ƒgFƒXƒŒƒbƒh”‚ğ 0 ‚É‚µ‚È‚¢iJOB‚ğÌ‚Ä‚È‚¢j
+// Ä¶’†iTTSj‚ÆAI busy’†‚Íupausev‚µ‚ÄAI‚í‚Á‚½‚çÄŠJ‚·‚é
+static bool g_pausedByTts = false;
 
 // === src/main.cpp : replace whole function ===
 static void applyMiningPolicyForTts(bool ttsBusy, bool aiBusy) {
@@ -400,12 +400,12 @@ static void applyMiningPolicyForTts(bool ttsBusy, bool aiBusy) {
   const bool speaking = M5.Speaker.isPlaying();
   const bool wantPause = speaking || aiBusy;
 
-  if (wantPause != s_pausedByTts) {
+  if (wantPause != g_pausedByTts) {
     MC_EVT("TTS", "mining pause: %d -> %d (speaking=%d aiBusy=%d)",
-           (int)s_pausedByTts, (int)wantPause, (int)speaking, (int)aiBusy);
+           (int)g_pausedByTts, (int)wantPause, (int)speaking, (int)aiBusy);
 
     setMiningPaused(wantPause);
-    s_pausedByTts = wantPause;
+    g_pausedByTts = wantPause;
   }
 }
 
@@ -414,17 +414,17 @@ static void applyMiningPolicyForTts(bool ttsBusy, bool aiBusy) {
 
 // ---------------- WiFi / Time ----------------
 
-// WiFi æ¥ç¶šã‚’ã€ŒçŠ¶æ…‹ãƒã‚·ãƒ³åŒ–ã€ã—ãŸãƒãƒ³ãƒ–ãƒ­ãƒƒã‚­ãƒ³ã‚°ç‰ˆã€‚
-// æ¯ãƒ•ãƒ¬ãƒ¼ãƒ å‘¼ã³å‡ºã•ã‚Œã‚‹å‰æã§ã€
-//   - åˆå›å‘¼ã³å‡ºã—æ™‚ã« WiFi.begin() ã‚’ã‚­ãƒƒã‚¯
-//   - æ¥ç¶šãŒå®Œäº†ã™ã‚‹ã‹ã‚¿ã‚¤ãƒ ã‚¢ã‚¦ãƒˆã—ãŸã‚‰ true ã‚’è¿”ã™
-//   - ãã‚Œã¾ã§ã¯ false ã‚’è¿”ã™
-// â€»æ¥ç¶šã«æˆåŠŸã—ãŸã‹ã©ã†ã‹ã¯ WiFi.status() == WL_CONNECTED ã§åˆ¤å®šã™ã‚‹ã€‚
+// WiFi Ú‘±‚ğuó‘Ôƒ}ƒVƒ“‰»v‚µ‚½ƒmƒ“ƒuƒƒbƒLƒ“ƒO”ÅB
+// –ˆƒtƒŒ[ƒ€ŒÄ‚Ño‚³‚ê‚é‘O’ñ‚ÅA
+//   - ‰‰ñŒÄ‚Ño‚µ‚É WiFi.begin() ‚ğƒLƒbƒN
+//   - Ú‘±‚ªŠ®—¹‚·‚é‚©ƒ^ƒCƒ€ƒAƒEƒg‚µ‚½‚ç true ‚ğ•Ô‚·
+//   - ‚»‚ê‚Ü‚Å‚Í false ‚ğ•Ô‚·
+// ¦Ú‘±‚É¬Œ÷‚µ‚½‚©‚Ç‚¤‚©‚Í WiFi.status() == WL_CONNECTED ‚Å”»’è‚·‚éB
 // === src/main.cpp : replace whole function ===
 static bool wifi_connect() {
   const auto& cfg = appConfig();
 
-  // çŠ¶æ…‹ã‚’ static ã§ä¿æŒ
+  // ó‘Ô‚ğ static ‚Å•Û
   enum WifiState {
     WIFI_NOT_STARTED,
     WIFI_CONNECTING,
@@ -454,16 +454,16 @@ static bool wifi_connect() {
       if (millis() - t_start > WIFI_CONNECT_TIMEOUT_MS) {
         MC_LOGW("WIFI", "connect timeout (status=%d)", (int)st);
         state = WIFI_DONE;
-        // ã€Œæ¥ç¶šè©¦è¡Œã€ã¨ã—ã¦ã¯çµ‚ã‚ã£ãŸã®ã§ true ã‚’è¿”ã™ï¼ˆæˆåŠŸ/å¤±æ•—ã¯ WiFi.status() ã§è¦‹ã‚‹ï¼‰
+        // uÚ‘±sv‚Æ‚µ‚Ä‚ÍI‚í‚Á‚½‚Ì‚Å true ‚ğ•Ô‚·i¬Œ÷/¸”s‚Í WiFi.status() ‚ÅŒ©‚éj
         return true;
       }
-      // ã¾ã æ¥ç¶šè©¦è¡Œä¸­
+      // ‚Ü‚¾Ú‘±s’†
       return false;
     }
 
     case WIFI_DONE:
     default:
-      // 2å›ç›®ä»¥é™ã¯ä½•ã‚‚ã—ãªã„
+      // 2‰ñ–ÚˆÈ~‚Í‰½‚à‚µ‚È‚¢
       return true;
   }
 }
@@ -480,7 +480,7 @@ static void setupTimeNTP() {
 
 
 void setup() {
-  // --- ã‚·ãƒªã‚¢ãƒ«ã¨ãƒ­ã‚°ï¼ˆæœ€åˆã«é–‹ãï¼‰ ---
+  // --- ƒVƒŠƒAƒ‹‚ÆƒƒOiÅ‰‚ÉŠJ‚­j ---
   Serial.begin(115200);
   mcConfigBegin();
 
@@ -498,18 +498,18 @@ void setup() {
   delay(50);
   mc_logf("[MAIN] setup() start");
 
-  // --- CPUã‚¯ãƒ­ãƒƒã‚¯ ---
-  const uint32_t req_mhz = mcCfgCpuMhz(); // LittleFSè¨­å®šãŒã‚ã‚Œã°å„ªå…ˆ
+  // --- CPUƒNƒƒbƒN ---
+  const uint32_t req_mhz = mcCfgCpuMhz(); // LittleFSİ’è‚ª‚ ‚ê‚Î—Dæ
   setCpuFrequencyMhz((int)req_mhz);
   mc_logf("[MAIN] cpu_mhz=%d (req=%lu)", getCpuFrequencyMhz(), (unsigned long)req_mhz);
 
-  // --- M5Unified ã®è¨­å®š ---
+  // --- M5Unified ‚Ìİ’è ---
   auto cfg_m5 = M5.config();
   cfg_m5.output_power  = true;
   cfg_m5.clear_display = true;
 
   cfg_m5.internal_imu = false;
-  cfg_m5.internal_mic = true;   // â˜…éŒ²éŸ³ã«å¿…è¦
+  cfg_m5.internal_mic = true;   // š˜^‰¹‚É•K—v
   cfg_m5.internal_spk = true;
   cfg_m5.internal_rtc = true;
 
@@ -530,36 +530,36 @@ void setup() {
             sec, (unsigned long)g_displaySleepTimeoutMs);
   }
 
-  // Azure TTS åˆæœŸåŒ–
+  // Azure TTS ‰Šú‰»
   g_tts.begin();
   g_orch.init();
 
-  // AI controller initï¼ˆOrchestrator ã‚’æ¸¡ã™ï¼‰
+  // AI controller initiOrchestrator ‚ğ“n‚·j
   g_ai.begin(&g_orch);
 
-  // --- ç”»é¢ã®åˆæœŸçŠ¶æ…‹ ---
-  M5.Display.setBrightness(DISPLAY_ACTIVE_BRIGHTNESS);
+  // --- ‰æ–Ê‚Ì‰Šúó‘Ô ---
+  M5.Display.setBrightness(kDisplayActiveBrightness);
   M5.Display.fillScreen(BLACK);
   M5.Display.setTextColor(WHITE, BLACK);
 
-  // â˜… UIèµ·å‹• & ã‚¹ãƒ—ãƒ©ãƒƒã‚·ãƒ¥è¡¨ç¤º
+  // š UI‹N“® & ƒXƒvƒ‰ƒbƒVƒ…•\¦
   UIMining::instance().begin(cfg.app_name, cfg.app_version);
   UIMining::instance().setAttentionDefaultText(mcCfgAttentionText());
 
-  // ã‚¹ã‚¿ãƒƒã‚¯ãƒãƒ£ãƒ³ã€Œå–‹ã‚‹/é»™ã‚‹ã€æ™‚é–“è¨­å®šï¼ˆå˜ä½: msï¼‰
+  // ƒXƒ^ƒbƒNƒ`ƒƒƒ“u’‚é/–Ù‚évŠÔİ’èi’PˆÊ: msj
   UIMining::instance().setStackchanSpeechTiming(
-    2200, 1200,   // å–‹ã‚‹: 2.2ã€œ3.4ç§’
-    900,  1400    // é»™ã‚‹: 0.9ã€œ2.3ç§’
+    2200, 1200,   // ’‚é: 2.2?3.4•b
+    900,  1400    // –Ù‚é: 0.9?2.3•b
   );
 
-  // ã‚¿ã‚¤ãƒãƒ¼é¡ã®åˆæœŸåŒ–
-  lastUiMs        = 0;
-  lastInputMs     = millis();
-  displaySleeping = false;
+  // ƒ^ƒCƒ}[—Ş‚Ì‰Šú‰»
+  g_lastUiMs        = 0;
+  g_lastInputMs     = millis();
+  g_displaySleeping = false;
 
   mc_logf("%s %s booting...", cfg.app_name, cfg.app_version);
 
-  // FreeRTOS ã‚¿ã‚¹ã‚¯ã§ãƒã‚¤ãƒ‹ãƒ³ã‚°é–‹å§‹
+  // FreeRTOS ƒ^ƒXƒN‚Åƒ}ƒCƒjƒ“ƒOŠJn
   startMiner();
 }
 
@@ -575,7 +575,7 @@ void loop() {
 
   const uint32_t now = (uint32_t)millis();
 
-  // AI state machine tickï¼ˆæ¯ãƒ«ãƒ¼ãƒ—ï¼‰
+  // AI state machine ticki–ˆƒ‹[ƒvj
   g_ai.tick(now);
 
   {
@@ -585,8 +585,8 @@ void loop() {
     }
   }
 
-// ===== main.cppï¼šPhase5-A abortãƒ–ãƒ­ãƒƒã‚¯ï¼ˆå…¨æ–‡å·®ã—æ›¿ãˆï¼‰=====
-  // Phase5-A: abort TTS (consumeæ–¹å¼)
+// ===== main.cppFPhase5-A abortƒuƒƒbƒNi‘S•¶·‚µ‘Ö‚¦j=====
+  // Phase5-A: abort TTS (consume•û®)
   {
     uint32_t abortId = 0;
     const char* reason = nullptr;
@@ -597,24 +597,24 @@ void loop() {
       mc_logf("[MAIN] abort tts id=%lu reason=%s -> cancel+clear inflight+clear orch",
               (unsigned long)abortId, r);
 
-      // TTSã¸ã‚­ãƒ£ãƒ³ã‚»ãƒ«ï¼ˆlate-playé˜²æ­¢ï¼‰
+      // TTS‚ÖƒLƒƒƒ“ƒZƒ‹ilate-play–h~j
       g_tts.cancel(abortId, r);
 
-      // inflight ã‚¯ãƒªã‚¢ + è¡¨ç¤ºã‚¯ãƒªã‚¢
+      // inflight ƒNƒŠƒA + •\¦ƒNƒŠƒA
       g_ttsInflightId = 0;
       g_ttsInflightRid = 0;
       g_ttsInflightSpeechId = 0;
       g_ttsInflightSpeechText = "";
       UIMining::instance().setStackchanSpeech("");
 
-      // Orchestrator å´ã® expect/pending æƒé™¤ï¼ˆB2: source/reasonä»˜ã cancelï¼‰
+      // Orchestrator ‘¤‚Ì expect/pending ‘|œiB2: source/reason•t‚« cancelj
       g_orch.cancelSpeak(abortId, r, Orchestrator::CancelSource::Main);
     }
   }
 
 
-  // â˜…overlayã¯æ¯ãƒ«ãƒ¼ãƒ—é€ã‚‰ãªã„ï¼ˆä¸Šéƒ¨æ–‡å­—ã®ãƒãƒ©ã¤ãå¯¾ç­–ï¼‰
-  // 200msã”ã¨ã€ã¾ãŸã¯AI stateå¤‰åŒ–æ™‚ã®ã¿é€ã‚‹
+  // šoverlay‚Í–ˆƒ‹[ƒv‘—‚ç‚È‚¢iã•”•¶š‚Ìƒ`ƒ‰‚Â‚«‘Îôj
+  // 200ms‚²‚ÆA‚Ü‚½‚ÍAI state•Ï‰»‚Ì‚İ‘—‚é
   static uint32_t s_lastOverlayPushMs = 0;
   static uint8_t  s_lastAiState = 255;
 
@@ -664,7 +664,7 @@ void loop() {
 
   const bool ttsBusyNow = g_tts.isBusy();
 
-// ===== main.cppï¼šTTS DONEãƒ–ãƒ­ãƒƒã‚¯ï¼ˆå…¨æ–‡å·®ã—æ›¿ãˆï¼‰=====
+// ===== main.cppFTTS DONEƒuƒƒbƒNi‘S•¶·‚µ‘Ö‚¦j=====
   uint32_t gotId = 0;
   bool ttsOk = false;
   char ttsReason[24] = {0};
@@ -696,12 +696,12 @@ void loop() {
                  orchOk ? 1 : 0);
 
     if (orchOk) {
-      // Step4: Orchestrator ãŒè¿”ã—ãŸ kind/rid ã§é€šçŸ¥å…ˆã‚’æ±ºã‚ã‚‹
+      // Step4: Orchestrator ‚ª•Ô‚µ‚½ kind/rid ‚Å’Ê’mæ‚ğŒˆ‚ß‚é
       if (doneKind == Orchestrator::OrchKind::AiSpeak && doneRid != 0) {
         g_ai.onSpeakDone(doneRid, now);
       }
 
-      // è¡¨ç¤ºã‚¯ãƒªã‚¢ & inflightã‚¯ãƒªã‚¢ï¼ˆä¸€è‡´æ™‚ï¼‰
+      // •\¦ƒNƒŠƒA & inflightƒNƒŠƒAiˆê’vj
       UIMining::instance().setStackchanSpeech("");
       LOG_EVT_INFO("EVT_PRESENT_SPEECH_CLEAR", "tts_id=%lu", (unsigned long)gotId);
 
@@ -723,7 +723,7 @@ void loop() {
 
         g_tts.requestSessionReset();
 
-        // desyncæ™‚ã¯ UI/çŠ¶æ…‹ã‚’å¼·åˆ¶å¾©å¸°ï¼ˆè§£æã—ã‚„ã™ã•å„ªå…ˆï¼‰
+        // desync‚Í UI/ó‘Ô‚ğ‹­§•œ‹Ai‰ğÍ‚µ‚â‚·‚³—Dæj
         UIMining::instance().setStackchanSpeech("");
         g_ttsInflightSpeechText = "";
         g_ttsInflightSpeechId = 0;
@@ -741,7 +741,7 @@ void loop() {
   applyMiningPolicyForTts(ttsBusyNow, g_ai.isBusy());
 
 
-  // pending ãŒã‚ã‚Œã°ç©ºãã‚¿ã‚¤ãƒŸãƒ³ã‚°ã§1ä»¶ã ã‘å®Ÿè¡Œ
+  // pending ‚ª‚ ‚ê‚Î‹ó‚«ƒ^ƒCƒ~ƒ“ƒO‚Å1Œ‚¾‚¯Às
   if (!g_tts.isBusy() && g_ttsInflightId == 0 && g_orch.hasPendingSpeak()) {
     auto pending = g_orch.popNextPending();
     if (pending.valid) {
@@ -765,7 +765,7 @@ void loop() {
     }
   }
 
-  // Wi-Fiåˆ‡æ–­æ¤œçŸ¥ï¼škeep-aliveä¸­ã®TLSã‚»ãƒƒã‚·ãƒ§ãƒ³ã‚’æ¬¡å›ã«å‚™ãˆã¦ç ´æ£„äºˆç´„
+  // Wi-FiØ’fŒŸ’mFkeep-alive’†‚ÌTLSƒZƒbƒVƒ‡ƒ“‚ğŸ‰ñ‚É”õ‚¦‚Ä”jŠü—\–ñ
   static wl_status_t s_prevWifi = WL_IDLE_STATUS;
   const wl_status_t wifiNow = WiFi.status();
   if (s_prevWifi == WL_CONNECTED && wifiNow != WL_CONNECTED) {
@@ -774,7 +774,7 @@ void loop() {
   }
   s_prevWifi = wifiNow;
 
-  // --- å…¥åŠ›æ¤œå‡ºï¼ˆãƒœã‚¿ãƒ³ + ã‚¿ãƒƒãƒï¼‰ ---
+  // --- “ü—ÍŒŸoiƒ{ƒ^ƒ“ + ƒ^ƒbƒ`j ---
   bool anyInput = false;
 
   const bool btnA = M5.BtnA.wasPressed();
@@ -785,7 +785,7 @@ void loop() {
     g_suppressTouchBeepOnce = true;
   }
 
-  // ã‚¿ãƒƒãƒå…¥åŠ›
+  // ƒ^ƒbƒ`“ü—Í
   static bool prevTouchPressed = false;
   bool touchPressed = false;
   bool touchDown    = false;
@@ -832,13 +832,13 @@ void loop() {
   }
 
   // === src/main.cpp : replace this block inside loop() ===
-  // --- ã‚¹ãƒªãƒ¼ãƒ—ä¸­ã®å¾©å¸°å‡¦ç† ---
-  if (displaySleeping) {
+  // --- ƒXƒŠ[ƒv’†‚Ì•œ‹Aˆ— ---
+  if (g_displaySleeping) {
     if (anyInput) {
       MC_EVT("MAIN", "display wake (sleep off)");
-      M5.Display.setBrightness(DISPLAY_ACTIVE_BRIGHTNESS);
-      displaySleeping = false;
-      lastInputMs     = now;
+      M5.Display.setBrightness(kDisplayActiveBrightness);
+      g_displaySleeping = false;
+      g_lastInputMs     = now;
     }
     delay(2);
     return;
@@ -846,14 +846,14 @@ void loop() {
 
 
 
-  // ã“ã“ã‹ã‚‰ã€Œç”»é¢ãŒONã€ã®æ™‚ã®å‡¦ç†
+  // ‚±‚±‚©‚çu‰æ–Ê‚ªONv‚Ì‚Ìˆ—
   UIMining& ui = UIMining::instance();
 
-  // Bãƒœã‚¿ãƒ³ï¼šè¨­å®šã•ã‚ŒãŸã€Œã“ã‚“ã«ã¡ã¯ã€ã‚’å–‹ã‚‹ï¼ˆå‹•ä½œç¢ºèªç”¨ï¼‰
+  // Bƒ{ƒ^ƒ“Fİ’è‚³‚ê‚½u‚±‚ñ‚É‚¿‚Ív‚ğ’‚éi“®ìŠm”F—pj
   if (btnB) {
-    const char* text = appConfig().hello_text;  // â˜…å¤‰æ›´ï¼šè¨­å®šå€¤ï¼ˆconfig_private.h / Webã§ä¸Šæ›¸ãå¯ï¼‰
+    const char* text = appConfig().hello_text;  // š•ÏXFİ’è’liconfig_private.h / Web‚Åã‘‚«‰Âj
     if (features.ttsEnabled) {
-      // INFOãƒ­ã‚°ã®å£ç´™åŒ–ã‚’é˜²ãï¼ˆæŒ™å‹•ã¯å¤‰ãˆãªã„ï¼šå‘¼ã³å‡ºã—å›æ•°ãƒ»æˆå¦åˆ¤å®šã¯å¾“æ¥é€šã‚Šï¼‰
+      // INFOƒƒO‚Ì•Ç†‰»‚ğ–h‚®i‹““®‚Í•Ï‚¦‚È‚¢FŒÄ‚Ño‚µ‰ñ”E¬”Û”»’è‚Í]—ˆ’Ê‚èj
       static uint32_t s_ttsFailLastLogMs = 0;
       static uint32_t s_ttsFailSuppressed = 0;
 
@@ -882,9 +882,9 @@ void loop() {
 
 
 
-  if (anyInput) lastInputMs = now;
+  if (anyInput) g_lastInputMs = now;
 
-  // --- Aãƒœã‚¿ãƒ³ï¼šãƒ€ãƒƒã‚·ãƒ¥ãƒœãƒ¼ãƒ‰ <-> ã‚¹ã‚¿ãƒƒã‚¯ãƒãƒ£ãƒ³ + ãƒ“ãƒ¼ãƒ— ---
+  // --- Aƒ{ƒ^ƒ“Fƒ_ƒbƒVƒ…ƒ{[ƒh <-> ƒXƒ^ƒbƒNƒ`ƒƒƒ“ + ƒr[ƒv ---
   if (btnA) {
     M5.Speaker.tone(1500, 50);
 
@@ -908,15 +908,15 @@ void loop() {
 
   bool aiConsumedTap = false;
   if (g_mode == MODE_STACKCHAN && touchDown) {
-    // ã‚¿ãƒƒãƒ—å‡¦ç†ã®ã€Œå‰ã€ã®AIçŠ¶æ…‹ã‚’æ§ãˆã‚‹ï¼ˆcancelã§å³IDLEã«ãªã‚‹ã‚±ãƒ¼ã‚¹å¯¾ç­–ï¼‰
+    // ƒ^ƒbƒvˆ—‚Ìu‘Ov‚ÌAIó‘Ô‚ğT‚¦‚éicancel‚Å‘¦IDLE‚É‚È‚éƒP[ƒX‘Îôj
     const AiTalkController::AiState stateBeforeTap = g_ai.state();
 
-    // ä¸Š1/3ã‚¿ãƒƒãƒ—ã¯AIãŒæœ€å„ªå…ˆã§å‡¦ç†ï¼ˆå‡¦ç†ã—ãŸã‚‰Attentionã¸æµã•ãªã„ï¼‰
+    // ã1/3ƒ^ƒbƒv‚ÍAI‚ªÅ—Dæ‚Åˆ—iˆ—‚µ‚½‚çAttention‚Ö—¬‚³‚È‚¢j
     const int screenH = M5.Display.height();
     aiConsumedTap = g_ai.onTap(touchX, touchY, screenH);
 
     if (aiConsumedTap) {
-      // Step2-2: é€šå¸¸ãƒ­ã‚°ã§ã¯é€£æ‰“åº§æ¨™ã‚’å‡ºã•ãšã€è¦ç´„ç”¨ã«ã‚«ã‚¦ãƒ³ãƒˆã ã‘è²¯ã‚ã‚‹
+      // Step2-2: ’ÊíƒƒO‚Å‚Í˜A‘ÅÀ•W‚ğo‚³‚¸A—v–ñ—p‚ÉƒJƒEƒ“ƒg‚¾‚¯’™‚ß‚é
       if (g_aiTapConsumedCount == 0) {
         g_aiTapFirstX = touchX;
         g_aiTapFirstY = touchY;
@@ -926,25 +926,25 @@ void loop() {
       g_aiTapLastX = touchX;
       g_aiTapLastY = touchY;
 
-      // ---- during= ã®æ”¹å–„ãƒã‚¤ãƒ³ãƒˆ ----
-      // onTap() ãŒã€Œã‚­ãƒ£ãƒ³ã‚»ãƒ«ã€ã‚’ç™ºç«ã™ã‚‹ã¨ã€ã“ã“ã«æ¥ãŸæ™‚ç‚¹ã§ state ãŒ IDLE ã«ãªã‚ŠãŒã¡ã€‚
-      // ãã®å ´åˆã¯ã€Œã‚¿ãƒƒãƒ—å‰ã®çŠ¶æ…‹ã€ã‚’æ¡ç”¨ã—ã¦ã€during=IDLE ã«ãªã‚Šã«ããã™ã‚‹ã€‚
+      // ---- during= ‚Ì‰ü‘Pƒ|ƒCƒ“ƒg ----
+      // onTap() ‚ªuƒLƒƒƒ“ƒZƒ‹v‚ğ”­‰Î‚·‚é‚ÆA‚±‚±‚É—ˆ‚½“_‚Å state ‚ª IDLE ‚É‚È‚è‚ª‚¿B
+      // ‚»‚Ìê‡‚Íuƒ^ƒbƒv‘O‚Ìó‘Ôv‚ğÌ—p‚µ‚ÄAduring=IDLE ‚É‚È‚è‚É‚­‚­‚·‚éB
       const AiTalkController::AiState sNow = g_ai.state();
       if (sNow != AiTalkController::AiState::Idle) {
         g_aiTapLastState = sNow;
       } else if (stateBeforeTap != AiTalkController::AiState::Idle) {
         g_aiTapLastState = stateBeforeTap;
       }
-      // ï¼ˆä¸¡æ–¹IDLEãªã‚‰æ›´æ–°ã—ãªã„ï¼å¾“æ¥ã©ãŠã‚ŠIDLEã®ã¾ã¾ï¼‰
+      // i—¼•ûIDLE‚È‚çXV‚µ‚È‚¢]—ˆ‚Ç‚¨‚èIDLE‚Ì‚Ü‚Üj
 
-      // è©³ç´°ï¼ˆåº§æ¨™è¿½è·¡ï¼‰ã¯ TRACE ã®ã¿ï¼ˆå£ç´™åŒ–ã‚’é˜²ãï¼‰
+      // Ú×iÀ•W’ÇÕj‚Í TRACE ‚Ì‚İi•Ç†‰»‚ğ–h‚®j
       MC_LOGT("AI", "tap consumed by AI (%d,%d)", touchX, touchY);
     }
   }
 
 
 
-  // AI busyä¸­ã¯ Attention ã‚’å®Œå…¨æŠ‘æ­¢ï¼šã™ã§ã«Attentionä¸­ãªã‚‰å³åº§ã«çµ‚äº†ï¼ˆä¿é™ºï¼‰
+  // AI busy’†‚Í Attention ‚ğŠ®‘S—}~F‚·‚Å‚ÉAttention’†‚È‚ç‘¦À‚ÉI—¹i•ÛŒ¯j
   if (g_mode == MODE_STACKCHAN && g_ai.isBusy() && g_attentionActive) {
     MC_EVT("ATTN", "force exit (aiBusy=1)");
 
@@ -959,11 +959,11 @@ void loop() {
 
 
 // --- Attention mode: tap in Stackchan screen ---
-// AI busyä¸­ã¯ Attention ã‚’å®Œå…¨æŠ‘æ­¢ï¼ˆã‚¿ãƒƒãƒ—ãŒAIã«æ¶ˆè²»ã•ã‚Œãªã„ã‚±ãƒ¼ã‚¹ã‚‚ã‚ã‚‹ãŸã‚å…¥å£ã§ã‚¬ãƒ¼ãƒ‰ï¼‰
+// AI busy’†‚Í Attention ‚ğŠ®‘S—}~iƒ^ƒbƒv‚ªAI‚ÉÁ”ï‚³‚ê‚È‚¢ƒP[ƒX‚à‚ ‚é‚½‚ß“üŒû‚ÅƒK[ƒhj
 if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
-  // ã™ã§ã«Attentionä¸­ãªã‚‰ã€Œå†å…¥ã€ã¯ã•ã›ãªã„ï¼ˆãƒ­ã‚°äºŒé‡åŒ–é˜²æ­¢ï¼‰
+  // ‚·‚Å‚ÉAttention’†‚È‚çuÄ“üv‚Í‚³‚¹‚È‚¢iƒƒO“ñd‰»–h~j
   if (g_attentionActive) {
-    // ä½•ã‚‚ã—ãªã„ï¼ˆã‚¿ã‚¤ãƒ ã‚¢ã‚¦ãƒˆã§æŠœã‘ã‚‹ or force-exitã§æŠœã‘ã‚‹ï¼‰
+    // ‰½‚à‚µ‚È‚¢iƒ^ƒCƒ€ƒAƒEƒg‚Å”²‚¯‚é or force-exit‚Å”²‚¯‚éj
   } else if (g_ai.isBusy()) {
     MC_LOGT("ATTN", "suppressed (aiBusy=1)");
   } else {
@@ -998,21 +998,21 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
     ui.triggerAttention(0);
   }
 
-  // --- èµ·å‹•æ™‚ã® WiFi æ¥ç¶š & NTP åŒæœŸï¼ˆãƒãƒ³ãƒ–ãƒ­ãƒƒã‚­ãƒ³ã‚°ï¼‰ ---
+  // --- ‹N“®‚Ì WiFi Ú‘± & NTP “¯Šúiƒmƒ“ƒuƒƒbƒLƒ“ƒOj ---
   const bool wifiDone = wifi_connect();
   if (wifiDone && !g_timeNtpDone && WiFi.status() == WL_CONNECTED) {
     setupTimeNTP();
     g_timeNtpDone = true;
   }
 
-  // --- UI æ›´æ–°ï¼ˆ100ms ã”ã¨ã«1å›ï¼‰ ---
-  if ((uint32_t)(now - lastUiMs) >= 100) {
-    lastUiMs = now;
+  // --- UI XVi100ms ‚²‚Æ‚É1‰ñj ---
+  if ((uint32_t)(now - g_lastUiMs) >= 100) {
+    g_lastUiMs = now;
 
     MiningSummary summary;
     updateMiningSummary(summary);
 
-    // bubble-only auto clearï¼ˆæœŸé™åˆ‡ã‚Œï¼‰
+    // bubble-only auto cleariŠúŒÀØ‚êj
     if (g_bubbleOnlyActive && (int32_t)(g_bubbleOnlyUntilMs - now) <= 0) {
       bubbleClear("timeout");
     }
@@ -1028,7 +1028,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
 
     const bool suppressBehaviorNow = (g_mode == MODE_STACKCHAN) && g_ai.isBusy();
 
-    // ---- Step2-1: busy enter/exit ã‚’æ¤œçŸ¥ã—ã¦1å›ã ã‘å‡ºã™ ----
+    // ---- Step2-1: busy enter/exit ‚ğŒŸ’m‚µ‚Ä1‰ñ‚¾‚¯o‚· ----
     if (suppressBehaviorNow && !g_prevAiBusyForBehavior) {
       g_aiBusyStartMs = now;
       MC_EVT("AI", "busy enter state=%s reason=ai_busy", aiStateName_(g_ai.state()));
@@ -1036,7 +1036,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
       const float durS = (now - g_aiBusyStartMs) / 1000.0f;
       MC_EVT("AI", "busy exit state=%s dur=%.1fs reason=ai_idle", aiStateName_(g_ai.state()), durS);
 
-      // ---- Step2-2: busyçµ‚äº†æ™‚ã« tap consumed ã‚’è¦ç´„ã—ã¦1å›ã ã‘å‡ºã™ ----
+      // ---- Step2-2: busyI—¹‚É tap consumed ‚ğ—v–ñ‚µ‚Ä1‰ñ‚¾‚¯o‚· ----
       if (g_aiTapConsumedCount > 0) {
         const float spanS = (now - g_aiTapFirstMs) / 1000.0f;
         MC_LOGD("AI", "tap consumed x%lu last=(%d,%d) first=(%d,%d) span=%.1fs during=%s",
@@ -1052,10 +1052,10 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
     g_prevAiBusyForBehavior = suppressBehaviorNow;
 
     if (suppressBehaviorNow) {
-      // Behaviorï¼ˆæ—¥å¸¸ã‚»ãƒªãƒ•ï¼‰æŠ‘æ­¢ãã®ã‚‚ã®ã¯å¾“æ¥é€šã‚Š
+      // Behaviori“úíƒZƒŠƒtj—}~‚»‚Ì‚à‚Ì‚Í]—ˆ’Ê‚è
       gotReaction = false;
 
-      // è©³ç´°ï¼ˆæ¯ç§’ï¼‰ã¯ TRACE ã®ã¿ï¼ˆå£ç´™åŒ–ã‚’é˜²ãï¼‰
+      // Ú×i–ˆ•bj‚Í TRACE ‚Ì‚İi•Ç†‰»‚ğ–h‚®j
       if ((now - g_aiBusyDebugLastMs) >= 1000) {
         MC_LOGT("AI", "suppress Behavior while busy (state=%s)", aiStateName_(g_ai.state()));
         g_aiBusyDebugLastMs = now;
@@ -1182,29 +1182,29 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
 
     String ticker = buildTicker(summary);
 
-    // ç”»é¢æç”»
+    // ‰æ–Ê•`‰æ
     if (g_mode == MODE_STACKCHAN) {
       ui.drawStackchanScreen(data);
     } else {
       ui.drawAll(data, ticker);
     }
 
-    // ãƒœã‚¿ãƒ³æŠ¼ä¸‹ã«ä¼´ã†ã‚¿ãƒƒãƒé–‹å§‹ãƒ“ãƒ¼ãƒ—æŠ‘æ­¢ï¼ˆæ¬¡ã® draw 1å›ã ã‘ï¼‰
+    // ƒ{ƒ^ƒ“‰Ÿ‰º‚É”º‚¤ƒ^ƒbƒ`ŠJnƒr[ƒv—}~iŸ‚Ì draw 1‰ñ‚¾‚¯j
     g_suppressTouchBeepOnce = false;
   }
 
   // === src/main.cpp : replace these blocks inside loop() ===
 
-  // --- ä¸€å®šæ™‚é–“ç„¡æ“ä½œãªã‚‰ç”»é¢OFFï¼ˆãƒã‚¤ãƒ‹ãƒ³ã‚°ã¯ç¶™ç¶šï¼‰---
-  if (!displaySleeping && (uint32_t)(now - lastInputMs) >= g_displaySleepTimeoutMs) {
+  // --- ˆê’èŠÔ–³‘€ì‚È‚ç‰æ–ÊOFFiƒ}ƒCƒjƒ“ƒO‚ÍŒp‘±j---
+  if (!g_displaySleeping && (uint32_t)(now - g_lastInputMs) >= g_displaySleepTimeoutMs) {
     MC_EVT("MAIN", "display sleep (screen off)");
     UIMining::instance().drawSleepMessage();
-    delay(DISPLAY_SLEEP_MESSAGE_MS);
+    delay(kDisplaySleepMessageMs);
     M5.Display.setBrightness(0);
-    displaySleeping = true;
+    g_displaySleeping = true;
   }
 
-  // ---- TTSä¸­ã®ãƒã‚¤ãƒ‹ãƒ³ã‚°è² è·åˆ¶å¾¡ï¼ˆæ¨ã¦ãªã„ç‰ˆï¼‰ ----
+  // ---- TTS’†‚Ìƒ}ƒCƒjƒ“ƒO•‰‰×§ŒäiÌ‚Ä‚È‚¢”Åj ----
   static bool s_ttsYieldApplied = false;
   static MiningYieldProfile s_ttsSavedYield = MiningYieldNormal();
   static bool s_ttsSavedYieldValid = false;
@@ -1237,7 +1237,7 @@ if (!aiConsumedTap && (g_mode == MODE_STACKCHAN) && touchDown) {
 
 
 
-// ReactionPriority -> OrchPrio å¤‰æ›
+// ReactionPriority -> OrchPrio •ÏŠ·
 static OrchPrio toOrchPrio(ReactionPriority p) {
   switch (p) {
     case ReactionPriority::Low:    return OrchPrio::Low;
@@ -1246,6 +1246,8 @@ static OrchPrio toOrchPrio(ReactionPriority p) {
     default:                       return OrchPrio::Normal;
   }
 }
+
+
 
 
 
