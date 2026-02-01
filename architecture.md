@@ -23,6 +23,13 @@ dependencies consistent as the project grows.
 - core
   - System startup and lifecycle
   - Orchestration between subsystems
+  - App runtime loop (input, UI, behavior, network)
+  - Serial setup protocol handler
+  - TTS orchestration and coordination
+  - main.cpp keeps high-level flow; detailed runtime logic lives in app_runtime
+  - app_runtime: input, UI update, behavior reaction, network tick
+  - serial_setup: line-based setup protocol, runtime config apply
+  - tts_coordinator: TTS state + orchestrator sync + pending speak
   - Cross-cutting policies (feature flags, timeouts)
 - ai
   - Dialogue control and AI integration
@@ -50,6 +57,8 @@ dependencies consistent as the project grows.
 
 Avoid reverse dependencies (e.g., ui -> ai) unless explicitly justified.
 
+Example dependency: app_runtime -> tts_coordinator -> azure_tts.
+
 ## Dependency Exceptions (Allowed Cases)
 - ui -> ai
   - OK for read-only state exposure via a narrow interface (e.g., view-model or DTO).
@@ -66,7 +75,11 @@ Avoid reverse dependencies (e.g., ui -> ai) unless explicitly justified.
 Status: config, utils, audio, ai, core, ui, and behavior are already moved under `/src` subfolders.
 - core
   - core/main.cpp
+  - core/app_types.h
+  - core/app_runtime.cpp / core/app_runtime.h
   - core/orchestrator.cpp / core/orchestrator.h
+  - core/serial_setup.cpp / core/serial_setup.h
+  - core/tts_coordinator.cpp / core/tts_coordinator.h
 - ai
   - ai/ai_interface.h
   - ai/ai_talk_controller.cpp / ai/ai_talk_controller.h

@@ -63,4 +63,5 @@ Unknown commands return:
 - `@ERR unknown_cmd: <original line>`
 
 ## Implementation reference
-- `src/core/main.cpp` (search for `handleSetupLine_`)
+- `src/core/serial_setup.cpp` (search for `handleSetupLine_`)
+- `src/core/serial_setup.h`

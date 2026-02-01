@@ -22,12 +22,13 @@ ESP32 (M5Stack Core2) 向けのマイニングダッシュボード + スタッ�
 
 ## Repository Layout / 構成
 - `src/core` : startup + orchestration / 起動とオーケストレーション
-- `src/ai` : LLM / STT / TTS / dialogue
+- `src/ai` : LLM / STT / TTS / dialogue / 対話・音声AI
 - `src/audio` : I2S + recording / 音声入出力
-- `src/ui` : UI + presenter
+- `src/ui` : UI + presenter / 画面表示とプレゼンター
 - `src/behavior` : Stackchan behavior / 振る舞い制御
 - `src/config` : settings + secrets + persistence / 設定と永続化
 - `src/utils` : small helpers / 小さなユーティリティ
+- `src/core/app_types.h` : app-level shared types / アプリ共通の型
 
 ## Configuration / 設定
 - Secrets live in `src/config/config_private.h` (not committed).
