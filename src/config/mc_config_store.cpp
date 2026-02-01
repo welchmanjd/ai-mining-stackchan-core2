@@ -7,6 +7,7 @@
 #include <LittleFS.h>
 
 #include "config.h"
+#include "utils/logging.h"
 #ifndef MC_WIFI_SSID
   #define MC_WIFI_SSID ""
 #endif
@@ -99,23 +100,23 @@ static void loadOnce_() {
   g_loaded = true;
   applyDefaults_();
   if (!LittleFS.begin(true)) {
-    Serial.printf("[CFG] LittleFS.begin failed (format attempted)\n");
+    MC_LOGE("CFG", "LittleFS.begin failed (format attempted)");
     return;
   }
   if (!LittleFS.exists(kCfgPath)) {
-    Serial.printf("[CFG] %s not found -> defaults\n", kCfgPath);
+    MC_LOGI("CFG", "%s not found -> defaults", kCfgPath);
     return;
   }
   File f = LittleFS.open(kCfgPath, "r");
   if (!f) {
-    Serial.printf("[CFG] open failed: %s\n", kCfgPath);
+    MC_LOGE("CFG", "open failed: %s", kCfgPath);
     return;
   }
   DynamicJsonDocument doc(5120);
   DeserializationError err = deserializeJson(doc, f);
   f.close();
   if (err) {
-    Serial.printf("[CFG] JSON parse failed: %s\n", err.c_str());
+    MC_LOGE("CFG", "JSON parse failed: %s", err.c_str());
     return;
   }
   auto setStr = [&](const char* key, String& dst) {
@@ -161,7 +162,7 @@ static void loadOnce_() {
     setCpuMhz("cpu_mhz", g_rt.cpuMhz_);
   } else {
     if (!doc["cpu_freq_mhz"].isNull()) {
-      Serial.printf("[CFG] deprecated key ignored: cpu_freq_mhz\n");
+      MC_LOGW("CFG", "deprecated key ignored: cpu_freq_mhz");
     }
   }
   setU32("display_sleep_s", g_rt.displaySleepS_);
@@ -175,7 +176,7 @@ static void loadOnce_() {
   if (isAllQuestionMarks_(g_rt.speechHello_)) {
     g_rt.speechHello_ = MC_SPEECH_HELLO;
   }
-  Serial.printf("[CFG] loaded %s\n", kCfgPath);
+  MC_LOGI("CFG", "loaded %s", kCfgPath);
 }
 } // namespace
 void mcConfigBegin() {
@@ -286,7 +287,7 @@ bool mcConfigSave(String& err) {
   }
   f.close();
   g_dirty = false;
-  Serial.printf("[CFG] saved %s\n", kCfgPath);
+  MC_LOGI("CFG", "saved %s", kCfgPath);
   return true;
 }
 String mcConfigGetMaskedJson() {

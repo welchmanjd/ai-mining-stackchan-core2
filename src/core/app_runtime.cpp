@@ -224,7 +224,9 @@ void appRuntimeTick(uint32_t now) {
 
   // Orchestrator tick (timeout recovery)
   if (g_ctx.orch_->tick(now)) {
-    LOG_EVT_INFO("EVT_ORCH_TIMEOUT_MAIN", "recover=1");
+    LOG_EVT_INFO("EVT_ORCH_TIMEOUT_MAIN", "recover=1 expect_tts_id=%lu expect_rid=%lu",
+                 (unsigned long)g_ctx.orch_->expectSpeakId(),
+                 (unsigned long)g_ctx.orch_->expectRid());
     if (g_ctx.tts_) {
       g_ctx.tts_->requestSessionReset();
     }

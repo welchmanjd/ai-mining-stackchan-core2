@@ -146,6 +146,11 @@ void AiTalkController::tick(uint32_t nowMs) {
               OrchestratorApi::OrchKind::AiSpeak
           );
           if (cmd.valid_) {
+            {
+              String head = mcLogHead(replyText_, MC_AI_LOG_HEAD_BYTES_TTS_LOG);
+              if (replyText_.length() > head.length()) head += "...";
+              MC_LOGD("TTS", "text_head=\"%s\"", head.c_str());
+            }
             orch_->enqueueSpeakPending(cmd);
             activeRid_ = rid;
             awaitingOrchSpeak_ = true;
@@ -282,6 +287,11 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
     lastSttStatus_ = stt.status_;
     if (stt.ok_) {
       lastUserText_ = mcUtf8ClampBytes(stt.text_, MC_AI_MAX_INPUT_CHARS);
+      {
+        String head = mcLogHead(lastUserText_, MC_AI_LOG_HEAD_BYTES_STT_LOG);
+        if (lastUserText_.length() > head.length()) head += "...";
+        MC_LOGD("STT", "text_head=\"%s\"", head.c_str());
+      }
     } else {
       lastUserText_ = stt.err_.length() ? stt.err_ : String(MC_AI_ERR_TEMP_FAIL_TRY_AGAIN);
       errorFlag_ = true;
@@ -383,7 +393,10 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
   overlay_ = AiUiOverlay();
   overlay_.active_ = true;
   overlay_.hint_ = MC_AI_IDLE_HINT_TEXT;
-  LOG_EVT_INFO("EVT_AI_STATE", "state=LISTENING");
+  const uint32_t ttsId = (orch_ && activeRid_ != 0) ? orch_->ttsIdForRid(activeRid_) : 0;
+  LOG_EVT_INFO("EVT_AI_STATE", "state=LISTENING rid=%lu tts_id=%lu",
+               (unsigned long)activeRid_,
+               (unsigned long)ttsId);
   updateOverlay_(nowMs);
 }
 void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
@@ -393,15 +406,19 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char* reason) {
   state_ = AiState::Idle;
   inputText_ = "";
   replyText_ = "";
+  const uint32_t oldRid = activeRid_;
   activeRid_ = 0;
   awaitingOrchSpeak_ = false;
   speakHardTimeoutMs_ = 0;
   overlay_ = AiUiOverlay();
   overlay_.active_ = false;
   errorFlag_ = false;
+  const uint32_t ttsId = (orch_ && oldRid != 0) ? orch_->ttsIdForRid(oldRid) : 0;
   LOG_EVT_INFO("EVT_AI_STATE",
-               "state=IDLE reason=%s",
-               reason ? reason : "-");
+               "state=IDLE reason=%s rid=%lu tts_id=%lu",
+               reason ? reason : "-",
+               (unsigned long)oldRid,
+               (unsigned long)ttsId);
   (void)nowMs;
 }
 void AiTalkController::enterSpeaking_(uint32_t nowMs) {
@@ -415,7 +432,10 @@ void AiTalkController::enterSpeaking_(uint32_t nowMs) {
             (unsigned)replyText_.length(),
             (unsigned long)activeRid_);
   }
-  LOG_EVT_INFO("EVT_AI_STATE", "state=SPEAKING");
+  const uint32_t ttsId = (orch_ && activeRid_ != 0) ? orch_->ttsIdForRid(activeRid_) : 0;
+  LOG_EVT_INFO("EVT_AI_STATE", "state=SPEAKING rid=%lu tts_id=%lu",
+               (unsigned long)activeRid_,
+               (unsigned long)ttsId);
   updateOverlay_(nowMs);
 }
 void AiTalkController::enterPostSpeakBlank_(uint32_t nowMs) {
@@ -423,7 +443,10 @@ void AiTalkController::enterPostSpeakBlank_(uint32_t nowMs) {
   blankStartMs_ = nowMs;
   bubbleText_ = "";
   bubbleDirty_ = true;
-  LOG_EVT_INFO("EVT_AI_STATE", "state=POST_SPEAK_BLANK");
+  const uint32_t ttsId = (orch_ && activeRid_ != 0) ? orch_->ttsIdForRid(activeRid_) : 0;
+  LOG_EVT_INFO("EVT_AI_STATE", "state=POST_SPEAK_BLANK rid=%lu tts_id=%lu",
+               (unsigned long)activeRid_,
+               (unsigned long)ttsId);
   updateOverlay_(nowMs);
 }
 void AiTalkController::enterCooldown_(uint32_t nowMs, bool error, const char* reason) {
@@ -436,10 +459,13 @@ void AiTalkController::enterCooldown_(uint32_t nowMs, bool error, const char* re
   overlay_.hint_  = MC_AI_IDLE_HINT_TEXT;
   overlay_.line1_ = MC_AI_TEXT_COOLDOWN;
   overlay_.line2_ = "";
-  LOG_EVT_INFO("EVT_AI_STATE", "state=COOLDOWN reason=%s err=%d dur=%lums",
+  const uint32_t ttsId = (orch_ && activeRid_ != 0) ? orch_->ttsIdForRid(activeRid_) : 0;
+  LOG_EVT_INFO("EVT_AI_STATE", "state=COOLDOWN reason=%s err=%d dur=%lums rid=%lu tts_id=%lu",
                reason ? reason : "-",
                error ? 1 : 0,
-               (unsigned long)cooldownDurMs_);
+               (unsigned long)cooldownDurMs_,
+               (unsigned long)activeRid_,
+               (unsigned long)ttsId);
 }
 void AiTalkController::updateOverlay_(uint32_t nowMs) {
   overlay_.active_ = true;

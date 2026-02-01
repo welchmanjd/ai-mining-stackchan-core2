@@ -52,14 +52,29 @@ inline void mc_logf(const char* fmt, ...) {
 #endif
 // ================================
 // ================================
-#define MC_EVT(tag, fmt, ...) \
-  mc_logf("[EVT] " tag " " fmt, ##__VA_ARGS__)
+#if (MC_LOG_LEVEL >= 1)
+  #define MC_EVT_I(tag, fmt, ...) \
+    mc_logf("[EVT] " tag " " fmt, ##__VA_ARGS__)
+  #define MC_EVT_W(tag, fmt, ...) \
+    mc_logf("[EVT] " tag " " fmt, ##__VA_ARGS__)
+#else
+  #define MC_EVT_I(tag, fmt, ...) do {} while (0)
+  #define MC_EVT_W(tag, fmt, ...) do {} while (0)
+#endif
 #if (MC_LOG_LEVEL >= 2)
   #define MC_EVT_D(tag, fmt, ...) \
     mc_logf("[EVT] " tag " " fmt, ##__VA_ARGS__)
 #else
   #define MC_EVT_D(tag, fmt, ...) do {} while (0)
 #endif
+#if (MC_LOG_LEVEL >= 3)
+  #define MC_EVT_T(tag, fmt, ...) \
+    mc_logf("[EVT] " tag " " fmt, ##__VA_ARGS__)
+#else
+  #define MC_EVT_T(tag, fmt, ...) do {} while (0)
+#endif
+// Back-compat: legacy MC_EVT mapped to INFO level.
+#define MC_EVT(tag, fmt, ...) MC_EVT_I(tag, fmt, ##__VA_ARGS__)
 // ================================
 // ================================
 //
@@ -74,11 +89,15 @@ inline void mc_logf(const char* fmt, ...) {
 #define EVT_HEARTBEAT_ENABLED 0
 #endif
 #define LOG_EVT_INFO(tag, fmt, ...) \
-  MC_EVT(tag, fmt, ##__VA_ARGS__)
+  MC_EVT_I(tag, fmt, ##__VA_ARGS__)
+#define LOG_EVT_WARN(tag, fmt, ...) \
+  MC_EVT_W(tag, fmt, ##__VA_ARGS__)
 #define LOG_EVT_DEBUG(tag, fmt, ...) \
   do { if (EVT_DEBUG_ENABLED) MC_EVT_D(tag, fmt, ##__VA_ARGS__); } while (0)
+#define LOG_EVT_TRACE(tag, fmt, ...) \
+  MC_EVT_T(tag, fmt, ##__VA_ARGS__)
 #define LOG_EVT_HEARTBEAT(tag, fmt, ...) \
-  do { if (EVT_HEARTBEAT_ENABLED) MC_LOGT(tag, fmt, ##__VA_ARGS__); } while (0)
+  do { if (EVT_HEARTBEAT_ENABLED) MC_EVT_T(tag, fmt, ##__VA_ARGS__); } while (0)
 // ================================
 // ================================
 #ifndef TOUCH_DEBUG_ENABLED

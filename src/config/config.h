@@ -129,6 +129,12 @@
 #ifndef MC_AI_LOG_HEAD_BYTES_OVERLAY
   #define MC_AI_LOG_HEAD_BYTES_OVERLAY 40 // ai_talk_controller.cpp: オーバーレイ表示のログ切り詰め
 #endif
+#ifndef MC_AI_LOG_HEAD_BYTES_STT_LOG
+  #define MC_AI_LOG_HEAD_BYTES_STT_LOG 40 // ai_talk_controller.cpp: STT文字列ログの切り詰め
+#endif
+#ifndef MC_AI_LOG_HEAD_BYTES_TTS_LOG
+  #define MC_AI_LOG_HEAD_BYTES_TTS_LOG 40 // ai_talk_controller.cpp: TTS文字列ログの切り詰め
+#endif
 #ifndef MC_AI_LOG_HEAD_BYTES_LLM_ERRMSG_SHORT
   #define MC_AI_LOG_HEAD_BYTES_LLM_ERRMSG_SHORT 80 // openai_llm.cpp: エラー文の短縮ログ
 #endif

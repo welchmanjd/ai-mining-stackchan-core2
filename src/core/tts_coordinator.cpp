@@ -125,14 +125,16 @@ static void handleTtsDone_(uint32_t now, bool ttsBusyNow) {
     clearInflight_();
   } else {
     LOG_EVT_INFO("EVT_TTS_DONE_IGNORED",
-                 "got_tts_id=%lu expected=%lu",
+                 "got_tts_id=%lu expected=%lu inflight_rid=%lu",
                  (unsigned long)gotId,
-                 (unsigned long)g_ttsInflightId);
+                 (unsigned long)g_ttsInflightId,
+                 (unsigned long)g_ttsInflightRid);
     if (desync) {
       LOG_EVT_INFO("EVT_ORCH_SPEAK_DESYNC",
-                   "got=%lu expect=%lu",
+                   "got=%lu expect=%lu inflight_rid=%lu",
                    (unsigned long)gotId,
-                   (unsigned long)g_ttsInflightId);
+                   (unsigned long)g_ttsInflightId,
+                   (unsigned long)g_ttsInflightRid);
       g_ctx.tts_->requestSessionReset();
       UIMining::instance().setStackchanSpeech("");
       clearInflight_();

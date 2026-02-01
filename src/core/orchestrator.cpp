@@ -45,7 +45,10 @@ void Orchestrator::init() {
   prevState_ = AppState::Idle;
   thinkWaitSinceMs_ = 0;
   timeoutLogged_ = false;
-  LOG_EVT_INFO("EVT_ORCH_INIT", "state=%d", (int)state_);
+  LOG_EVT_INFO("EVT_ORCH_INIT", "state=%d expect_rid=%lu expect_tts_id=%lu",
+               (int)state_,
+               (unsigned long)expectRid_,
+               (unsigned long)expectSpeakId_);
 }
 Orchestrator::SpeakStartCmd Orchestrator::makeSpeakStartCmd(uint32_t rid, const String& text, OrchPrio prio, OrchKind kind) {
   SpeakStartCmd cmd;
@@ -133,6 +136,8 @@ void Orchestrator::setExpectedSpeak(uint32_t speakId, uint32_t rid, OrchKind kin
 }
 void Orchestrator::clearExpectedSpeak(const char* reason) {
   const uint32_t old = expectSpeakId_;
+  const uint32_t oldRid = expectRid_;
+  const OrchKind oldKind = expectKind_;
   const AppState from = state_;
   expectSpeakId_ = 0;
   expectRid_ = 0;
@@ -140,22 +145,36 @@ void Orchestrator::clearExpectedSpeak(const char* reason) {
   mismatchCount_ = 0;
   state_ = AppState::Idle;
   LOG_EVT_INFO("EVT_ORCH_CLEAR_EXPECT",
-               "from=%d to=%d reason=%s old_expect=%lu",
+               "from=%d to=%d reason=%s old_expect=%lu old_rid=%lu old_kind=%d",
                (int)from, (int)state_,
                reason ? reason : "-",
-               (unsigned long)old);
+               (unsigned long)old,
+               (unsigned long)oldRid,
+               (int)oldKind);
 }
 void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason) {
   cancelSpeak(speakId, reason, CancelSource::Other);
 }
 void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason, CancelSource source) {
   if (speakId == 0) return;
+  uint32_t ridForLog = 0;
+  if (expectSpeakId_ != 0 && expectSpeakId_ == speakId) {
+    ridForLog = expectRid_;
+  } else if (!pending_.empty()) {
+    for (const auto& cmd : pending_) {
+      if (cmd.ttsId_ == speakId) {
+        ridForLog = cmd.rid_;
+        break;
+      }
+    }
+  }
   // idempotent guard
   const CancelRecord* already = findCanceled_(speakId);
   if (already) {
     LOG_EVT_INFO("EVT_ORCH_CANCEL_IGNORED",
-                 "tts_id=%lu source=%s reason=%s orig_source=%s orig_reason=%s",
+                 "tts_id=%lu rid=%lu source=%s reason=%s orig_source=%s orig_reason=%s",
                  (unsigned long)speakId,
+                 (unsigned long)ridForLog,
                  sourceToStr_(source),
                  (reason && reason[0]) ? reason : "-",
                  sourceToStr_(already->source),
@@ -169,7 +188,7 @@ void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason, CancelSourc
   // Remove from pending queue to prevent later playback.
   if (!pending_.empty()) {
     for (auto it = pending_.begin(); it != pending_.end();) {
-    if (it->ttsId_ == speakId) {
+      if (it->ttsId_ == speakId) {
         it = pending_.erase(it);
         removed++;
       } else {
@@ -193,9 +212,10 @@ void Orchestrator::cancelSpeak(uint32_t speakId, const char* reason, CancelSourc
   }
   prevState_ = state_;
   LOG_EVT_INFO("EVT_ORCH_CANCEL_SPEAK",
-               "from=%d to=%d tts_id=%lu source=%s reason=%s old_expect=%lu cleared_expect=%d pending_removed=%u pending_left=%u",
+               "from=%d to=%d tts_id=%lu rid=%lu source=%s reason=%s old_expect=%lu cleared_expect=%d pending_removed=%u pending_left=%u",
                (int)from, (int)state_,
                (unsigned long)speakId,
+               (unsigned long)ridForLog,
                sourceToStr_(source),
                (reason && reason[0]) ? reason : "-",
                (unsigned long)oldExpect,
@@ -240,13 +260,16 @@ void Orchestrator::onAudioStart(uint32_t speakId) {
     const AppState from = state_;
     state_ = AppState::Speak;
     LOG_EVT_INFO("EVT_ORCH_STATE",
-                 "from=%d to=%d reason=audio_start speak_id=%lu",
-                 (int)from, (int)state_, (unsigned long)speakId);
+                 "from=%d to=%d reason=audio_start speak_id=%lu rid=%lu",
+                 (int)from, (int)state_,
+                 (unsigned long)speakId,
+                 (unsigned long)expectRid_);
   } else {
     LOG_EVT_INFO("EVT_ORCH_AUDIO_START_IGNORED",
-                 "got=%lu expect=%lu state=%d",
+                 "got=%lu expect=%lu expect_rid=%lu state=%d",
                  (unsigned long)speakId,
                  (unsigned long)expectSpeakId_,
+                 (unsigned long)expectRid_,
                  (int)state_);
   }
 }
@@ -263,16 +286,20 @@ bool Orchestrator::onTtsDone(uint32_t gotId,
   if (doneKind) *doneKind = OrchKind::None;
   const uint32_t expect = expectSpeakId_;
   const bool ok = (expect != 0) && (gotId == expect);
-  LOG_EVT_INFO("EVT_TTS_DONE_RX_ORCH", "got=%lu expect=%lu ok=%d",
-               (unsigned long)gotId, (unsigned long)expect, ok ? 1 : 0);
+  LOG_EVT_INFO("EVT_TTS_DONE_RX_ORCH", "got=%lu expect=%lu expect_rid=%lu ok=%d",
+               (unsigned long)gotId, (unsigned long)expect,
+               (unsigned long)expectRid_,
+               ok ? 1 : 0);
   if (ok) {
     if (doneRid) *doneRid = expectRid_;
     if (doneKind) *doneKind = expectKind_;
     const AppState from = state_;
     state_ = AppState::Idle;
     LOG_EVT_INFO("EVT_ORCH_STATE",
-                 "from=%d to=%d reason=tts_done speak_id=%lu",
-                 (int)from, (int)state_, (unsigned long)gotId);
+                 "from=%d to=%d reason=tts_done speak_id=%lu rid=%lu",
+                 (int)from, (int)state_,
+                 (unsigned long)gotId,
+                 (unsigned long)expectRid_);
     expectSpeakId_ = 0;
     expectRid_ = 0;
     expectKind_ = OrchKind::None;
@@ -282,8 +309,10 @@ bool Orchestrator::onTtsDone(uint32_t gotId,
   // mismatch
   if (expect != 0) mismatchCount_++;
   LOG_EVT_INFO("EVT_ORCH_SPEAK_MISMATCH",
-               "got=%lu expect=%lu count=%u",
-               (unsigned long)gotId, (unsigned long)expect, (unsigned)mismatchCount_);
+               "got=%lu expect=%lu expect_rid=%lu count=%u",
+               (unsigned long)gotId, (unsigned long)expect,
+               (unsigned long)expectRid_,
+               (unsigned)mismatchCount_);
   if (mismatchCount_ >= kDesyncThreshold) {
     if (desyncOut) *desyncOut = true;
   }
@@ -305,6 +334,8 @@ bool Orchestrator::tick(uint32_t nowMs) {
     if (thinkWaitSinceMs_ != 0 && (uint32_t)(nowMs - thinkWaitSinceMs_) >= kThinkWaitTimeoutMs) {
       const size_t cleared = pending_.size();
       const AppState from = state_;
+      const uint32_t oldExpectId = expectSpeakId_;
+      const uint32_t oldExpectRid = expectRid_;
       pending_.clear();
       expectSpeakId_ = 0;
       expectRid_ = 0;
@@ -314,9 +345,11 @@ bool Orchestrator::tick(uint32_t nowMs) {
       timeoutLogged_ = true;
       didTimeout = true;
       LOG_EVT_INFO("EVT_ORCH_TIMEOUT",
-                   "from=%d elapsed_ms=%lu action=clear_pending_idle cleared=%u",
+                   "from=%d elapsed_ms=%lu action=clear_pending_idle cleared=%u expect_tts_id=%lu expect_rid=%lu",
                    (int)from, (unsigned long)(nowMs - thinkWaitSinceMs_),
-                   (unsigned)cleared);
+                   (unsigned)cleared,
+                   (unsigned long)oldExpectId,
+                   (unsigned long)oldExpectRid);
     }
   }
   return didTimeout;

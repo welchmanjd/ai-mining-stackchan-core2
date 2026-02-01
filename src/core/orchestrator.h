@@ -31,6 +31,9 @@ public:
                  OrchKind* doneKind,
                  bool* desyncOut = nullptr);
   uint32_t ttsIdForRid(uint32_t rid) const override;
+  uint32_t expectSpeakId() const { return expectSpeakId_; }
+  uint32_t expectRid() const { return expectRid_; }
+  OrchKind expectKind() const { return expectKind_; }
   bool cancelSpeakByRid(uint32_t rid,
                         const char* reason,
                         CancelSource source,
