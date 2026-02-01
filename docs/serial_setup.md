@@ -3,6 +3,9 @@
 This project exposes a simple line-based serial protocol for setup and diagnostics.
 All commands are plain text, one per line. Responses are prefixed with `@OK`, `@ERR`, or data tags.
 
+Related docs:
+- `docs/config.md` (compile-time and runtime config overview)
+
 ## Connection
 - Baud: 115200
 - Newline: `\n` (CR is ignored)

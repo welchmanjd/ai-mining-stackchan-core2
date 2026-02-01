@@ -58,6 +58,7 @@ dependencies consistent as the project grows.
 Avoid reverse dependencies (e.g., ui -> ai) unless explicitly justified.
 
 Example dependency: app_runtime -> tts_coordinator -> azure_tts.
+Main flow: main.cpp -> app_runtime -> tts_coordinator.
 
 ## Dependency Exceptions (Allowed Cases)
 - ui -> ai

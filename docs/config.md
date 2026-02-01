@@ -138,4 +138,6 @@ Typical keys:
 - `spk_volume`
 - `cpu_mhz`
 
+These keys apply immediately when set via the serial protocol.
+
 See `docs/serial_setup.md` for the setup protocol.
