@@ -141,10 +141,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
   // Keep instructions short to reduce token use and response latency.
   DynamicJsonDocument req(2048);
   req["model"] = MC_OPENAI_MODEL;
-  req["instructions"] =
-      "あなたはスタックチャンの会話AIです。日本語で短く答えてください。"
-      "返答は120文字以内。箇条書き禁止。1〜2文。"
-      "相手が『聞こえる？』等の確認なら、明るく短く返してください。";
+  req["instructions"] = MC_OPENAI_INSTRUCTIONS;
   req["input"] = userText;
   req["reasoning"]["effort"] = MC_OPENAI_REASONING_EFFORT;
   req["max_output_tokens"] = (int)MC_OPENAI_MAX_OUTPUT_TOKENS;
