@@ -5,7 +5,14 @@
 #include <type_traits>
 
 #include <LittleFS.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 #include <M5Unified.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 // Arduino-ESP32 ships ESP-IDF's I2S driver headers.
 // We use these *only* to force-uninstall stale drivers after switching Mic <-> Speaker.
 #include <driver/i2s.h>

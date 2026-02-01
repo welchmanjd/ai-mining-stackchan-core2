@@ -3,7 +3,14 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 #include <M5Unified.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include <WiFi.h>
 #include <esp32-hal-cpu.h>
 
@@ -68,7 +75,7 @@ static const char* aiStateName_(AiTalkController::AiState s) {
 static long getDisplaySleepSecondsFromStore_(long fallbackSec) {
   // Pull display timeout from stored JSON config (best-effort).
   String j = mcConfigGetMaskedJson(); // contains display_sleep_s, attention_text, etc.
-  StaticJsonDocument<1024> doc;
+  JsonDocument doc;
   DeserializationError e = deserializeJson(doc, j);
   if (e) return fallbackSec;
   JsonVariant v = doc["display_sleep_s"];

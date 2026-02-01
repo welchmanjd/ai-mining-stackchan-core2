@@ -26,29 +26,8 @@
 #ifndef MC_AZ_SPEECH_KEY
   #define MC_AZ_SPEECH_KEY ""
 #endif
-#ifndef MC_AZ_TTS_VOICE
-  #define MC_AZ_TTS_VOICE ""
-#endif
 #ifndef MC_AZ_CUSTOM_SUBDOMAIN
   #define MC_AZ_CUSTOM_SUBDOMAIN ""
-#endif
-#ifndef MC_DISPLAY_SLEEP_SECONDS
-  #define MC_DISPLAY_SLEEP_SECONDS 600
-#endif
-#ifndef MC_ATTENTION_TEXT
-  #define MC_ATTENTION_TEXT "Hi there!"
-#endif
-#ifndef MC_SPK_VOLUME
-  #define MC_SPK_VOLUME 160
-#endif
-#ifndef MC_CPU_FREQ_MHZ
-  #define MC_CPU_FREQ_MHZ 240
-#endif
-#ifndef MC_SPEECH_SHARE_ACCEPTED
-#define MC_SPEECH_SHARE_ACCEPTED "シェア獲得したよ！"
-#endif
-#ifndef MC_SPEECH_HELLO
-#define MC_SPEECH_HELLO "こんにちはマイニングスタックチャンです"
 #endif
 namespace {
 static const char* kCfgPath = "/mc_config.json";
@@ -112,7 +91,7 @@ static void loadOnce_() {
     MC_LOGE("CFG", "open failed: %s", kCfgPath);
     return;
   }
-  DynamicJsonDocument doc(5120);
+  JsonDocument doc;
   DeserializationError err = deserializeJson(doc, f);
   f.close();
   if (err) {
@@ -260,7 +239,7 @@ bool mcConfigSave(String& err) {
     err = "fs_begin_failed";
     return false;
   }
-  DynamicJsonDocument doc(5120);
+  JsonDocument doc;
   doc["wifi_ssid"] = g_rt.wifiSsid_;
   doc["wifi_pass"] = g_rt.wifiPass_;
   doc["duco_user"] = g_rt.ducoUser_;
@@ -292,7 +271,7 @@ bool mcConfigSave(String& err) {
 }
 String mcConfigGetMaskedJson() {
   loadOnce_();
-  DynamicJsonDocument doc(3072);
+  JsonDocument doc;
   const bool wifiPassSet = g_rt.wifiPass_.length() > 0;
   const bool ducoKeySet  = (g_rt.ducoKey_.length() > 0) && (g_rt.ducoKey_ != "None");
   const bool azKeySet    = g_rt.azKey_.length() > 0;

@@ -2,7 +2,14 @@
 #include "core/serial_setup.h"
 
 #include <ArduinoJson.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 #include <M5Unified.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include <WiFi.h>
 #include <esp32-hal-cpu.h>
 

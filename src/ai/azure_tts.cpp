@@ -4,7 +4,14 @@
 
 #include <string.h>
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 #include <M5Unified.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include <WiFi.h>
 
 #include "audio/i2s_manager.h"

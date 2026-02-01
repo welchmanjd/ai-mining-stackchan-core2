@@ -6,15 +6,8 @@
 #include <WiFiClientSecure.h>
 
 #include "config/config.h"
-#include "config/config_private.h"
 #include "utils/logging.h"
 #include "utils/mc_text_utils.h"
-#ifndef MC_OPENAI_ENDPOINT
-#define MC_OPENAI_ENDPOINT "https://api.openai.com/v1/responses"
-#endif
-#ifndef MC_OPENAI_MODEL
-#define MC_OPENAI_MODEL "gpt-5-nano"
-#endif
 // ---- small helpers ----
 // Step2: moved UTF-8 clamp / one-line sanitize into mc_text_utils.*
 static String buildDiag_(JsonVariant root) {
@@ -139,7 +132,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
            (unsigned long)timeoutMs, (unsigned)userText.length());
   // ---- request build ----
   // Keep instructions short to reduce token use and response latency.
-  DynamicJsonDocument req(2048);
+  JsonDocument req;
   req["model"] = MC_OPENAI_MODEL;
   req["instructions"] = MC_OPENAI_INSTRUCTIONS;
   req["input"] = userText;
@@ -182,7 +175,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
   }
  if (code < 200 || code >= 300) {
   // HTTP error response: try to extract a short error message for logs.
-  DynamicJsonDocument doc(4096);
+  JsonDocument doc;
   DeserializationError e = deserializeJson(doc, body);
   String msg = "";
   if (!e && doc["error"]["message"].is<const char*>()) {
@@ -199,7 +192,7 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
   return r;
 }
   // ---- parse + extract ----
-  DynamicJsonDocument doc(24576);
+  JsonDocument doc;
   DeserializationError e = deserializeJson(doc, body);
   if (e) {
     r.ok_ = false;

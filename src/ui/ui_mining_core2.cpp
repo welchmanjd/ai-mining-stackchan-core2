@@ -2,7 +2,14 @@
 // Module implementation.
 #include "ui/ui_mining_core2.h"
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 #include <M5Unified.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include <WiFi.h>
 
 #include "utils/logging.h"

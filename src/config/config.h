@@ -206,25 +206,25 @@ struct AppConfig {
 inline const AppConfig& appConfig() {
   static AppConfig cfg{
     // wifi
-    mcCfgWifiSsid(),
-    mcCfgWifiPass(),
+    "",
+    "",
     // duco
-    mcCfgDucoUser(),
-    mcCfgDucoKey(),
+    "",
+    "",
     "Mining-Stackchan-Core2", // duco_rig_name
     "M5StackCore2",           // duco_banner
     // azure tts
-    mcCfgAzRegion(),
-    mcCfgAzKey(),
-    mcCfgAzVoice(),
+    "",
+    "",
+    "",
     // app
     "Mining-Stackchan-Core2", // app_name
     "0.681",                  // app_version
     // attention
-    mcCfgAttentionText(),
+    "",
     // speech lines
-    mcCfgShareAcceptedText(),
-    mcCfgHelloText()
+    "",
+    ""
   };
   cfg.wifiSsid_      = mcCfgWifiSsid();
   cfg.wifiPass_      = mcCfgWifiPass();

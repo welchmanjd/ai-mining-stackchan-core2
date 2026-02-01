@@ -6,7 +6,14 @@
 #include <time.h>
 
 #include <Arduino.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 #include <M5Unified.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include <esp32-hal-cpu.h>
 #include <esp_log.h>
 
