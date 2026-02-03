@@ -31,6 +31,7 @@ dependencies consistent as the project grows.
   - serial_setup: line-based setup protocol, runtime config apply
   - tts_coordinator: TTS state + orchestrator sync + pending speak
   - Cross-cutting policies (feature flags, timeouts)
+  - Public API headers live under `core/public/` to make the boundary explicit
 - ai
   - Dialogue control and AI integration
   - LLM/STT/TTS providers

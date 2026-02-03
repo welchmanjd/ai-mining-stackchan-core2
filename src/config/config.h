@@ -103,6 +103,15 @@
 #ifndef MC_AI_LLM_TIMEOUT_MS
   #define MC_AI_LLM_TIMEOUT_MS 10000 // ai_talk_controller.cpp: LLM呼び出しの上限
 #endif
+#ifndef MC_AI_LLM_TASK_STACK
+  #define MC_AI_LLM_TASK_STACK 8192 // ai_talk_controller.cpp: LLMタスクのスタック
+#endif
+#ifndef MC_AI_LLM_TASK_PRIO
+  #define MC_AI_LLM_TASK_PRIO 1 // ai_talk_controller.cpp: LLMタスク優先度
+#endif
+#ifndef MC_AI_LLM_TASK_CORE
+  #define MC_AI_LLM_TASK_CORE 0 // ai_talk_controller.cpp: LLMタスクの実行コア
+#endif
 #ifndef MC_AI_OVERALL_DEADLINE_MS
   #define MC_AI_OVERALL_DEADLINE_MS 20000 // ai_talk_controller.cpp: STT+LLM全体の予算
 #endif

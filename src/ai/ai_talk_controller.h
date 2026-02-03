@@ -1,6 +1,12 @@
 ﻿#pragma once
 #include <Arduino.h>
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+
+#include "ai/openai_llm.h"
+
 #include "audio/audio_recorder.h"
 #include "ui/ui_types.h"
 #include "utils/app_types.h"
@@ -32,6 +38,9 @@ private:
   void enterPostSpeakBlank_(uint32_t nowMs);
   void enterCooldown_(uint32_t nowMs, bool error, const char *reason);
   void updateOverlay_(uint32_t nowMs);
+  void startLlmRequest_(const String &userText, uint32_t timeoutMs);
+  bool tryConsumeLlmResult_();
+  static void llmTaskEntry_(void *arg);
 
 private:
   OrchestratorApi *orch_ = nullptr;
@@ -68,4 +77,13 @@ private:
   bool errorFlag_ = false;
   uint32_t abortTtsId_ = 0;
   char abortTtsReason_[24] = {0};
+  // ---- LLM async ----
+  TaskHandle_t llmTask_ = nullptr;
+  SemaphoreHandle_t llmMutex_ = nullptr;
+  volatile bool llmBusy_ = false;
+  volatile bool llmDone_ = false;
+  uint32_t llmReqId_ = 0;
+  String llmInput_;
+  uint32_t llmTimeout_ = 0;
+  LlmResult llmResult_;
 };
