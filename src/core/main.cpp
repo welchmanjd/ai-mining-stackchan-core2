@@ -22,12 +22,12 @@
 #include "ai/mining_task.h"
 #include "behavior/stackchan_behavior.h"
 #include "config/config.h"
-#include "core/app_runtime.h"
-#include "core/app_types.h"
+#include "core/public/app_runtime.h"
 #include "core/orchestrator.h"
-#include "core/serial_setup.h"
-#include "core/tts_coordinator.h"
+#include "core/public/serial_setup.h"
+#include "core/public/tts_coordinator.h"
 #include "ui/ui_mining_core2.h"
+#include "utils/app_types.h"
 #include "utils/logging.h"
 // Azure TTS
 static AzureTts g_tts;

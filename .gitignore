@@ -1,5 +1,6 @@
 .pio/
 .vscode/
+.cache/
 .DS_Store
 *.bin
 *.elf

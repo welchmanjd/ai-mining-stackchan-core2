@@ -20,8 +20,8 @@
 #include <Avatar.h>
 #include <M5GFX.h>
 
-#include "ai/ai_interface.h"
 #include "utils/mining_panel_data.h"
+#include "ui/ui_types.h"
 class UIMining {
 public:
   using PanelData = MiningPanelData;

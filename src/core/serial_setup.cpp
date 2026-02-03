@@ -1,5 +1,5 @@
 // Module implementation.
-#include "core/serial_setup.h"
+#include "core/public/serial_setup.h"
 
 #include <ArduinoJson.h>
 #if defined(__GNUC__)

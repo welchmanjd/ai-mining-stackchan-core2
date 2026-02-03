@@ -1,5 +1,5 @@
 // Module implementation.
-#include "core/tts_coordinator.h"
+#include "core/public/tts_coordinator.h"
 
 #include <Arduino.h>
 #if defined(__GNUC__)
@@ -16,7 +16,7 @@
 #include "ai/mining_task.h"
 #include "behavior/stackchan_behavior.h"
 #include "config/runtime_features.h"
-#include "core/app_types.h"
+#include "utils/app_types.h"
 #include "core/orchestrator.h"
 #include "ui/ui_mining_core2.h"
 #include "utils/logging.h"
