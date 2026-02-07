@@ -223,6 +223,18 @@ static bool dechunkMemory_(const uint8_t* in, size_t inLen, uint8_t** outBuf, si
 }
 static void logHeadBytes_(const uint8_t* buf, size_t len);
 static uint32_t g_chunkedSalvageCount = 0;
+static String tokenSnippet_(const String& s) {
+  // Avoid logging full tokens. Show a small redacted snippet only.
+  const size_t n = s.length();
+  if (n == 0) return "(empty)";
+  if (n <= 12) return s;
+  String out;
+  out.reserve(8 + 3 + 8);
+  out += s.substring(0, 8);
+  out += "...";
+  out += s.substring(n - 8);
+  return out;
+}
 // === src/azure_tts.cpp : replace whole function ===
 static void salvageChunkedLeakIfNeeded_(uint8_t** pBuf, size_t* pLen) {
   // Fix up cases where chunk framing leaked into the response body.
@@ -699,10 +711,13 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
   // Legacy token fetch via regional STS endpoint (still used by some tenants).
   if (!outTok) return false;
   outTok->clear();
-  if (key_.length() == 0) return false;
+  if (key_.length() == 0) {
+    MC_LOGI("TTS_TOKEN", "skip: key empty");
+    return false;
+  }
   constexpr uint32_t kTokenTimeoutMs = 6000;
-  auto tryUrl = [&](const String& url) -> bool {
-    (void)url;
+  auto tryUrl = [&](const String& url, const char* label) -> bool {
+    MC_LOGI("TTS_TOKEN", "try %s url=%s", label ? label : "?", url.c_str());
     WiFiClientSecure c;
     c.setInsecure();
     HTTPClient h;
@@ -710,7 +725,7 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
     h.useHTTP10(false);
     h.setTimeout(kTokenTimeoutMs);
     if (!h.begin(c, url)) {
-      MC_LOGD("TTS_TOKEN", "begin failed");
+      MC_LOGI("TTS_TOKEN", "begin failed (%s)", label ? label : "?");
       h.end();
       return false;
     }
@@ -718,30 +733,57 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
     h.addHeader("Content-length", "0");
     h.addHeader("Ocp-Apim-Subscription-Key", key_);
     int code = h.POST((uint8_t*)nullptr, 0);
+    MC_LOGI("TTS_TOKEN", "POST done code=%d (%s)", code, label ? label : "?");
     if (code == 200) {
-      String tok = h.getString();
+      String tok;
+      int total = h.getSize(); // -1 if unknown (chunked)
+      WiFiClient* s = h.getStreamPtr();
+      const uint32_t t0 = millis();
+      const uint32_t kTimeoutMs = 1500;
+      const size_t kMaxTok = 2048;
+      while (millis() - t0 < kTimeoutMs) {
+        if (!s) break;
+        while (s->available()) {
+          char c = (char)s->read();
+          tok += c;
+          if (tok.length() >= kMaxTok) break;
+        }
+        if (tok.length() >= kMaxTok) break;
+        if (!s->connected() && !s->available()) break;
+        delay(1);
+      }
+      size_t rawLen = tok.length();
       tok.trim();
+      size_t trimLen = tok.length();
+      MC_LOGI("TTS_TOKEN", "HTTP 200 body_len=%u trimmed=%u size=%d (%s)",
+              (unsigned)rawLen, (unsigned)trimLen, total, label ? label : "?");
+      MC_LOGD("TTS_TOKEN", "body_snip=%s", tokenSnippet_(tok).c_str());
       h.end();
       if (tok.length()) {
+        if (outTok) *outTok = tok;
         return true;
       }
-      MC_LOGD("TTS_TOKEN", "HTTP 200 but empty body");
+      MC_LOGI("TTS_TOKEN", "HTTP 200 but empty body (%s)", label ? label : "?");
       return false;
     }
-    (void)h.getString();
-    MC_LOGD("TTS_TOKEN", "HTTP %d", code);
+    String body = h.getString();
+    String err = h.errorToString(code);
+    MC_LOGI("TTS_TOKEN", "HTTP %d (%s) err=%s body_len=%u",
+            code, label ? label : "?", err.c_str(), (unsigned)body.length());
     h.end();
     return false;
   };
-  // 1) custom host
-  if (customHost_.length()) {
-    String url = String("https://") + customHost_ + "/sts/v1.0/issueToken";
-    if (tryUrl(url)) return true;
-  }
-  // 2) region STS
+  // 1) region STS (official endpoint)
   if (region_.length()) {
     String url = String("https://") + region_ + ".api.cognitive.microsoft.com/sts/v1.0/issueToken";
-    if (tryUrl(url)) return true;
+    if (tryUrl(url, "region")) return true;
+  } else {
+    MC_LOGI("TTS_TOKEN", "skip: region empty");
+  }
+  // 2) custom host (legacy / some tenants)
+  if (customHost_.length()) {
+    String url = String("https://") + customHost_ + "/sts/v1.0/issueToken";
+    if (tryUrl(url, "custom")) return true;
   }
   return false;
 }
