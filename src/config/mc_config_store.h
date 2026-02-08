@@ -11,6 +11,7 @@ const char* mcCfgAzRegion();
 const char* mcCfgAzKey();
 const char* mcCfgAzVoice();
 const char* mcCfgAzEndpoint();
+const char* mcCfgOpenAiKey();
 const char* mcCfgAttentionText();
 uint8_t mcCfgSpkVolume();
 const char* mcCfgShareAcceptedText();

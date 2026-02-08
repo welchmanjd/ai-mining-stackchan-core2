@@ -179,6 +179,10 @@
 #ifndef MC_OPENAI_ENDPOINT
   #define MC_OPENAI_ENDPOINT "https://api.openai.com/v1/responses" // openai_llm.cpp: HTTPリクエスト先
 #endif
+// OpenAI API key (config_private.h or runtime config can override)
+#ifndef MC_OPENAI_API_KEY
+  #define MC_OPENAI_API_KEY ""
+#endif
 // ---- OpenAI LLM tuning (experiment) ----
 #ifndef MC_OPENAI_MAX_OUTPUT_TOKENS
   #define MC_OPENAI_MAX_OUTPUT_TOKENS 1024 // openai_llm.cpp: req["max_output_tokens"]

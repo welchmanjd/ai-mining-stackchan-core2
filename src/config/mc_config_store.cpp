@@ -40,6 +40,7 @@ struct RuntimeCfg {
   String azKey_;
   String azVoice_;
   String azEndpoint_;
+  String openAiKey_;
   uint16_t cpuMhz_ = (uint16_t)MC_CPU_FREQ_MHZ; // 80/160/240
   uint32_t displaySleepS_ = MC_DISPLAY_SLEEP_SECONDS;
   String attentionText_;
@@ -67,6 +68,7 @@ static void applyDefaults_() {
   g_rt.azKey_    = MC_AZ_SPEECH_KEY;
   g_rt.azVoice_  = MC_AZ_TTS_VOICE;
   g_rt.azEndpoint_ = MC_AZ_CUSTOM_SUBDOMAIN;
+  g_rt.openAiKey_ = MC_OPENAI_API_KEY;
   g_rt.cpuMhz_     = (uint16_t)MC_CPU_FREQ_MHZ;
   g_rt.displaySleepS_ = (uint32_t)MC_DISPLAY_SLEEP_SECONDS;
   g_rt.attentionText_  = MC_ATTENTION_TEXT;
@@ -137,6 +139,7 @@ static void loadOnce_() {
   else                           setStr("az_tts_voice", g_rt.azVoice_);
   if (!doc["az_endpoint"].isNull()) setStr("az_endpoint", g_rt.azEndpoint_);
   else                              setStr("az_custom_subdomain", g_rt.azEndpoint_);
+  setStr("openai_key", g_rt.openAiKey_);
   if (!doc["cpu_mhz"].isNull()) {
     setCpuMhz("cpu_mhz", g_rt.cpuMhz_);
   } else {
@@ -177,6 +180,7 @@ bool mcConfigSetKV(const String& key, const String& value, String& err) {
     setDirty();
     return true;
   }
+  if (key == "openai_key") { g_rt.openAiKey_ = value; setDirty(); return true; }
   if (key == "cpu_mhz") {
     char* endp = nullptr;
     long v = strtol(value.c_str(), &endp, 10);
@@ -248,6 +252,7 @@ bool mcConfigSave(String& err) {
   doc["az_key"]    = g_rt.azKey_;
   doc["az_voice"]  = g_rt.azVoice_;
   doc["az_endpoint"] = g_rt.azEndpoint_;
+  doc["openai_key"] = g_rt.openAiKey_;
   doc["cpu_mhz"]      = g_rt.cpuMhz_;
   doc["display_sleep_s"] = g_rt.displaySleepS_;
   doc["attention_text"]  = g_rt.attentionText_;
@@ -275,6 +280,7 @@ String mcConfigGetMaskedJson() {
   const bool wifiPassSet = g_rt.wifiPass_.length() > 0;
   const bool ducoKeySet  = (g_rt.ducoKey_.length() > 0) && (g_rt.ducoKey_ != "None");
   const bool azKeySet    = g_rt.azKey_.length() > 0;
+  const bool openAiKeySet = g_rt.openAiKey_.length() > 0;
   doc["wifi_ssid"] = g_rt.wifiSsid_;
   doc["wifi_pass"] = "***";
   doc["wifi_pass_set"] = wifiPassSet;
@@ -293,6 +299,8 @@ String mcConfigGetMaskedJson() {
   doc["az_speech_key_set"] = azKeySet;
   doc["az_tts_voice"]     = g_rt.azVoice_;
   doc["az_custom_subdomain"] = g_rt.azEndpoint_;
+  doc["openai_key"] = "***";
+  doc["openai_key_set"] = openAiKeySet;
   doc["cpu_mhz"] = g_rt.cpuMhz_;
   doc["display_sleep_s"] = g_rt.displaySleepS_;
   doc["attention_text"]  = g_rt.attentionText_;
@@ -312,6 +320,7 @@ const char* mcCfgAzRegion() { loadOnce_(); return g_rt.azRegion_.c_str(); }
 const char* mcCfgAzKey()    { loadOnce_(); return g_rt.azKey_.c_str();    }
 const char* mcCfgAzVoice()  { loadOnce_(); return g_rt.azVoice_.c_str();  }
 const char* mcCfgAzEndpoint() { loadOnce_(); return g_rt.azEndpoint_.c_str(); }
+const char* mcCfgOpenAiKey() { loadOnce_(); return g_rt.openAiKey_.c_str(); }
 const char* mcCfgAttentionText() { loadOnce_(); return g_rt.attentionText_.c_str(); }
 uint8_t mcCfgSpkVolume()         { loadOnce_(); return g_rt.spkVolume_; }
 const char* mcCfgShareAcceptedText() { loadOnce_(); return g_rt.speechShareAccepted_.c_str(); }

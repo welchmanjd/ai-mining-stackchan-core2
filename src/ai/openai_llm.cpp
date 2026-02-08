@@ -155,9 +155,18 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
     MC_EVT("LLM", "fail stage=begin took=%lums", (unsigned long)r.tookMs_);
     return r;
   }
+  const char* apiKey = mcCfgOpenAiKey();
+  if (!apiKey || !*apiKey) {
+    r.ok_ = false;
+    r.err_ = "missing_openai_key";
+    r.tookMs_ = millis() - t0;
+    MC_EVT("LLM", "fail stage=missing_openai_key took=%lums", (unsigned long)r.tookMs_);
+    http.end();
+    return r;
+  }
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept", "application/json");
-  http.addHeader("Authorization", String("Bearer ") + String(MC_OPENAI_API_KEY));
+  http.addHeader("Authorization", String("Bearer ") + String(apiKey));
   int code = http.POST((uint8_t*)payload.c_str(), payload.length());
   r.http_ = code;
   String body;
