@@ -34,6 +34,9 @@ static const char* kCfgPath = "/mc_config.json";
 struct RuntimeCfg {
   String wifiSsid_;
   String wifiPass_;
+  bool wifiEnabled_ = true;
+  bool miningEnabled_ = true;
+  bool aiEnabled_ = true;
   String ducoUser_;
   String ducoKey_;
   String azRegion_;
@@ -41,6 +44,8 @@ struct RuntimeCfg {
   String azVoice_;
   String azEndpoint_;
   String openAiKey_;
+  String openAiModel_;
+  String openAiInstructions_;
   uint16_t cpuMhz_ = (uint16_t)MC_CPU_FREQ_MHZ; // 80/160/240
   uint32_t displaySleepS_ = MC_DISPLAY_SLEEP_SECONDS;
   String attentionText_;
@@ -62,6 +67,9 @@ static bool isAllQuestionMarks_(const String& s) {
 static void applyDefaults_() {
   g_rt.wifiSsid_ = MC_WIFI_SSID;
   g_rt.wifiPass_ = MC_WIFI_PASS;
+  g_rt.wifiEnabled_ = true;
+  g_rt.miningEnabled_ = true;
+  g_rt.aiEnabled_ = true;
   g_rt.ducoUser_ = MC_DUCO_USER;
   g_rt.ducoKey_  = MC_DUCO_MINER_KEY;
   g_rt.azRegion_ = MC_AZ_SPEECH_REGION;
@@ -69,6 +77,8 @@ static void applyDefaults_() {
   g_rt.azVoice_  = MC_AZ_TTS_VOICE;
   g_rt.azEndpoint_ = MC_AZ_CUSTOM_SUBDOMAIN;
   g_rt.openAiKey_ = MC_OPENAI_API_KEY;
+  g_rt.openAiModel_ = MC_OPENAI_MODEL;
+  g_rt.openAiInstructions_ = MC_OPENAI_INSTRUCTIONS;
   g_rt.cpuMhz_     = (uint16_t)MC_CPU_FREQ_MHZ;
   g_rt.displaySleepS_ = (uint32_t)MC_DISPLAY_SLEEP_SECONDS;
   g_rt.attentionText_  = MC_ATTENTION_TEXT;
@@ -123,8 +133,31 @@ static void loadOnce_() {
     if (!(mhz == 80 || mhz == 160 || mhz == 240)) return;
     dst = (uint16_t)mhz;
   };
+  auto setBool = [&](const char* key, bool& dst) {
+    JsonVariant v = doc[key];
+    if (v.isNull()) return;
+    if (v.is<bool>()) {
+      dst = v.as<bool>();
+      return;
+    }
+    if (v.is<int>()) {
+      dst = (v.as<int>() != 0);
+      return;
+    }
+    if (v.is<const char*>()) {
+      const String s = v.as<String>();
+      if (s == "1" || s.equalsIgnoreCase("true")) {
+        dst = true;
+      } else if (s == "0" || s.equalsIgnoreCase("false")) {
+        dst = false;
+      }
+    }
+  };
   setStr("wifi_ssid", g_rt.wifiSsid_);
   setStr("wifi_pass", g_rt.wifiPass_);
+  setBool("wifi_enabled", g_rt.wifiEnabled_);
+  setBool("mining_enabled", g_rt.miningEnabled_);
+  setBool("ai_enabled", g_rt.aiEnabled_);
   setStr("duco_user", g_rt.ducoUser_);
   if (!doc["duco_key"].isNull()) {
     setStr("duco_key", g_rt.ducoKey_);
@@ -140,6 +173,8 @@ static void loadOnce_() {
   if (!doc["az_endpoint"].isNull()) setStr("az_endpoint", g_rt.azEndpoint_);
   else                              setStr("az_custom_subdomain", g_rt.azEndpoint_);
   setStr("openai_key", g_rt.openAiKey_);
+  setStr("openai_model", g_rt.openAiModel_);
+  setStr("openai_instructions", g_rt.openAiInstructions_);
   if (!doc["cpu_mhz"].isNull()) {
     setCpuMhz("cpu_mhz", g_rt.cpuMhz_);
   } else {
@@ -168,8 +203,49 @@ bool mcConfigSetKV(const String& key, const String& value, String& err) {
   loadOnce_();
   err = "";
   auto setDirty = [&] { g_dirty = true; };
+  auto parse01 = [&](bool& out) -> bool {
+    if (value == "1") {
+      out = true;
+      return true;
+    }
+    if (value == "0") {
+      out = false;
+      return true;
+    }
+    return false;
+  };
   if (key == "wifi_ssid") { g_rt.wifiSsid_ = value; setDirty(); return true; }
   if (key == "wifi_pass") { g_rt.wifiPass_ = value; setDirty(); return true; }
+  if (key == "wifi_enabled") {
+    bool b = true;
+    if (!parse01(b)) {
+      err = "invalid_bool";
+      return false;
+    }
+    g_rt.wifiEnabled_ = b;
+    setDirty();
+    return true;
+  }
+  if (key == "mining_enabled") {
+    bool b = true;
+    if (!parse01(b)) {
+      err = "invalid_bool";
+      return false;
+    }
+    g_rt.miningEnabled_ = b;
+    setDirty();
+    return true;
+  }
+  if (key == "ai_enabled") {
+    bool b = true;
+    if (!parse01(b)) {
+      err = "invalid_bool";
+      return false;
+    }
+    g_rt.aiEnabled_ = b;
+    setDirty();
+    return true;
+  }
   if (key == "duco_user") { g_rt.ducoUser_ = value; setDirty(); return true; }
   if (key == "duco_miner_key") { g_rt.ducoKey_ = value; setDirty(); return true; }
   if (key == "az_speech_region") { g_rt.azRegion_ = value; setDirty(); return true; }
@@ -181,6 +257,8 @@ bool mcConfigSetKV(const String& key, const String& value, String& err) {
     return true;
   }
   if (key == "openai_key") { g_rt.openAiKey_ = value; setDirty(); return true; }
+  if (key == "openai_model") { g_rt.openAiModel_ = value; setDirty(); return true; }
+  if (key == "openai_instructions") { g_rt.openAiInstructions_ = value; setDirty(); return true; }
   if (key == "cpu_mhz") {
     char* endp = nullptr;
     long v = strtol(value.c_str(), &endp, 10);
@@ -246,6 +324,9 @@ bool mcConfigSave(String& err) {
   JsonDocument doc;
   doc["wifi_ssid"] = g_rt.wifiSsid_;
   doc["wifi_pass"] = g_rt.wifiPass_;
+  doc["wifi_enabled"] = g_rt.wifiEnabled_;
+  doc["mining_enabled"] = g_rt.miningEnabled_;
+  doc["ai_enabled"] = g_rt.aiEnabled_;
   doc["duco_user"] = g_rt.ducoUser_;
   doc["duco_key"]  = g_rt.ducoKey_;
   doc["az_region"] = g_rt.azRegion_;
@@ -253,6 +334,8 @@ bool mcConfigSave(String& err) {
   doc["az_voice"]  = g_rt.azVoice_;
   doc["az_endpoint"] = g_rt.azEndpoint_;
   doc["openai_key"] = g_rt.openAiKey_;
+  doc["openai_model"] = g_rt.openAiModel_;
+  doc["openai_instructions"] = g_rt.openAiInstructions_;
   doc["cpu_mhz"]      = g_rt.cpuMhz_;
   doc["display_sleep_s"] = g_rt.displaySleepS_;
   doc["attention_text"]  = g_rt.attentionText_;
@@ -284,6 +367,9 @@ String mcConfigGetMaskedJson() {
   doc["wifi_ssid"] = g_rt.wifiSsid_;
   doc["wifi_pass"] = "***";
   doc["wifi_pass_set"] = wifiPassSet;
+  doc["wifi_enabled"] = g_rt.wifiEnabled_;
+  doc["mining_enabled"] = g_rt.miningEnabled_;
+  doc["ai_enabled"] = g_rt.aiEnabled_;
   doc["duco_user"] = g_rt.ducoUser_;
   doc["duco_key"] = "***";
   doc["duco_key_set"] = ducoKeySet;
@@ -301,6 +387,8 @@ String mcConfigGetMaskedJson() {
   doc["az_custom_subdomain"] = g_rt.azEndpoint_;
   doc["openai_key"] = "***";
   doc["openai_key_set"] = openAiKeySet;
+  doc["openai_model"] = g_rt.openAiModel_;
+  doc["openai_instructions"] = g_rt.openAiInstructions_;
   doc["cpu_mhz"] = g_rt.cpuMhz_;
   doc["display_sleep_s"] = g_rt.displaySleepS_;
   doc["attention_text"]  = g_rt.attentionText_;
@@ -321,8 +409,13 @@ const char* mcCfgAzKey()    { loadOnce_(); return g_rt.azKey_.c_str();    }
 const char* mcCfgAzVoice()  { loadOnce_(); return g_rt.azVoice_.c_str();  }
 const char* mcCfgAzEndpoint() { loadOnce_(); return g_rt.azEndpoint_.c_str(); }
 const char* mcCfgOpenAiKey() { loadOnce_(); return g_rt.openAiKey_.c_str(); }
+const char* mcCfgOpenAiModel() { loadOnce_(); return g_rt.openAiModel_.c_str(); }
+const char* mcCfgOpenAiInstructions() { loadOnce_(); return g_rt.openAiInstructions_.c_str(); }
 const char* mcCfgAttentionText() { loadOnce_(); return g_rt.attentionText_.c_str(); }
 uint8_t mcCfgSpkVolume()         { loadOnce_(); return g_rt.spkVolume_; }
 const char* mcCfgShareAcceptedText() { loadOnce_(); return g_rt.speechShareAccepted_.c_str(); }
 const char* mcCfgHelloText()         { loadOnce_(); return g_rt.speechHello_.c_str(); }
+bool mcCfgWifiEnabled() { loadOnce_(); return g_rt.wifiEnabled_; }
+bool mcCfgMiningEnabled() { loadOnce_(); return g_rt.miningEnabled_; }
+bool mcCfgAiEnabled() { loadOnce_(); return g_rt.aiEnabled_; }
 uint32_t mcCfgCpuMhz() { loadOnce_(); return (uint32_t)g_rt.cpuMhz_; }

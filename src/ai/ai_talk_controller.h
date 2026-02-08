@@ -23,6 +23,8 @@ public:
   void tick(uint32_t nowMs);
   void onSpeakDone(uint32_t rid) { onSpeakDone(rid, millis()); }
   void onSpeakDone(uint32_t rid, uint32_t nowMs);
+  void forceStop(const char* reason = "force_stop") { forceStop(millis(), reason); }
+  void forceStop(uint32_t nowMs, const char* reason = "force_stop");
   bool isBusy() const { return state_ != AiState::Idle; }
   AiState state() const { return state_; }
   AiUiOverlay getOverlay() const { return overlay_; }

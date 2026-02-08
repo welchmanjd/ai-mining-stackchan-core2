@@ -40,7 +40,7 @@ static void handleSetupLine_(const char* line) {
     return;
   }
   if (cmd.equalsIgnoreCase("HELP")) {
-    Serial.println("@OK CMDS=HELLO,PING,GET INFO,HELP");
+    Serial.println("@OK CMDS=HELLO,PING,GET INFO,GET CFG,SET,SAVE,REBOOT,AZTEST,HELP");
     return;
   }
   if (cmd.equalsIgnoreCase("GET INFO")) {

@@ -214,6 +214,21 @@ void AiTalkController::onSpeakDone(uint32_t rid, uint32_t nowMs) {
     enterPostSpeakBlank_(nowMs);
   }
 }
+void AiTalkController::forceStop(uint32_t nowMs, const char* reason) {
+  const char* stopReason = (reason && reason[0]) ? reason : "force_stop";
+  if (awaitingOrchSpeak_ && orch_ && activeRid_ != 0) {
+    uint32_t canceledId = 0;
+    orch_->cancelSpeakByRid(activeRid_, stopReason, OrchestratorApi::CancelSource::Ai, &canceledId);
+    if (canceledId != 0) {
+      abortTtsId_ = canceledId;
+      strncpy(abortTtsReason_, stopReason, sizeof(abortTtsReason_) - 1);
+      abortTtsReason_[sizeof(abortTtsReason_) - 1] = 0;
+    }
+  }
+  enterIdle_(nowMs, stopReason);
+  bubbleText_ = "";
+  bubbleDirty_ = true;
+}
 bool AiTalkController::consumeAbortTts(uint32_t *outId,
                                        const char **outReason) {
   if (abortTtsId_ == 0)

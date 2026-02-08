@@ -133,8 +133,12 @@ LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
   // ---- request build ----
   // Keep instructions short to reduce token use and response latency.
   JsonDocument req;
-  req["model"] = MC_OPENAI_MODEL;
-  req["instructions"] = MC_OPENAI_INSTRUCTIONS;
+  const char* model = mcCfgOpenAiModel();
+  if (!model || !*model) model = MC_OPENAI_MODEL;
+  const char* instructions = mcCfgOpenAiInstructions();
+  if (!instructions || !*instructions) instructions = MC_OPENAI_INSTRUCTIONS;
+  req["model"] = model;
+  req["instructions"] = instructions;
   req["input"] = userText;
   req["reasoning"]["effort"] = MC_OPENAI_REASONING_EFFORT;
   req["max_output_tokens"] = (int)MC_OPENAI_MAX_OUTPUT_TOKENS;

@@ -22,7 +22,7 @@ Related docs:
 
 ### HELP
 - Request: `HELP`
-- Response: `@OK CMDS=HELLO,PING,GET INFO,HELP`
+- Response: `@OK CMDS=HELLO,PING,GET INFO,GET CFG,SET,SAVE,REBOOT,AZTEST,HELP`
 
 ### GET INFO
 - Request: `GET INFO`
@@ -37,11 +37,36 @@ Related docs:
 - Response (success): `@OK SET <KEY>`
 - Response (error): `@ERR SET <KEY> <reason>`
 
+Supported keys:
+- `wifi_enabled` (`0|1`)
+- `mining_enabled` (`0|1`)
+- `ai_enabled` (`0|1`)
+- `openai_instructions`
+- `display_sleep_s`
+- `openai_model`
+- `spk_volume`
+- `share_accepted_text`
+- `attention_text`
+- `hello_text`
+- `wifi_ssid`
+- `wifi_pass`
+- `duco_user`
+- `duco_miner_key`
+- `az_speech_region`
+- `az_speech_key`
+- `az_tts_voice`
+- `az_custom_subdomain`
+- `openai_key`
+- `cpu_mhz`
+
 Keys with immediate runtime effect:
 - `display_sleep_s`
 - `attention_text`
 - `spk_volume`
 - `cpu_mhz`
+
+Dependency rule:
+- If `wifi_enabled=0`, effective mining/AI features are also disabled.
 
 ### SAVE
 - Request: `SAVE`

@@ -39,9 +39,17 @@ See `src/config/config.h` for the full, authoritative list of defaults.
 Some settings can be modified at runtime and persisted via the serial setup protocol.
 
 Typical keys:
+- `wifi_enabled`
+- `mining_enabled`
+- `ai_enabled`
+- `openai_instructions`
 - `display_sleep_s`
+- `openai_model`
 - `attention_text`
 - `spk_volume`
+- `share_accepted_text`
+- `hello_text`
 - `cpu_mhz`
 
-These keys apply immediately when set via the serial protocol. See `docs/serial_setup.md`.
+Some keys apply immediately (`display_sleep_s`, `attention_text`, `spk_volume`, `cpu_mhz`).
+Others are used on subsequent feature checks and/or after reboot. See `docs/serial_setup.md`.

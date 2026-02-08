@@ -12,10 +12,15 @@ const char* mcCfgAzKey();
 const char* mcCfgAzVoice();
 const char* mcCfgAzEndpoint();
 const char* mcCfgOpenAiKey();
+const char* mcCfgOpenAiModel();
+const char* mcCfgOpenAiInstructions();
 const char* mcCfgAttentionText();
 uint8_t mcCfgSpkVolume();
 const char* mcCfgShareAcceptedText();
 const char* mcCfgHelloText();
+bool mcCfgWifiEnabled();
+bool mcCfgMiningEnabled();
+bool mcCfgAiEnabled();
 uint32_t mcCfgCpuMhz();
 
 // Config edit helpers

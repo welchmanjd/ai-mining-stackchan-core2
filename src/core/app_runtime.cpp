@@ -169,11 +169,27 @@ static OrchPrio toOrchPrio_(ReactionPriority p) {
 }
 
 static bool wifiConnect_() {
+  const RuntimeFeatures features = getRuntimeFeatures();
   const auto &cfg = appConfig();
   enum WifiState { NotStarted, Connecting, Done };
   static WifiState s_state = NotStarted;
+  static bool s_forcedOff = false;
   static uint32_t s_startMs = 0;
   static const uint32_t wifiConnectTimeoutMs = 20000UL;
+  if (!features.wifiEnabled_) {
+    if (!s_forcedOff) {
+      MC_LOGI("WIFI", "disabled by runtime config");
+      WiFi.disconnect(true, true);
+      WiFi.mode(WIFI_OFF);
+      s_forcedOff = true;
+      s_state = NotStarted;
+    }
+    return true;
+  }
+  if (s_forcedOff) {
+    s_forcedOff = false;
+    s_state = NotStarted;
+  }
   switch (s_state) {
   case NotStarted: {
     WiFi.mode(WIFI_STA);
@@ -224,20 +240,28 @@ void appRuntimeTick(uint32_t now) {
   if (!g_ctx.ai_ || !g_ctx.orch_ || !g_ctx.behavior_)
     return;
 
-  g_ctx.ai_->tick(now);
-  {
-    String aiBubbleText;
-    if (g_ctx.ai_->consumeBubbleUpdate(&aiBubbleText)) {
-      bubbleShow_(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
+  const RuntimeFeatures runtimeFeatures = getRuntimeFeatures();
+  if (runtimeFeatures.aiEnabled_) {
+    g_ctx.ai_->tick(now);
+    {
+      String aiBubbleText;
+      if (g_ctx.ai_->consumeBubbleUpdate(&aiBubbleText)) {
+        bubbleShow_(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
+      }
     }
-  }
-  static uint32_t s_lastOverlayPushMs = 0;
-  static uint8_t s_lastAiState = 255;
-  const uint8_t st = (uint8_t)g_ctx.ai_->state();
-  if ((st != s_lastAiState) || (now - s_lastOverlayPushMs >= 200)) {
-    UIMining::instance().setAiOverlay(g_ctx.ai_->getOverlay());
-    s_lastOverlayPushMs = now;
-    s_lastAiState = st;
+    static uint32_t s_lastOverlayPushMs = 0;
+    static uint8_t s_lastAiState = 255;
+    const uint8_t st = (uint8_t)g_ctx.ai_->state();
+    if ((st != s_lastAiState) || (now - s_lastOverlayPushMs >= 200)) {
+      UIMining::instance().setAiOverlay(g_ctx.ai_->getOverlay());
+      s_lastOverlayPushMs = now;
+      s_lastAiState = st;
+    }
+  } else {
+    if (g_ctx.ai_->isBusy()) {
+      g_ctx.ai_->forceStop(now, "ai_disabled");
+    }
+    UIMining::instance().setAiOverlay(AiUiOverlay());
   }
 
   // Orchestrator tick (timeout recovery)
@@ -374,7 +398,7 @@ void appRuntimeTick(uint32_t now) {
   }
 
   bool aiConsumedTap = false;
-  if (g_mode == Stackchan && touchDown) {
+  if (runtimeFeatures.aiEnabled_ && g_mode == Stackchan && touchDown) {
     const AiState stateBeforeTap = g_ctx.ai_->state();
     const int screenH = M5.Display.height();
     aiConsumedTap = g_ctx.ai_->onTap(touchX, touchY, screenH);
