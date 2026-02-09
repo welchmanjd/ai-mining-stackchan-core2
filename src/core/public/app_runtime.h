@@ -20,6 +20,7 @@ using BubbleClearFn = void (*)(const char* reason, bool forceUiClear);
 
 void appRuntimeInit(const AppRuntimeContext& ctx);
 void appRuntimeTick(uint32_t now);
+void appRuntimeNotifySerialActivity();
 
 uint32_t* appRuntimeDisplaySleepTimeoutMsPtr();
 bool* appRuntimeAttentionActivePtr();

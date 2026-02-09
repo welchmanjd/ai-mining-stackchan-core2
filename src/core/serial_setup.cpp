@@ -17,6 +17,7 @@
 #include "config/config.h"
 #include "config/mc_config_store.h"
 #include "config/runtime_features.h"
+#include "core/public/app_runtime.h"
 #include "ui/ui_mining_core2.h"
 #include "utils/logging.h"
 
@@ -159,6 +160,7 @@ void pollSetupSerial() {
     if (c == '\r') continue;
     if (c == '\n') {
       g_setupLine[g_setupLineLen] = '\0';
+      appRuntimeNotifySerialActivity();
       handleSetupLine_(g_setupLine);
       g_setupLineLen = 0;
       continue;

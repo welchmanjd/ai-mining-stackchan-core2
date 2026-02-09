@@ -618,13 +618,24 @@ void appRuntimeTick(uint32_t now) {
 
   if (!g_displaySleeping &&
       (uint32_t)(now - g_lastInputMs) >= g_displaySleepTimeoutMs) {
-    MC_EVT("MAIN", "display sleep (screen off)");
+    const uint32_t idleMs = (uint32_t)(now - g_lastInputMs);
+    MC_EVT("MAIN", "display sleep (screen off) idle_ms=%lu timeout_ms=%lu",
+           (unsigned long)idleMs, (unsigned long)g_displaySleepTimeoutMs);
     UIMining::instance().drawSleepMessage();
     M5.Display.setBrightness(0);
     g_displaySleeping = true;
   }
 }
 
+void appRuntimeNotifySerialActivity() {
+  const uint32_t now = millis();
+  g_lastInputMs = now;
+  if (g_displaySleeping) {
+    MC_EVT("MAIN", "display wake (serial activity)");
+    M5.Display.setBrightness(kDisplayActiveBrightness);
+    g_displaySleeping = false;
+  }
+}
 uint32_t *appRuntimeDisplaySleepTimeoutMsPtr() {
   return &g_displaySleepTimeoutMs;
 }
