@@ -45,10 +45,10 @@ static void handleSetupLine_(const char* line) {
   }
   if (cmd.equalsIgnoreCase("GET INFO")) {
     const auto& cfg = appConfig();
-    char buf[200];
+    char buf[320];
     snprintf(buf, sizeof(buf),
-             "@INFO {\"app\":\"%s\",\"ver\":\"%s\",\"baud\":%d}",
-             cfg.appName_, cfg.appVersion_, 115200);
+             "@INFO {\"app\":\"%s\",\"ver\":\"%s\",\"build_id\":\"%s\",\"baud\":%d}",
+             cfg.appName_, cfg.appVersion_, cfg.appBuildId_, 115200);
     Serial.println(buf);
     return;
   }

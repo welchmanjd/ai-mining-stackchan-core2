@@ -193,6 +193,9 @@
 #ifndef MC_OPENAI_LOG_USAGE
   #define MC_OPENAI_LOG_USAGE 1 // openai_llm.cpp: usageログ出力の有無
 #endif
+#ifndef MC_BUILD_ID
+  #define MC_BUILD_ID "unknown"
+#endif
 // ---------------------------------------------------------
 // ---------------------------------------------------------
 struct AppConfig {
@@ -210,6 +213,7 @@ struct AppConfig {
   // app
   const char* appName_;
   const char* appVersion_;
+  const char* appBuildId_;
   // attention
   const char* attentionText_;
   // speech lines (Web/JSON: share_accepted_text / hello_text)
@@ -232,7 +236,8 @@ inline const AppConfig& appConfig() {
     "",
     // app
     "Mining-Stackchan-Core2", // app_name
-    "0.681",                  // app_version
+    "0.700",                  // app_version
+    MC_BUILD_ID,              // app_build_id
     // attention
     "",
     // speech lines
