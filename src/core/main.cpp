@@ -91,6 +91,7 @@ void setup() {
   M5.Display.fillScreen(BLACK);
   M5.Display.setTextColor(WHITE, BLACK);
   UIMining::instance().begin(cfg.appName_, cfg.appVersion_);
+  UIMining::instance().onEnterStackchanMode();
   UIMining::instance().setAttentionDefaultText(mcCfgAttentionText());
   UIMining::instance().setStackchanSpeechTiming(
     2200, 1200,

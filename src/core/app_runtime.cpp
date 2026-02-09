@@ -31,7 +31,7 @@
 static AppRuntimeContext g_ctx;
 
 static unsigned long g_lastUiMs = 0;
-static AppMode g_mode = Dash;
+static AppMode g_mode = Stackchan;
 static bool g_prevAiBusyForBehavior = false;
 static uint32_t g_aiBusyStartMs = 0;
 static uint32_t g_aiBusyDebugLastMs = 0;
@@ -51,7 +51,6 @@ static bool g_displaySleeping = false;
 static bool g_suppressTouchBeepOnce = false;
 static bool g_timeNtpDone = false;
 static const uint8_t kDisplayActiveBrightness = 128;
-static const uint32_t kDisplaySleepMessageMs = 5000UL;
 static bool g_bubbleOnlyActive = false;
 static uint32_t g_bubbleOnlyUntilMs = 0;
 static uint32_t g_bubbleOnlyRid = 0;
@@ -65,7 +64,7 @@ enum class BubbleSource : uint8_t {
 };
 static BubbleSource g_bubbleOnlySource = BubbleSource::None;
 static bool g_lastPopEmptyBusy = false;
-static AppMode g_lastPopEmptyMode = Dash;
+static AppMode g_lastPopEmptyMode = Stackchan;
 static bool g_lastPopEmptyAttn = false;
 
 static const char *aiStateName_(AiState s) {
@@ -621,7 +620,6 @@ void appRuntimeTick(uint32_t now) {
       (uint32_t)(now - g_lastInputMs) >= g_displaySleepTimeoutMs) {
     MC_EVT("MAIN", "display sleep (screen off)");
     UIMining::instance().drawSleepMessage();
-    delay(kDisplaySleepMessageMs);
     M5.Display.setBrightness(0);
     g_displaySleeping = true;
   }

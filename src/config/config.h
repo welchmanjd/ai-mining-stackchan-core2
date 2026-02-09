@@ -236,7 +236,7 @@ inline const AppConfig& appConfig() {
     "",
     // app
     "Mining-Stackchan-Core2", // app_name
-    "0.700",                  // app_version
+    "0.702",                  // app_version
     MC_BUILD_ID,              // app_build_id
     // attention
     "",
