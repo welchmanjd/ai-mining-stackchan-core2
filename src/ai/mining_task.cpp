@@ -266,7 +266,7 @@ static void ducoTask_(void *pv) {
       }
     }
     WiFiClient cli;
-    cli.setTimeout(15);
+    cli.setTimeout(15000);
     MC_LOGI_RL("duco_connect", 10000, "DUCO", "%s connect %s:%u ...", tag,
                g_host, g_port);
     if (!cli.connect(g_host, g_port)) {
@@ -492,6 +492,14 @@ void updateMiningSummary(MiningSummary &out) {
   float maxPing = 0.0f;
   uint32_t acc = 0, rej = 0, diff = 0;
   g_anyConnected = false;
+
+  char statusSnap[64];
+  char poolDiagSnap[128];
+  char nodeNameSnap[48];
+
+  // Enter critical section BEFORE reading any shared state
+  portENTER_CRITICAL(&g_statsMux);
+
   for (int i = 0; i < kDucoMinerThreads; ++i) {
     totalKh += g_thr[i].hashrateKh_;
     acc += g_thr[i].accepted_;
@@ -504,23 +512,21 @@ void updateMiningSummary(MiningSummary &out) {
       maxPing = g_thr[i].lastPingMs_;
     }
   }
-  out.totalKh_ = totalKh;
-  out.accepted_ = acc;
-  out.rejected_ = rej;
-  out.maxDifficulty_ = diff;
-  out.anyConnected_ = g_anyConnected;
-  // Copy thread-shared strings under lock
-  char statusSnap[64];
-  char poolDiagSnap[128];
-  char nodeNameSnap[48];
-  portENTER_CRITICAL(&g_statsMux);
+
   strncpy(statusSnap, g_status, sizeof(statusSnap));
   statusSnap[sizeof(statusSnap) - 1] = '\0';
   strncpy(poolDiagSnap, g_poolDiagText, sizeof(poolDiagSnap));
   poolDiagSnap[sizeof(poolDiagSnap) - 1] = '\0';
   strncpy(nodeNameSnap, g_nodeName, sizeof(nodeNameSnap));
   nodeNameSnap[sizeof(nodeNameSnap) - 1] = '\0';
+
   portEXIT_CRITICAL(&g_statsMux);
+
+  out.totalKh_ = totalKh;
+  out.accepted_ = acc;
+  out.rejected_ = rej;
+  out.maxDifficulty_ = diff;
+  out.anyConnected_ = g_anyConnected;
   out.poolName_ = String(nodeNameSnap);
   out.maxPingMs_ = maxPing;
   out.miningEnabled_ = features.miningEnabled_;

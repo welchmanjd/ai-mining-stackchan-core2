@@ -198,11 +198,16 @@ static void loadOnce_() {
 } // namespace
 void mcConfigBegin() {
   loadOnce_();
-}
+} // namespace
+
 bool mcConfigSetKV(const String& key, const String& value, String& err) {
   loadOnce_();
   err = "";
   auto setDirty = [&] { g_dirty = true; };
+  // Setup tool sends "__MC_EMPTY__" when the user clears a field.
+  // Convert it to empty string before storing.
+  const String strValue = (value == "__MC_EMPTY__") ? String("") : value;
+
   auto parse01 = [&](bool& out) -> bool {
     if (value == "1") {
       out = true;
@@ -214,8 +219,8 @@ bool mcConfigSetKV(const String& key, const String& value, String& err) {
     }
     return false;
   };
-  if (key == "wifi_ssid") { g_rt.wifiSsid_ = value; setDirty(); return true; }
-  if (key == "wifi_pass") { g_rt.wifiPass_ = value; setDirty(); return true; }
+  if (key == "wifi_ssid") { g_rt.wifiSsid_ = strValue; setDirty(); return true; }
+  if (key == "wifi_pass") { g_rt.wifiPass_ = strValue; setDirty(); return true; }
   if (key == "wifi_enabled") {
     bool b = true;
     if (!parse01(b)) {
@@ -246,19 +251,19 @@ bool mcConfigSetKV(const String& key, const String& value, String& err) {
     setDirty();
     return true;
   }
-  if (key == "duco_user") { g_rt.ducoUser_ = value; setDirty(); return true; }
-  if (key == "duco_miner_key") { g_rt.ducoKey_ = value; setDirty(); return true; }
-  if (key == "az_speech_region") { g_rt.azRegion_ = value; setDirty(); return true; }
-  if (key == "az_speech_key")    { g_rt.azKey_    = value; setDirty(); return true; }
-  if (key == "az_tts_voice")     { g_rt.azVoice_  = value; setDirty(); return true; }
+  if (key == "duco_user") { g_rt.ducoUser_ = strValue; setDirty(); return true; }
+  if (key == "duco_miner_key") { g_rt.ducoKey_ = strValue; setDirty(); return true; }
+  if (key == "az_speech_region") { g_rt.azRegion_ = strValue; setDirty(); return true; }
+  if (key == "az_speech_key")    { g_rt.azKey_    = strValue; setDirty(); return true; }
+  if (key == "az_tts_voice")     { g_rt.azVoice_  = strValue; setDirty(); return true; }
   if (key == "az_custom_subdomain") {
-    g_rt.azEndpoint_ = value;
+    g_rt.azEndpoint_ = strValue;
     setDirty();
     return true;
   }
-  if (key == "openai_key") { g_rt.openAiKey_ = value; setDirty(); return true; }
-  if (key == "openai_model") { g_rt.openAiModel_ = value; setDirty(); return true; }
-  if (key == "openai_instructions") { g_rt.openAiInstructions_ = value; setDirty(); return true; }
+  if (key == "openai_key") { g_rt.openAiKey_ = strValue; setDirty(); return true; }
+  if (key == "openai_model") { g_rt.openAiModel_ = strValue; setDirty(); return true; }
+  if (key == "openai_instructions") { g_rt.openAiInstructions_ = strValue; setDirty(); return true; }
   if (key == "cpu_mhz") {
     char* endp = nullptr;
     long v = strtol(value.c_str(), &endp, 10);
@@ -419,3 +424,5 @@ bool mcCfgWifiEnabled() { loadOnce_(); return g_rt.wifiEnabled_; }
 bool mcCfgMiningEnabled() { loadOnce_(); return g_rt.miningEnabled_; }
 bool mcCfgAiEnabled() { loadOnce_(); return g_rt.aiEnabled_; }
 uint32_t mcCfgCpuMhz() { loadOnce_(); return (uint32_t)g_rt.cpuMhz_; }
+
+
