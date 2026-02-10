@@ -5,13 +5,13 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
+#include "ai/azure_stt.h"
 #include "ai/openai_llm.h"
 
 #include "audio/audio_recorder.h"
 #include "ui/ui_types.h"
 #include "utils/app_types.h"
 #include "utils/orchestrator_api.h"
-
 
 class AiTalkController {
 public:
@@ -23,8 +23,10 @@ public:
   void tick(uint32_t nowMs);
   void onSpeakDone(uint32_t rid) { onSpeakDone(rid, millis()); }
   void onSpeakDone(uint32_t rid, uint32_t nowMs);
-  void forceStop(const char* reason = "force_stop") { forceStop(millis(), reason); }
-  void forceStop(uint32_t nowMs, const char* reason = "force_stop");
+  void forceStop(const char *reason = "force_stop") {
+    forceStop(millis(), reason);
+  }
+  void forceStop(uint32_t nowMs, const char *reason = "force_stop");
   bool isBusy() const { return state_ != AiState::Idle; }
   AiState state() const { return state_; }
   AiUiOverlay getOverlay() const { return overlay_; }
@@ -43,6 +45,11 @@ private:
   void startLlmRequest_(const String &userText, uint32_t timeoutMs);
   bool tryConsumeLlmResult_();
   static void llmTaskEntry_(void *arg);
+  // ---- STT async ----
+  void startSttRequest_(const int16_t *pcm, size_t samples, int sampleRate,
+                        uint32_t timeoutMs);
+  bool tryConsumeSttResult_();
+  static void sttTaskEntry_(void *arg);
 
 private:
   OrchestratorApi *orch_ = nullptr;
@@ -88,4 +95,16 @@ private:
   String llmInput_;
   uint32_t llmTimeout_ = 0;
   LlmResult llmResult_;
+  // ---- STT async ----
+  TaskHandle_t sttTask_ = nullptr;
+  SemaphoreHandle_t sttMutex_ = nullptr;
+  volatile bool sttBusy_ = false;
+  volatile bool sttDone_ = false;
+  uint32_t sttReqId_ = 0;
+  const int16_t *sttPcm_ = nullptr;
+  size_t sttSamples_ = 0;
+  int sttSampleRate_ = 16000;
+  uint32_t sttTimeout_ = 0;
+  azure_stt::SttResult sttResult_;
+  bool sttStartedLlm_ = false; // true after STT result consumed and LLM started
 };

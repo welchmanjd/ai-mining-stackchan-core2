@@ -1,0 +1,513 @@
+Processing m5stack-core2 (platform: espressif32; board: m5stack-core2; framework: arduino)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/m5stack-core2.html
+PLATFORM: Espressif 32 (6.12.0) > M5Stack Core2
+HARDWARE: ESP32 240MHz, 4.31MB RAM, 16MB Flash
+DEBUG: Current (cmsis-dap) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b 
+ - tool-esptoolpy @ 2.40900.250804 (4.9.0) 
+ - toolchain-xtensa-esp32 @ 8.4.0+2021r2-patch5
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 37 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- M5Unified @ 0.1.16
+|-- M5Stack-Avatar @ 0.9.2
+|-- ArduinoJson @ 7.4.2
+|-- HTTPClient @ 2.0.0
+|-- WiFi @ 2.0.0
+|-- WiFiClientSecure @ 2.0.0
+|-- LittleFS @ 2.0.0
+|-- FS @ 2.0.0
+|-- M5GFX @ 0.2.18
+Building in debug mode
+Compiling .pio\build\m5stack-core2\src\ai\mining_task.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32\Bus_EPD.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32\Bus_I2C.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32\Bus_Parallel8.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32\Bus_SPI.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32\Light_PWM.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32\Panel_CVBS.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32\Panel_EPD.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32\common.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32c3\Bus_Parallel8.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32p4\Bus_DSI.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32p4\Panel_DSI.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32p4\Touch_ST7123.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32s2\Bus_Parallel16.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32s2\Bus_Parallel8.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32s3\Bus_Parallel16.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\esp32s3\Bus_Parallel8.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\framebuffer\Panel_fb.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\framebuffer\common.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\sdl\Panel_sdl.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\platforms\sdl\common.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\touch\Touch_CST816S.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\touch\Touch_FT5x06.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\touch\Touch_GT911.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\M5Unified.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\AXP192_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\AXP2101_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\Button_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\I2C_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\IMU_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\INA3221_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\IP5306_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\Log_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\M5Timer.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\Mic_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\Power_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\RTC8563_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\Speaker_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\Touch_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\imu\AK8963_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\imu\BMI270_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\imu\BMM150_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\imu\IMU_Base.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\imu\MPU6886_Class.cpp.o
+Compiling .pio\build\m5stack-core2\libe2d\M5Unified\utility\imu\SH200Q_Class.cpp.o
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/utility/IMU_Class.cpp:4:
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/IMU_Class.cpp:4:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/utility/IMU_Class.cpp:4:
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/IMU_Class.cpp:4:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/IMU_Class.cpp: In member function 'bool m5::IMU_Class::begin(m5::I2C_Class*, m5::board_t)':
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/IMU_Class.cpp:65:35: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+         if (board == m5::board_t::board_M5Atom)
+                                   ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/IMU_Class.cpp:4:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/IMU_Class.cpp:65:35: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+         if (board == m5::board_t::board_M5Atom)
+                                   ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/IMU_Class.cpp:4:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+Compiling .pio\build\m5stack-core2\libdf8\M5Stack-Avatar\Avatar.cpp.o
+Compiling .pio\build\m5stack-core2\libdf8\M5Stack-Avatar\BoundingRect.cpp.o
+Compiling .pio\build\m5stack-core2\libdf8\M5Stack-Avatar\ColorPalette.cpp.o
+Compiling .pio\build\m5stack-core2\libdf8\M5Stack-Avatar\DrawContext.cpp.o
+Compiling .pio\build\m5stack-core2\libdf8\M5Stack-Avatar\Eye.cpp.o
+Compiling .pio\build\m5stack-core2\libdf8\M5Stack-Avatar\Eyeblow.cpp.o
+Compiling .pio\build\m5stack-core2\libdf8\M5Stack-Avatar\Face.cpp.o
+Compiling .pio\build\m5stack-core2\libdf8\M5Stack-Avatar\Gaze.cpp.o
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Mic_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Mic_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Mic_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Mic_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+Compiling .pio\build\m5stack-core2\libdf8\M5Stack-Avatar\Mouth.cpp.o
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp: In function 'int32_t m5::getBatteryAdcRaw(uint8_t, uint8_t)':
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:849:59: warning: 'ADC_ATTEN_DB_11' is deprecated [-Wdeprecated-declarations]
+         adc2_config_channel_atten((adc2_channel_t)adc_ch, ADC_ATTEN_DB_11);
+                                                           ^~~~~~~~~~~~~~~
+In file included from C:/Users/welch/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/driver/include/driver/adc.h:14,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.hpp:17,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:4:
+C:/Users/welch/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/include/hal/adc_types.h:54:5: note: declared here
+     ADC_ATTEN_DB_11 __attribute__((deprecated)) = ADC_ATTEN_DB_12,  ///<This is deprecated, it behaves the same as `ADC_ATTEN_DB_12`
+     ^~~~~~~~~~~~~~~
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:852:59: warning: 'ADC_ATTEN_DB_11' is deprecated [-Wdeprecated-declarations]
+         adc1_config_channel_atten((adc1_channel_t)adc_ch, ADC_ATTEN_DB_11);
+                                                           ^~~~~~~~~~~~~~~
+In file included from C:/Users/welch/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/driver/include/driver/adc.h:14,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.hpp:17,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:4:
+C:/Users/welch/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/include/hal/adc_types.h:54:5: note: declared here
+     ADC_ATTEN_DB_11 __attribute__((deprecated)) = ADC_ATTEN_DB_12,  ///<This is deprecated, it behaves the same as `ADC_ATTEN_DB_12`
+     ^~~~~~~~~~~~~~~
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:855:54: warning: 'ADC_ATTEN_DB_11' is deprecated [-Wdeprecated-declarations]
+       esp_adc_cal_characterize((adc_unit_t)adc_unit, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars);
+                                                      ^~~~~~~~~~~~~~~
+In file included from C:/Users/welch/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/driver/include/driver/adc.h:14,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.hpp:17,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Power_Class.cpp:4:
+C:/Users/welch/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/include/hal/adc_types.h:54:5: note: declared here
+     ADC_ATTEN_DB_11 __attribute__((deprecated)) = ADC_ATTEN_DB_12,  ///<This is deprecated, it behaves the same as `ADC_ATTEN_DB_12`
+     ^~~~~~~~~~~~~~~
+Compiling .pio\build\m5stack-core2\lib5c5\WiFi\WiFi.cpp.o
+Compiling .pio\build\m5stack-core2\lib5c5\WiFi\WiFiAP.cpp.o
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Speaker_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Speaker_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Speaker_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/../M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/utility/Speaker_Class.cpp:6:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+Compiling .pio\build\m5stack-core2\lib5c5\WiFi\WiFiClient.cpp.o
+Compiling .pio\build\m5stack-core2\lib5c5\WiFi\WiFiGeneric.cpp.o
+Compiling .pio\build\m5stack-core2\lib5c5\WiFi\WiFiMulti.cpp.o
+Compiling .pio\build\m5stack-core2\lib5c5\WiFi\WiFiSTA.cpp.o
+Compiling .pio\build\m5stack-core2\lib5c5\WiFi\WiFiScan.cpp.o
+Compiling .pio\build\m5stack-core2\lib5c5\WiFi\WiFiServer.cpp.o
+Compiling .pio\build\m5stack-core2\lib5c5\WiFi\WiFiUdp.cpp.o
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Avatar.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Avatar.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Avatar.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Avatar.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Avatar.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Avatar.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Avatar.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Avatar.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:10,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:10,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eye.h:10,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eye.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eye.h:9,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eye.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eye.h:10,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eye.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eye.h:9,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eye.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Balloon.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Face.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Face.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Balloon.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Face.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Face.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Balloon.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Face.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Face.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:19,
+                 from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Balloon.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Face.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Face.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eyeblow.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eyeblow.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eyeblow.h:9,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eyeblow.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eyeblow.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eyeblow.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eyeblow.h:9,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Eyeblow.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Mouth.h:10,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Mouth.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Mouth.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Mouth.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.h:5,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/ColorPalette.h:7,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/DrawContext.h:11,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Mouth.h:10,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Mouth.cpp:5:
+.pio/libdeps/m5stack-core2/M5Unified/src/M5Unified.hpp:153:41: warning: 'board_M5Atom' is deprecated [-Wdeprecated-declarations]
+                              = board_t::board_M5Atom;
+                                         ^~~~~~~~~~~~
+In file included from .pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/LGFXBase.hpp:35,
+                 from .pio/libdeps/m5stack-core2/M5GFX/src/M5GFX.h:50,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Mouth.h:8,
+                 from .pio/libdeps/m5stack-core2/M5Stack-Avatar/src/Mouth.cpp:5:
+.pio/libdeps/m5stack-core2/M5GFX/src/lgfx/v1/../boards.hpp:40:7: note: declared here
+     , board_M5Atom __attribute__ ((deprecated)) = board_M5AtomLite
+       ^~~~~~~~~~~~
+Compiling .pio\build\m5stack-core2\lib429\WiFiClientSecure\WiFiClientSecure.cpp.o
+Compiling .pio\build\m5stack-core2\lib429\WiFiClientSecure\esp_crt_bundle.c.o
+Compiling .pio\build\m5stack-core2\lib429\WiFiClientSecure\ssl_client.cpp.o
+Compiling .pio\build\m5stack-core2\lib0a6\HTTPClient\HTTPClient.cpp.o
+Compiling .pio\build\m5stack-core2\lib033\FS\FS.cpp.o
+Compiling .pio\build\m5stack-core2\lib033\FS\vfs_api.cpp.o
+Compiling .pio\build\m5stack-core2\libc03\LittleFS\LittleFS.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\Esp.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\FirmwareMSC.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\FunctionalInterrupt.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\HWCDC.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\HardwareSerial.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\IPAddress.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\IPv6Address.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\MD5Builder.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\Print.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\Stream.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\StreamString.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\Tone.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\USB.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\USBCDC.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\USBMSC.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\WMath.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\WString.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\base64.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\cbuf.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-adc.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-bt.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-cpu.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-dac.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-gpio.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-i2c-slave.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-i2c.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-ledc.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-matrix.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-misc.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-psram.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-rgb-led.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-rmt.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-sigmadelta.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-spi.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-time.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-timer.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-tinyusb.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-touch.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\esp32-hal-uart.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\firmware_msc_fat.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\libb64\cdecode.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\libb64\cencode.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\main.cpp.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\stdlib_noniso.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\wiring_pulse.c.o
+Compiling .pio\build\m5stack-core2\FrameworkArduino\wiring_shift.c.o
+Archiving .pio\build\m5stack-core2\libFrameworkArduino.a
+Linking .pio\build\m5stack-core2\firmware.elf
+Retrieving maximum program size .pio\build\m5stack-core2\firmware.elf
+Checking size .pio\build\m5stack-core2\firmware.elf
+Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
+RAM:   [          ]   1.2% (used 54528 bytes from 4521984 bytes)
+Flash: [==        ]  22.5% (used 1476061 bytes from 6553600 bytes)
+Building .pio\build\m5stack-core2\firmware.bin
+esptool.py v4.9.0
+Creating esp32 image...
+Merged 27 ELF sections
+Successfully created esp32 image.
+========================= [SUCCESS] Took 20.68 seconds =========================
+
+Environment    Status    Duration
+-------------  --------  ------------
+m5stack-core2  SUCCESS   00:00:20.677
+========================= 1 succeeded in 00:00:20.677 =========================

@@ -17,71 +17,91 @@
 #include "audio/i2s_manager.h"
 #include "config/mc_config_store.h"
 #include "utils/logging.h"
-// TTS debug switch (optional): define -DTTS_DEBUG_ENABLED=1 to restore very chatty logs.
+// TTS debug switch (optional): define -DTTS_DEBUG_ENABLED=1 to restore very
+// chatty logs.
 #ifndef TTS_DEBUG_ENABLED
 #define TTS_DEBUG_ENABLED 0
 #endif
 // ---------- helpers ----------
-static String trimCopy_(const String& s) {
+static String trimCopy_(const String &s) {
   String t = s;
   t.trim();
   return t;
 }
-static bool readLineCRLF_(WiFiClient* s, String* out, uint32_t idleTimeoutMs) {
+static bool readLineCRLF_(WiFiClient *s, String *out, uint32_t idleTimeoutMs) {
   // Line reader used for both chunked decoding and HTTP header parsing.
   out->remove(0);
   uint32_t t0 = millis();
   while (true) {
     while (s->available()) {
       char c = (char)s->read();
-      if (c == '\r') continue;
-      if (c == '\n') return true;
+      if (c == '\r')
+        continue;
+      if (c == '\n')
+        return true;
       out->concat(c);
-      if (out->length() > 64) return false; // too long
+      if (out->length() > 64)
+        return false; // too long
     }
-    if (!s->connected()) return false;
-    if (millis() - t0 > idleTimeoutMs) return false;
+    if (!s->connected())
+      return false;
+    if (millis() - t0 > idleTimeoutMs)
+      return false;
     delay(1);
   }
 }
-static bool readExact_(WiFiClient* s, uint8_t* dst, size_t n, uint32_t idleTimeoutMs) {
+static bool readExact_(WiFiClient *s, uint8_t *dst, size_t n,
+                       uint32_t idleTimeoutMs) {
   size_t got = 0;
   uint32_t t0 = millis();
   while (got < n) {
     int a = s->available();
     if (a <= 0) {
-      if (!s->connected()) return false;
-      if (millis() - t0 > idleTimeoutMs) return false;
+      if (!s->connected())
+        return false;
+      if (millis() - t0 > idleTimeoutMs)
+        return false;
       delay(1);
       continue;
     }
     t0 = millis();
     int r = s->readBytes(dst + got, (size_t)min<int>(a, (int)(n - got)));
-    if (r <= 0) return false;
+    if (r <= 0)
+      return false;
     got += (size_t)r;
   }
   return true;
 }
-static bool readChunkedBody_(WiFiClient* s, uint8_t** outBuf, size_t* outLen, uint32_t idleTimeoutMs) {
+static bool readChunkedBody_(WiFiClient *s, uint8_t **outBuf, size_t *outLen,
+                             uint32_t idleTimeoutMs) {
   // Strict chunked reader used when the server properly frames payload.
   *outBuf = nullptr;
   *outLen = 0;
   const size_t kCapMax = 512 * 1024;
   size_t cap = 8192;
   size_t used = 0;
-  uint8_t* buf = (uint8_t*)malloc(cap);
-  if (!buf) return false;
+  uint8_t *buf = (uint8_t *)malloc(cap);
+  if (!buf)
+    return false;
   while (true) {
     String line;
-    if (!readLineCRLF_(s, &line, idleTimeoutMs)) { free(buf); return false; }
+    if (!readLineCRLF_(s, &line, idleTimeoutMs)) {
+      free(buf);
+      return false;
+    }
     line.trim();
-    if (!line.length()) continue; // skip empty lines
+    if (!line.length())
+      continue; // skip empty lines
     // chunk-size (hex) may have extensions: "1a;foo=bar"
     int semi = line.indexOf(';');
-    if (semi >= 0) line = line.substring(0, semi);
-    char* endp = nullptr;
+    if (semi >= 0)
+      line = line.substring(0, semi);
+    char *endp = nullptr;
     unsigned long chunk = strtoul(line.c_str(), &endp, 16);
-    if (!endp || endp == line.c_str()) { free(buf); return false; }
+    if (!endp || endp == line.c_str()) {
+      free(buf);
+      return false;
+    }
     if (chunk == 0) {
       // consume trailing headers (optional) until empty line
       // (Azure usually ends soon; safe to just read one line if present)
@@ -90,20 +110,35 @@ static bool readChunkedBody_(WiFiClient* s, uint8_t** outBuf, size_t* outLen, ui
       (void)readLineCRLF_(s, &tail, 50);
       break;
     }
-    if (used + chunk > kCapMax) { free(buf); return false; }
+    if (used + chunk > kCapMax) {
+      free(buf);
+      return false;
+    }
     while (used + chunk > cap) {
       size_t ncap = cap * 2;
-      if (ncap > kCapMax) { free(buf); return false; }
-      uint8_t* nb = (uint8_t*)realloc(buf, ncap);
-      if (!nb) { free(buf); return false; }
+      if (ncap > kCapMax) {
+        free(buf);
+        return false;
+      }
+      uint8_t *nb = (uint8_t *)realloc(buf, ncap);
+      if (!nb) {
+        free(buf);
+        return false;
+      }
       buf = nb;
       cap = ncap;
     }
-    if (!readExact_(s, buf + used, (size_t)chunk, idleTimeoutMs)) { free(buf); return false; }
+    if (!readExact_(s, buf + used, (size_t)chunk, idleTimeoutMs)) {
+      free(buf);
+      return false;
+    }
     used += (size_t)chunk;
     // chunk terminator CRLF
     char crlf[2];
-    if (!readExact_(s, (uint8_t*)crlf, 2, idleTimeoutMs)) { free(buf); return false; }
+    if (!readExact_(s, (uint8_t *)crlf, 2, idleTimeoutMs)) {
+      free(buf);
+      return false;
+    }
     // tolerate if not CRLF
   }
   *outBuf = buf;
@@ -112,60 +147,77 @@ static bool readChunkedBody_(WiFiClient* s, uint8_t** outBuf, size_t* outLen, ui
 }
 // ---------- chunked "salvage" (when chunk markers leak into body) ----------
 static bool isHexDigit_(char c) {
-  return (c >= '0' && c <= '9') ||
-         (c >= 'a' && c <= 'f') ||
+  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
          (c >= 'A' && c <= 'F');
 }
 // Detect pattern like: "10000\r\nRIFF...." at the very beginning
-static bool looksLikeChunkedLeak_(const uint8_t* buf, size_t len) {
-  if (!buf || len < 10) return false;
+static bool looksLikeChunkedLeak_(const uint8_t *buf, size_t len) {
+  if (!buf || len < 10)
+    return false;
   // need at least: "1\r\nRIFF" (but typically "10000\r\nRIFF")
   // Scan first line until \n within a small window.
   size_t i = 0;
   size_t maxScan = (len < 32) ? len : 32;
   // first char must be hex
-  if (!isHexDigit_((char)buf[0])) return false;
+  if (!isHexDigit_((char)buf[0]))
+    return false;
   // read until LF
   for (; i < maxScan; i++) {
     char c = (char)buf[i];
-    if (c == '\n') break;
+    if (c == '\n')
+      break;
     // allow \r, hex digits, ';' extensions, spaces/tabs (tolerant)
-    if (c == '\r') continue;
-    if (c == ';' || c == ' ' || c == '\t') continue;
-    if (!isHexDigit_(c)) return false;
+    if (c == '\r')
+      continue;
+    if (c == ';' || c == ' ' || c == '\t')
+      continue;
+    if (!isHexDigit_(c))
+      return false;
   }
-  if (i >= maxScan) return false;          // no LF soon -> unlikely chunked leak
+  if (i >= maxScan)
+    return false; // no LF soon -> unlikely chunked leak
   size_t lfPos = i;
   // after LF, the payload should start (often RIFF)
   size_t payloadPos = lfPos + 1;
-  if (payloadPos + 4 > len) return false;
+  if (payloadPos + 4 > len)
+    return false;
   // Many times it's RIFF right away
-  if (memcmp(buf + payloadPos, "RIFF", 4) == 0) return true;
+  if (memcmp(buf + payloadPos, "RIFF", 4) == 0)
+    return true;
   // or sometimes there is an extra CRLF; tolerate one empty line
-  if (payloadPos + 2 < len && buf[payloadPos] == '\r' && buf[payloadPos + 1] == '\n') {
+  if (payloadPos + 2 < len && buf[payloadPos] == '\r' &&
+      buf[payloadPos + 1] == '\n') {
     payloadPos += 2;
-    if (payloadPos + 4 <= len && memcmp(buf + payloadPos, "RIFF", 4) == 0) return true;
+    if (payloadPos + 4 <= len && memcmp(buf + payloadPos, "RIFF", 4) == 0)
+      return true;
   }
   return false;
 }
-static bool dechunkMemory_(const uint8_t* in, size_t inLen, uint8_t** outBuf, size_t* outLen) {
+static bool dechunkMemory_(const uint8_t *in, size_t inLen, uint8_t **outBuf,
+                           size_t *outLen) {
   // Best-effort salvage for chunk markers accidentally embedded in the body.
-  if (!outBuf || !outLen) return false;
+  if (!outBuf || !outLen)
+    return false;
   *outBuf = nullptr;
   *outLen = 0;
-  if (!in || inLen == 0) return false;
+  if (!in || inLen == 0)
+    return false;
   const size_t kCapMax = 512 * 1024;
   size_t cap = 8192;
   size_t used = 0;
-  uint8_t* buf = (uint8_t*)malloc(cap);
-  if (!buf) return false;
+  uint8_t *buf = (uint8_t *)malloc(cap);
+  if (!buf)
+    return false;
   auto ensureCap = [&](size_t need) -> bool {
-    if (need > kCapMax) return false;
+    if (need > kCapMax)
+      return false;
     while (need > cap) {
       size_t ncap = cap * 2;
-      if (ncap > kCapMax) return false;
-      uint8_t* nb = (uint8_t*)realloc(buf, ncap);
-      if (!nb) return false;
+      if (ncap > kCapMax)
+        return false;
+      uint8_t *nb = (uint8_t *)realloc(buf, ncap);
+      if (!nb)
+        return false;
       buf = nb;
       cap = ncap;
     }
@@ -176,58 +228,85 @@ static bool dechunkMemory_(const uint8_t* in, size_t inLen, uint8_t** outBuf, si
     // read line until '\n'
     size_t lineStart = pos;
     size_t lineEnd = pos;
-    while (lineEnd < inLen && in[lineEnd] != '\n') lineEnd++;
-    if (lineEnd >= inLen) { free(buf); return false; } // no LF -> malformed
+    while (lineEnd < inLen && in[lineEnd] != '\n')
+      lineEnd++;
+    if (lineEnd >= inLen) {
+      free(buf);
+      return false;
+    } // no LF -> malformed
     // line is [lineStart, lineEnd] excluding LF; may include CR
     // Copy to temp string (small)
     char line[64];
     size_t L = lineEnd - lineStart;
-    if (L >= sizeof(line)) { free(buf); return false; } // too long
+    if (L >= sizeof(line)) {
+      free(buf);
+      return false;
+    } // too long
     memcpy(line, in + lineStart, L);
     line[L] = 0;
     pos = lineEnd + 1; // skip LF
     // trim CR/spaces
     // remove trailing CR
-    while (L > 0 && (line[L - 1] == '\r' || line[L - 1] == ' ' || line[L - 1] == '\t')) {
+    while (L > 0 &&
+           (line[L - 1] == '\r' || line[L - 1] == ' ' || line[L - 1] == '\t')) {
       line[--L] = 0;
     }
     // skip leading spaces
-    char* p = line;
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p == 0) continue; // empty line -> ignore
+    char *p = line;
+    while (*p == ' ' || *p == '\t')
+      p++;
+    if (*p == 0)
+      continue; // empty line -> ignore
     // cut chunk extensions
-    char* semi = strchr(p, ';');
-    if (semi) *semi = 0;
+    char *semi = strchr(p, ';');
+    if (semi)
+      *semi = 0;
     // parse hex
-    char* endp = nullptr;
+    char *endp = nullptr;
     unsigned long chunk = strtoul(p, &endp, 16);
-    if (!endp || endp == p) { free(buf); return false; }
+    if (!endp || endp == p) {
+      free(buf);
+      return false;
+    }
     if (chunk == 0) {
       // chunked end. There may be trailing headers and an empty line.
       // We can just stop here.
       break;
     }
-    if (pos + chunk > inLen) { free(buf); return false; }
-    if (!ensureCap(used + (size_t)chunk)) { free(buf); return false; }
+    if (pos + chunk > inLen) {
+      free(buf);
+      return false;
+    }
+    if (!ensureCap(used + (size_t)chunk)) {
+      free(buf);
+      return false;
+    }
     memcpy(buf + used, in + pos, (size_t)chunk);
     used += (size_t)chunk;
     pos += (size_t)chunk;
     // skip CRLF after chunk payload if present
-    if (pos < inLen && in[pos] == '\r') pos++;
-    if (pos < inLen && in[pos] == '\n') pos++;
+    if (pos < inLen && in[pos] == '\r')
+      pos++;
+    if (pos < inLen && in[pos] == '\n')
+      pos++;
   }
-  if (used == 0) { free(buf); return false; }
+  if (used == 0) {
+    free(buf);
+    return false;
+  }
   *outBuf = buf;
   *outLen = used;
   return true;
 }
-static void logHeadBytes_(const uint8_t* buf, size_t len);
+static void logHeadBytes_(const uint8_t *buf, size_t len);
 static uint32_t g_chunkedSalvageCount = 0;
-static String tokenSnippet_(const String& s) {
+static String tokenSnippet_(const String &s) {
   // Avoid logging full tokens. Show a small redacted snippet only.
   const size_t n = s.length();
-  if (n == 0) return "(empty)";
-  if (n <= 12) return s;
+  if (n == 0)
+    return "(empty)";
+  if (n <= 12)
+    return s;
   String out;
   out.reserve(8 + 3 + 8);
   out += s.substring(0, 8);
@@ -236,24 +315,28 @@ static String tokenSnippet_(const String& s) {
   return out;
 }
 // === src/azure_tts.cpp : replace whole function ===
-static void salvageChunkedLeakIfNeeded_(uint8_t** pBuf, size_t* pLen) {
+static void salvageChunkedLeakIfNeeded_(uint8_t **pBuf, size_t *pLen) {
   // Fix up cases where chunk framing leaked into the response body.
-  if (!pBuf || !pLen) return;
-  uint8_t* buf = *pBuf;
+  if (!pBuf || !pLen)
+    return;
+  uint8_t *buf = *pBuf;
   size_t len = *pLen;
-  if (!buf || len < 10) return;
-  if (memcmp(buf, "RIFF", 4) == 0) return; // already OK
-  if (!looksLikeChunkedLeak_(buf, len)) return;
+  if (!buf || len < 10)
+    return;
+  if (memcmp(buf, "RIFF", 4) == 0)
+    return; // already OK
+  if (!looksLikeChunkedLeak_(buf, len))
+    return;
   MC_LOGW("TTS", "chunked markers leaked into body -> salvage");
   MC_LOGT("TTS", "chunked leak head dump follows");
   logHeadBytes_(buf, len);
-  uint8_t* fixed = nullptr;
+  uint8_t *fixed = nullptr;
   size_t fixedLen = 0;
   if (dechunkMemory_(buf, len, &fixed, &fixedLen)) {
     g_chunkedSalvageCount++;
     MC_LOGD("TTS", "salvaged #%lu: %u -> %u bytes",
-            (unsigned long)g_chunkedSalvageCount,
-            (unsigned)len, (unsigned)fixedLen);
+            (unsigned long)g_chunkedSalvageCount, (unsigned)len,
+            (unsigned)fixedLen);
     free(buf);
     *pBuf = fixed;
     *pLen = fixedLen;
@@ -262,16 +345,22 @@ static void salvageChunkedLeakIfNeeded_(uint8_t** pBuf, size_t* pLen) {
     MC_LOGW("TTS", "salvage failed (dechunkMemory_)");
   }
 }
-static String normalizeCustomHost_(const String& inRaw) {
+static String normalizeCustomHost_(const String &inRaw) {
   String s = trimCopy_(inRaw);
-  if (s == "-" || s.equalsIgnoreCase("none")) return "";
-  if (!s.length()) return "";
-  if (s.startsWith("https://")) s = s.substring(8);
-  else if (s.startsWith("http://")) s = s.substring(7);
+  if (s == "-" || s.equalsIgnoreCase("none"))
+    return "";
+  if (!s.length())
+    return "";
+  if (s.startsWith("https://"))
+    s = s.substring(8);
+  else if (s.startsWith("http://"))
+    s = s.substring(7);
   int slash = s.indexOf('/');
-  if (slash >= 0) s = s.substring(0, slash);
+  if (slash >= 0)
+    s = s.substring(0, slash);
   s.trim();
-  if (!s.length()) return "";
+  if (!s.length())
+    return "";
   if (s.indexOf('.') < 0) {
     s += ".cognitiveservices.azure.com";
   }
@@ -279,24 +368,28 @@ static String normalizeCustomHost_(const String& inRaw) {
 }
 // ---- WAV parser (PCM) ----
 struct WavPcmInfo_ {
-  const uint8_t* pcm_ = nullptr;
+  const uint8_t *pcm_ = nullptr;
   size_t pcmBytes_ = 0;
   uint32_t sampleRate_ = 16000;
   uint16_t channels_ = 1;
   uint16_t bitsPerSample_ = 16;
 };
-static uint32_t rd32le_(const uint8_t* p) {
-  return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+static uint32_t rd32le_(const uint8_t *p) {
+  return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+         ((uint32_t)p[3] << 24);
 }
-static uint16_t rd16le_(const uint8_t* p) {
+static uint16_t rd16le_(const uint8_t *p) {
   return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
 }
-static bool parseWavPcm_(const uint8_t* buf, size_t len, WavPcmInfo_* out) {
+static bool parseWavPcm_(const uint8_t *buf, size_t len, WavPcmInfo_ *out) {
   // Minimal WAV parser that accepts only PCM16 mono.
-  if (!buf || len < 44 || !out) return false;
+  if (!buf || len < 44 || !out)
+    return false;
   // "RIFF" .... "WAVE"
-  if (memcmp(buf, "RIFF", 4) != 0) return false;
-  if (memcmp(buf + 8, "WAVE", 4) != 0) return false;
+  if (memcmp(buf, "RIFF", 4) != 0)
+    return false;
+  if (memcmp(buf + 8, "WAVE", 4) != 0)
+    return false;
   bool hasFmt = false;
   bool hasData = false;
   uint16_t audioFormat = 0;
@@ -305,14 +398,15 @@ static bool parseWavPcm_(const uint8_t* buf, size_t len, WavPcmInfo_* out) {
   uint16_t bitsPerSample = 0;
   size_t pos = 12;
   while (pos + 8 <= len) {
-    const uint8_t* ch = buf + pos;
+    const uint8_t *ch = buf + pos;
     uint32_t csize = rd32le_(ch + 4);
     pos += 8;
-    if (pos + csize > len) break;
+    if (pos + csize > len)
+      break;
     if (memcmp(ch, "fmt ", 4) == 0 && csize >= 16) {
-      audioFormat   = rd16le_(buf + pos + 0);
-      channels      = rd16le_(buf + pos + 2);
-      sampleRate    = rd32le_(buf + pos + 4);
+      audioFormat = rd16le_(buf + pos + 0);
+      channels = rd16le_(buf + pos + 2);
+      sampleRate = rd32le_(buf + pos + 4);
       bitsPerSample = rd16le_(buf + pos + 14);
       hasFmt = true;
     } else if (memcmp(ch, "data", 4) == 0) {
@@ -322,20 +416,26 @@ static bool parseWavPcm_(const uint8_t* buf, size_t len, WavPcmInfo_* out) {
     }
     // chunks are word-aligned
     pos += (size_t)csize;
-    if (pos & 1) pos++;
+    if (pos & 1)
+      pos++;
   }
-  if (!hasFmt || !hasData) return false;
-  if (audioFormat != 1) return false;          // PCM only
-  if (channels != 1) return false;             // mono only (for now)
-  if (bitsPerSample != 16) return false;       // 16-bit only
+  if (!hasFmt || !hasData)
+    return false;
+  if (audioFormat != 1)
+    return false; // PCM only
+  if (channels != 1)
+    return false; // mono only (for now)
+  if (bitsPerSample != 16)
+    return false; // 16-bit only
   out->channels_ = channels;
   out->sampleRate_ = sampleRate ? sampleRate : 16000;
   out->bitsPerSample_ = bitsPerSample;
   return true;
 }
 // === src/azure_tts.cpp : replace whole function ===
-static void logHeadBytes_(const uint8_t* buf, size_t len) {
-  if (!buf || len == 0) return;
+static void logHeadBytes_(const uint8_t *buf, size_t len) {
+  if (!buf || len == 0)
+    return;
   char s[64];
   size_t n = (len < 12) ? len : 12;
   for (size_t i = 0; i < n; i++) {
@@ -349,7 +449,7 @@ static void logHeadBytes_(const uint8_t* buf, size_t len) {
     MC_LOGT("TTS", "looks like MP3 frame sync (0xFFEx)");
   }
 }
-static bool isCustomEndpoint_(const String& endpoint) {
+static bool isCustomEndpoint_(const String &endpoint) {
   return endpoint.indexOf(".cognitiveservices.azure.com/tts/") >= 0;
 }
 void AzureTts::begin(uint8_t volume) {
@@ -357,7 +457,7 @@ void AzureTts::begin(uint8_t volume) {
   cfg_ = RuntimeConfig{};
   keepaliveEnabled_ = true;
   region_ = trimCopy_(mcCfgAzRegion());
-  key_    = trimCopy_(mcCfgAzKey());
+  key_ = trimCopy_(mcCfgAzKey());
   defaultVoice_ = trimCopy_(mcCfgAzVoice());
   customHost_ = normalizeCustomHost_(mcCfgAzEndpoint());
   if (customHost_.length()) {
@@ -366,19 +466,19 @@ void AzureTts::begin(uint8_t volume) {
     MC_LOGD("TTS", "endpoint: custom (len=%u)", (unsigned)endpoint_.length());
   } else if (region_.length()) {
     // region endpoint
-    endpoint_ = "https://" + region_ + ".tts.speech.microsoft.com/cognitiveservices/v1";
+    endpoint_ =
+        "https://" + region_ + ".tts.speech.microsoft.com/cognitiveservices/v1";
     MC_LOGD("TTS", "endpoint: region (len=%u)", (unsigned)endpoint_.length());
   } else {
     endpoint_ = "";
     MC_LOGD("TTS", "endpoint: (not set)");
   }
   MC_LOGD("TTS", "azure key: %s", key_.length() ? "set" : "(not set)");
-  MC_LOGD("TTS", "voice: %s", defaultVoice_.length() ? defaultVoice_.c_str() : "(not set)");
+  MC_LOGD("TTS", "voice: %s",
+          defaultVoice_.length() ? defaultVoice_.c_str() : "(not set)");
   MC_LOGD("TTS", "cfg lens: region=%u voice=%u key=%u endpoint=%u",
-          (unsigned)region_.length(),
-          (unsigned)defaultVoice_.length(),
-          (unsigned)key_.length(),
-          (unsigned)endpoint_.length());
+          (unsigned)region_.length(), (unsigned)defaultVoice_.length(),
+          (unsigned)key_.length(), (unsigned)endpoint_.length());
   // audio
   defaultVolume_ = volume;
   M5.Speaker.setVolume(volume);
@@ -395,20 +495,24 @@ void AzureTts::begin(uint8_t volume) {
   sessionResetPending_ = false;
   // cancel state
   cancelMux_ = portMUX_INITIALIZER_UNLOCKED;
+  stateMux_ = portMUX_INITIALIZER_UNLOCKED;
   cancelSpeakId_ = 0;
   cancelReason_[0] = 0;
 }
-bool AzureTts::isBusy() const {
-  return state_ != Idle;
-}
-bool AzureTts::consumeDone(uint32_t* outId, bool* outOk, char* outReason, size_t outReasonLen) {
+bool AzureTts::isBusy() const { return state_ != Idle; }
+
+bool AzureTts::consumeDone(uint32_t *outId, bool *outOk, char *outReason,
+                           size_t outReasonLen) {
   uint32_t v = doneSpeakId_;
-  if (!v) return false;
+  if (!v)
+    return false;
   doneSpeakId_ = 0;
-  if (outId) *outId = v;
-  if (outOk) *outOk = doneOk_;
+  if (outId)
+    *outId = v;
+  if (outOk)
+    *outOk = doneOk_;
   if (outReason && outReasonLen > 0) {
-    const char* r = (doneReason_[0] ? doneReason_ : "-");
+    const char *r = (doneReason_[0] ? doneReason_ : "-");
     strncpy(outReason, r, outReasonLen - 1);
     outReason[outReasonLen - 1] = 0;
   }
@@ -417,61 +521,74 @@ bool AzureTts::consumeDone(uint32_t* outId, bool* outOk, char* outReason, size_t
   doneReason_[0] = 0;
   return true;
 }
-void AzureTts::requestSessionReset() {
-  sessionResetPending_ = true;
-}
-void AzureTts::setRuntimeConfig(const RuntimeConfig& cfg) { cfg_ = cfg; }
+void AzureTts::requestSessionReset() { sessionResetPending_ = true; }
+void AzureTts::setRuntimeConfig(const RuntimeConfig &cfg) { cfg_ = cfg; }
 AzureTts::RuntimeConfig AzureTts::runtimeConfig() const { return cfg_; }
 void AzureTts::setPlaybackEnabled(bool en) { playbackEnabled_ = en; }
 bool AzureTts::playbackEnabled() const { return playbackEnabled_; }
 bool AzureTts::testCredentials() {
-  if (state_ != Idle) return false;
-  if (!endpoint_.length() || !key_.length() || !defaultVoice_.length()) return false;
+  if (state_ != Idle)
+    return false;
+  if (!endpoint_.length() || !key_.length() || !defaultVoice_.length())
+    return false;
   return ensureToken_();
 }
 AzureTts::LastResult AzureTts::lastResult() const { return last_; }
 // ---- task ----
-void AzureTts::taskEntry(void* pv) {
-  static_cast<AzureTts*>(pv)->taskBody();
+void AzureTts::taskEntry(void *pv) {
+  static_cast<AzureTts *>(pv)->taskBody();
   vTaskDelete(nullptr);
 }
-bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voice) {
+bool AzureTts::speakAsync(const String &text, uint32_t speakId,
+                          const char *voice) {
 #if TTS_DEBUG_ENABLED
-  MC_LOGD("TTS", "speakAsync call id=%lu text_bytes=%u",
-          (unsigned long)speakId,
+  MC_LOGD("TTS", "speakAsync call id=%lu text_bytes=%u", (unsigned long)speakId,
           (unsigned)text.length());
 #endif
-  // --- rejection checks (NO SIDE EFFECTS) ---
+  // --- atomic state check + transition ---
+  portENTER_CRITICAL(&stateMux_);
   if (state_ != Idle) {
+    portEXIT_CRITICAL(&stateMux_);
     MC_LOGI_RL("TTS.rej.busy", 1500, "TTS",
                "speakAsync rejected reason=busy id=%lu text_bytes=%u",
                (unsigned long)speakId, (unsigned)text.length());
     return false;
   }
+  state_ = Fetching;
+  portEXIT_CRITICAL(&stateMux_);
   if (WiFi.status() != WL_CONNECTED) {
+    portENTER_CRITICAL(&stateMux_);
+    state_ = Idle;
+    portEXIT_CRITICAL(&stateMux_);
     MC_LOGI_RL("TTS.rej.wifi", 3000, "TTS",
                "speakAsync rejected reason=wifi id=%lu",
                (unsigned long)speakId);
     return false;
   }
   if (!endpoint_.length() || !key_.length()) {
+    portENTER_CRITICAL(&stateMux_);
+    state_ = Idle;
+    portEXIT_CRITICAL(&stateMux_);
     MC_LOGI_RL("TTS.rej.config", 5000, "TTS",
                "speakAsync rejected reason=config id=%lu",
                (unsigned long)speakId);
     return false;
   }
   // Prepare request strings (same behavior as before).
-  reqText_  = text;
+  reqText_ = text;
   reqVoice_ = voice ? String(voice) : defaultVoice_;
-  if (!reqVoice_.length()) reqVoice_ = defaultVoice_;
+  if (!reqVoice_.length())
+    reqVoice_ = defaultVoice_;
   if (!reqVoice_.length()) {
+    portENTER_CRITICAL(&stateMux_);
+    state_ = Idle;
+    portEXIT_CRITICAL(&stateMux_);
     MC_LOGI_RL("TTS.rej.voice", 5000, "TTS",
                "speakAsync rejected reason=voice id=%lu",
                (unsigned long)speakId);
     return false;
   }
-  MC_EVT("TTS", "accepted id=%lu text_bytes=%u",
-         (unsigned long)speakId,
+  MC_EVT("TTS", "accepted id=%lu text_bytes=%u", (unsigned long)speakId,
          (unsigned)text.length());
   currentSpeakId_ = speakId;
   // clear DONE state (for previous id)
@@ -483,12 +600,15 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
   cancelSpeakId_ = 0;
   cancelReason_[0] = 0;
   portEXIT_CRITICAL(&cancelMux_);
-  state_ = Fetching;
+  // state_ already set to Fetching above
   if (!task_) {
-    BaseType_t ok = xTaskCreatePinnedToCore(taskEntry, "azure_tts", 8192, this, 1, &task_, 1);
+    BaseType_t ok = xTaskCreatePinnedToCore(taskEntry, "azure_tts", 8192, this,
+                                            1, &task_, 1);
     if (ok != pdPASS) {
       task_ = nullptr;
+      portENTER_CRITICAL(&stateMux_);
       state_ = Idle;
+      portEXIT_CRITICAL(&stateMux_);
       MC_EVT("TTS", "fail stage=task_create id=%lu", (unsigned long)speakId);
       MC_LOGE("TTS", "task create failed");
       return false;
@@ -496,8 +616,9 @@ bool AzureTts::speakAsync(const String& text, uint32_t speakId, const char* voic
   }
   return true;
 }
-void AzureTts::cancel(uint32_t speakId, const char* reason) {
-  if (speakId == 0) return;
+void AzureTts::cancel(uint32_t speakId, const char *reason) {
+  if (speakId == 0)
+    return;
   // record cancel request
   portENTER_CRITICAL(&cancelMux_);
   cancelSpeakId_ = speakId;
@@ -508,8 +629,7 @@ void AzureTts::cancel(uint32_t speakId, const char* reason) {
     cancelReason_[0] = 0;
   }
   portEXIT_CRITICAL(&cancelMux_);
-  MC_EVT("TTS", "cancel req id=%lu reason=%s",
-         (unsigned long)speakId,
+  MC_EVT("TTS", "cancel req id=%lu reason=%s", (unsigned long)speakId,
          (cancelReason_[0] ? cancelReason_ : "-"));
   // Best-effort: if already PLAYING, try to stop immediately.
   if (state_ == Playing && currentSpeakId_ == speakId) {
@@ -519,27 +639,86 @@ void AzureTts::cancel(uint32_t speakId, const char* reason) {
 }
 void AzureTts::poll() {
   // Drive the playback state machine from the main loop.
-  if (state_ == Idle) return;
+  State stateSnapshot = Idle;
+  portENTER_CRITICAL(&stateMux_);
+  stateSnapshot = state_;
+  portEXIT_CRITICAL(&stateMux_);
+  if (stateSnapshot == Idle)
+    return;
   // waiting fetch
-  if (state_ == Fetching) {
+  if (stateSnapshot == Fetching) {
     return;
   }
+  auto setState = [&](State s) {
+    portENTER_CRITICAL(&stateMux_);
+    state_ = s;
+    portEXIT_CRITICAL(&stateMux_);
+  };
+  auto peekWav = [&](uint8_t **outPtr, size_t *outLen) {
+    uint8_t *p = nullptr;
+    size_t len = 0;
+    portENTER_CRITICAL(&stateMux_);
+    p = wav_;
+    len = wavLen_;
+    portEXIT_CRITICAL(&stateMux_);
+    if (outPtr)
+      *outPtr = p;
+    if (outLen)
+      *outLen = len;
+  };
+  auto detachWav = [&](size_t *outLen) -> uint8_t * {
+    uint8_t *p = nullptr;
+    size_t len = 0;
+    portENTER_CRITICAL(&stateMux_);
+    p = wav_;
+    len = wavLen_;
+    wav_ = nullptr;
+    wavLen_ = 0;
+    portEXIT_CRITICAL(&stateMux_);
+    if (outLen)
+      *outLen = len;
+    return p;
+  };
   auto clearCancel = [&]() {
     portENTER_CRITICAL(&cancelMux_);
     cancelSpeakId_ = 0;
     cancelReason_[0] = 0;
     portEXIT_CRITICAL(&cancelMux_);
   };
-  auto makeCanceledReason = [&](char* out, size_t outLen) {
-    if (!out || outLen == 0) return;
-    if (cancelReason_[0]) {
-      snprintf(out, outLen, "canceled:%s", cancelReason_);
+  auto peekCancel = [&](uint32_t *outId, char *outReason, size_t outReasonLen) {
+    uint32_t id = 0;
+    char reason[sizeof(cancelReason_)] = {0};
+    portENTER_CRITICAL(&cancelMux_);
+    id = cancelSpeakId_;
+    strncpy(reason, cancelReason_, sizeof(reason) - 1);
+    reason[sizeof(reason) - 1] = 0;
+    portEXIT_CRITICAL(&cancelMux_);
+    if (outId) {
+      *outId = id;
+    }
+    if (outReason && outReasonLen > 0) {
+      strncpy(outReason, reason, outReasonLen - 1);
+      outReason[outReasonLen - 1] = 0;
+    }
+  };
+  auto hasCancelForCurrent = [&]() {
+    uint32_t id = 0;
+    peekCancel(&id, nullptr, 0);
+    return (id != 0 && id == currentSpeakId_);
+  };
+  auto makeCanceledReason = [&](char *out, size_t outLen) {
+    if (!out || outLen == 0)
+      return;
+    char reason[sizeof(cancelReason_)] = {0};
+    peekCancel(nullptr, reason, sizeof(reason));
+    if (reason[0]) {
+      snprintf(out, outLen, "canceled:%s", reason);
     } else {
       strncpy(out, "canceled", outLen - 1);
       out[outLen - 1] = 0;
     }
   };
-  auto setDone = [&](bool ok, const char* reason) {
+  auto setDone = [&](bool ok, const char *reason) {
     doneOk_ = ok;
     if (reason && reason[0]) {
       strncpy(doneReason_, reason, sizeof(doneReason_) - 1);
@@ -549,7 +728,7 @@ void AzureTts::poll() {
     }
     doneSpeakId_ = currentSpeakId_;
   };
-  auto setLastDrop = [&](const char* reason) {
+  auto setLastDrop = [&](const char *reason) {
     last_.ok = false;
     if (reason && reason[0]) {
       strncpy(last_.err, reason, sizeof(last_.err) - 1);
@@ -559,16 +738,18 @@ void AzureTts::poll() {
     }
   };
   // ---------- Ready: try to play ----------
-  if (state_ == Ready) {
+  if (stateSnapshot == Ready) {
     // cancel guard (prevents late play)
-    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
+    if (hasCancelForCurrent()) {
       char r[24];
       makeCanceledReason(r, sizeof(r));
       MC_EVT("TTS", "canceled before play id=%lu reason=%s",
              (unsigned long)currentSpeakId_, r);
-      if (wav_) { free(wav_); wav_ = nullptr; }
-      wavLen_ = 0;
-      state_ = Idle;
+      uint8_t *drop = detachWav(nullptr);
+      if (drop) {
+        free(drop);
+      }
+      setState(Idle);
       if (i2sLocked_) {
         I2SManager::instance().unlock("TTS.cancel_ready");
         i2sLocked_ = false;
@@ -578,32 +759,37 @@ void AzureTts::poll() {
       clearCancel();
       return;
     }
-    if (!wav_ || wavLen_ == 0) {
-      MC_EVT("TTS", "fail id=%lu reason=no_wav", (unsigned long)currentSpeakId_);
+    uint8_t *wavPtr = nullptr;
+    size_t wavLen = 0;
+    peekWav(&wavPtr, &wavLen);
+    if (!wavPtr || wavLen == 0) {
+      MC_EVT("TTS", "fail id=%lu reason=no_wav",
+             (unsigned long)currentSpeakId_);
       MC_LOGW("TTS", "no wav -> drop id=%lu", (unsigned long)currentSpeakId_);
-      state_ = Idle;
+      setState(Idle);
       setLastDrop("no_wav");
       setDone(false, "no_wav");
       return;
     }
     // If speaker is still playing something else, wait here.
-    if (M5.Speaker.isPlaying()) return;
+    if (M5.Speaker.isPlaying())
+      return;
     // I2S owner: Speaker
     if (!i2sLocked_) {
       if (!I2SManager::instance().lockForSpeaker("TTS.play", 4000)) {
-        I2SManager& m = I2SManager::instance();
+        I2SManager &m = I2SManager::instance();
         MC_EVT("TTS", "fail id=%lu reason=i2s_deny wav=%uB",
-               (unsigned long)currentSpeakId_, (unsigned)wavLen_);
+               (unsigned long)currentSpeakId_, (unsigned)wavLen);
         MC_LOGW("TTS", "I2S lockForSpeaker failed -> drop id=%lu wav=%uB",
-                (unsigned long)currentSpeakId_, (unsigned)wavLen_);
+                (unsigned long)currentSpeakId_, (unsigned)wavLen);
         MC_LOGD("TTS", "i2s owner=%u depth=%lu ownerSite=%s",
-                (unsigned)m.owner(),
-                (unsigned long)m.depth(),
+                (unsigned)m.owner(), (unsigned long)m.depth(),
                 m.ownerCallsite() ? m.ownerCallsite() : "");
-        free(wav_);
-        wav_ = nullptr;
-        wavLen_ = 0;
-        state_ = Idle;
+        uint8_t *drop = detachWav(nullptr);
+        if (drop) {
+          free(drop);
+        }
+        setState(Idle);
         setLastDrop("i2s_deny");
         setDone(false, "i2s_deny");
         return;
@@ -618,24 +804,23 @@ void AzureTts::poll() {
     {
       const int vol = (int)M5.Speaker.getVolume();
       MC_LOGT("TTS", "spk state: enabled=%d playing=%d vol=%d defaultVol=%d",
-              M5.Speaker.isEnabled() ? 1 : 0,
-              M5.Speaker.isPlaying() ? 1 : 0,
-              vol,
-              (int)defaultVolume_);
+              M5.Speaker.isEnabled() ? 1 : 0, M5.Speaker.isPlaying() ? 1 : 0,
+              vol, (int)defaultVolume_);
       if (vol == 0 && defaultVolume_ > 0) {
         MC_LOGD("TTS", "spk vol=0 -> restore %d", (int)defaultVolume_);
         M5.Speaker.setVolume(defaultVolume_);
       }
     }
-    bool okPlay = M5.Speaker.playWav(wav_, wavLen_);
+    bool okPlay = M5.Speaker.playWav(wavPtr, wavLen);
     if (!okPlay) {
       MC_EVT("TTS", "fail id=%lu reason=play_fail wav=%uB",
-             (unsigned long)currentSpeakId_, (unsigned)wavLen_);
-      MC_LOGE("TTS", "play failed (wav=%uB)", (unsigned)wavLen_);
-      free(wav_);
-      wav_ = nullptr;
-      wavLen_ = 0;
-      state_ = Idle;
+             (unsigned long)currentSpeakId_, (unsigned)wavLen);
+      MC_LOGE("TTS", "play failed (wav=%uB)", (unsigned)wavLen);
+      uint8_t *drop = detachWav(nullptr);
+      if (drop) {
+        free(drop);
+      }
+      setState(Idle);
       if (i2sLocked_) {
         I2SManager::instance().unlock("TTS.play_fail");
         i2sLocked_ = false;
@@ -644,22 +829,25 @@ void AzureTts::poll() {
       setDone(false, "play_fail");
       return;
     }
-    MC_EVT("TTS", "play start id=%lu bytes=%u",
-           (unsigned long)currentSpeakId_, (unsigned)wavLen_);
-    state_ = Playing;
+    MC_EVT("TTS", "play start id=%lu bytes=%u", (unsigned long)currentSpeakId_,
+           (unsigned)wavLen);
+    setState(Playing);
     return;
   }
   // ---------- Playing: wait done ----------
-  if (state_ == Playing) {
+  if (stateSnapshot == Playing) {
     // canceled during play
-    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_ && !M5.Speaker.isPlaying()) {
+    if (hasCancelForCurrent() &&
+        !M5.Speaker.isPlaying()) {
       char r[24];
       makeCanceledReason(r, sizeof(r));
       MC_EVT("TTS", "canceled during play id=%lu reason=%s",
              (unsigned long)currentSpeakId_, r);
-      if (wav_) { free(wav_); wav_ = nullptr; }
-      wavLen_ = 0;
-      state_ = Idle;
+      uint8_t *drop = detachWav(nullptr);
+      if (drop) {
+        free(drop);
+      }
+      setState(Idle);
       if (i2sLocked_) {
         I2SManager::instance().unlock("TTS.cancel_play");
         i2sLocked_ = false;
@@ -670,9 +858,11 @@ void AzureTts::poll() {
       return;
     }
     if (!M5.Speaker.isPlaying()) {
-      if (wav_) { free(wav_); wav_ = nullptr; }
-      wavLen_ = 0;
-      state_ = Idle;
+      uint8_t *drop = detachWav(nullptr);
+      if (drop) {
+        free(drop);
+      }
+      setState(Idle);
       if (i2sLocked_) {
         I2SManager::instance().unlock("TTS.done");
         i2sLocked_ = false;
@@ -688,7 +878,8 @@ void AzureTts::poll() {
 }
 // ---------- token / fetch ----------
 void AzureTts::warmupDnsOnce_() {
-  if (dnsWarmed_) return;
+  if (dnsWarmed_)
+    return;
   dnsWarmed_ = true;
   IPAddress ip;
   // custom host
@@ -707,16 +898,17 @@ void AzureTts::warmupDnsOnce_() {
     }
   }
 }
-bool AzureTts::fetchTokenOld_(String* outTok) {
+bool AzureTts::fetchTokenOld_(String *outTok) {
   // Legacy token fetch via regional STS endpoint (still used by some tenants).
-  if (!outTok) return false;
+  if (!outTok)
+    return false;
   outTok->clear();
   if (key_.length() == 0) {
     MC_LOGI("TTS_TOKEN", "skip: key empty");
     return false;
   }
   constexpr uint32_t kTokenTimeoutMs = 6000;
-  auto tryUrl = [&](const String& url, const char* label) -> bool {
+  auto tryUrl = [&](const String &url, const char *label) -> bool {
     MC_LOGI("TTS_TOKEN", "try %s url=%s", label ? label : "?", url.c_str());
     WiFiClientSecure c;
     c.setInsecure();
@@ -732,24 +924,28 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
     h.addHeader("Content-type", "application/x-www-form-urlencoded");
     h.addHeader("Content-length", "0");
     h.addHeader("Ocp-Apim-Subscription-Key", key_);
-    int code = h.POST((uint8_t*)nullptr, 0);
+    int code = h.POST((uint8_t *)nullptr, 0);
     MC_LOGI("TTS_TOKEN", "POST done code=%d (%s)", code, label ? label : "?");
     if (code == 200) {
       String tok;
       int total = h.getSize(); // -1 if unknown (chunked)
-      WiFiClient* s = h.getStreamPtr();
+      WiFiClient *s = h.getStreamPtr();
       const uint32_t t0 = millis();
       const uint32_t kTimeoutMs = 1500;
       const size_t kMaxTok = 2048;
       while (millis() - t0 < kTimeoutMs) {
-        if (!s) break;
+        if (!s)
+          break;
         while (s->available()) {
           char c = (char)s->read();
           tok += c;
-          if (tok.length() >= kMaxTok) break;
+          if (tok.length() >= kMaxTok)
+            break;
         }
-        if (tok.length() >= kMaxTok) break;
-        if (!s->connected() && !s->available()) break;
+        if (tok.length() >= kMaxTok)
+          break;
+        if (!s->connected() && !s->available())
+          break;
         delay(1);
       }
       size_t rawLen = tok.length();
@@ -760,7 +956,8 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
       MC_LOGD("TTS_TOKEN", "body_snip=%s", tokenSnippet_(tok).c_str());
       h.end();
       if (tok.length()) {
-        if (outTok) *outTok = tok;
+        if (outTok)
+          *outTok = tok;
         return true;
       }
       MC_LOGI("TTS_TOKEN", "HTTP 200 but empty body (%s)", label ? label : "?");
@@ -768,31 +965,37 @@ bool AzureTts::fetchTokenOld_(String* outTok) {
     }
     String body = h.getString();
     String err = h.errorToString(code);
-    MC_LOGI("TTS_TOKEN", "HTTP %d (%s) err=%s body_len=%u",
-            code, label ? label : "?", err.c_str(), (unsigned)body.length());
+    MC_LOGI("TTS_TOKEN", "HTTP %d (%s) err=%s body_len=%u", code,
+            label ? label : "?", err.c_str(), (unsigned)body.length());
     h.end();
     return false;
   };
   // 1) region STS (official endpoint)
   if (region_.length()) {
-    String url = String("https://") + region_ + ".api.cognitive.microsoft.com/sts/v1.0/issueToken";
-    if (tryUrl(url, "region")) return true;
+    String url = String("https://") + region_ +
+                 ".api.cognitive.microsoft.com/sts/v1.0/issueToken";
+    if (tryUrl(url, "region"))
+      return true;
   } else {
     MC_LOGI("TTS_TOKEN", "skip: region empty");
   }
   // 2) custom host (legacy / some tenants)
   if (customHost_.length()) {
     String url = String("https://") + customHost_ + "/sts/v1.0/issueToken";
-    if (tryUrl(url, "custom")) return true;
+    if (tryUrl(url, "custom"))
+      return true;
   }
   return false;
 }
 bool AzureTts::ensureToken_() {
   uint32_t now = millis();
-  if (token_.length() && now < tokenExpireMs_) return true;
-  if (now < tokenFailUntilMs_) return false;
+  if (token_.length() && now < tokenExpireMs_)
+    return true;
+  if (now < tokenFailUntilMs_)
+    return false;
   if (WiFi.status() != WL_CONNECTED) {
-    MC_LOGI_RL("TTS.token.wifi", 5000, "TTS_TOKEN", "fetch skipped: wifi not connected");
+    MC_LOGI_RL("TTS.token.wifi", 5000, "TTS_TOKEN",
+               "fetch skipped: wifi not connected");
     return false;
   }
   String tok;
@@ -808,32 +1011,45 @@ bool AzureTts::ensureToken_() {
   tokenFailCount_ = (uint8_t)min<int>(tokenFailCount_ + 1, 10);
   uint32_t backoff = 1000u * (1u << min<int>(tokenFailCount_, 6)); // up to ~64s
   tokenFailUntilMs_ = now + backoff;
-  MC_LOGI_RL("TTS.token.fail", 5000, "TTS_TOKEN",
-             "fail (cooldown=%us)", (unsigned)(backoff / 1000));
+  MC_LOGI_RL("TTS.token.fail", 5000, "TTS_TOKEN", "fail (cooldown=%us)",
+             (unsigned)(backoff / 1000));
   return false;
 }
-static String AzureTts_xmlEscape_(const String& s) {
+static String AzureTts_xmlEscape_(const String &s) {
   String o;
   o.reserve(s.length() + 16);
   for (size_t i = 0; i < s.length(); i++) {
     char c = s[i];
     switch (c) {
-      case '&': o += "&amp;"; break;
-      case '<': o += "&lt;"; break;
-      case '>': o += "&gt;"; break;
-      case '"': o += "&quot;"; break;
-      case '\'': o += "&apos;"; break;
-      default: o += c; break;
+    case '&':
+      o += "&amp;";
+      break;
+    case '<':
+      o += "&lt;";
+      break;
+    case '>':
+      o += "&gt;";
+      break;
+    case '"':
+      o += "&quot;";
+      break;
+    case '\'':
+      o += "&apos;";
+      break;
+    default:
+      o += c;
+      break;
     }
   }
   return o;
 }
-String AzureTts::xmlEscape_(const String& s) { return AzureTts_xmlEscape_(s); }
-String AzureTts::buildSsml_(const String& text, const String& voice) const {
+String AzureTts::xmlEscape_(const String &s) { return AzureTts_xmlEscape_(s); }
+String AzureTts::buildSsml_(const String &text, const String &voice) const {
   String v = voice.length() ? voice : defaultVoice_;
   String ssml;
   ssml.reserve(text.length() + v.length() + 128);
-  ssml += "<speak version='1.0' xml:lang='ja-JP' xmlns='http://www.w3.org/2001/10/synthesis'>";
+  ssml += "<speak version='1.0' xml:lang='ja-JP' "
+          "xmlns='http://www.w3.org/2001/10/synthesis'>";
   ssml += "<voice name='";
   ssml += v;
   ssml += "'>";
@@ -841,12 +1057,15 @@ String AzureTts::buildSsml_(const String& text, const String& voice) const {
   ssml += "</voice></speak>";
   return ssml;
 }
-bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
-  if (!outBuf || !outLen) return false;
+bool AzureTts::fetchWav_(const String &ssml, uint8_t **outBuf, size_t *outLen) {
+  if (!outBuf || !outLen)
+    return false;
   *outBuf = nullptr;
   *outLen = 0;
-  if (!endpoint_.length() || !key_.length()) return false;
-  if (WiFi.status() != WL_CONNECTED) return false;
+  if (!endpoint_.length() || !key_.length())
+    return false;
+  if (WiFi.status() != WL_CONNECTED)
+    return false;
   warmupDnsOnce_();
   // token
   const bool hasToken = ensureToken_();
@@ -857,7 +1076,8 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   // keep-alive toggling
   bool useKeepAlive = keepaliveEnabled_;
   uint32_t now = millis();
-  if (disableKeepaliveUntilMs_ && now < disableKeepaliveUntilMs_) useKeepAlive = false;
+  if (disableKeepaliveUntilMs_ && now < disableKeepaliveUntilMs_)
+    useKeepAlive = false;
   https_.setTimeout(cfg_.httpTimeoutMs);
   https_.setReuse(useKeepAlive);
   // begin
@@ -880,7 +1100,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   if (isCustomEndpoint_(endpoint_) && region_.length()) {
     https_.addHeader("Ocp-Apim-Subscription-Region", region_);
   }
-  int code = https_.POST((uint8_t*)ssml.c_str(), ssml.length());
+  int code = https_.POST((uint8_t *)ssml.c_str(), ssml.length());
   last_.httpCode = code;
   if (code != 200) {
     String body = https_.getString();
@@ -892,7 +1112,7 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
     return false;
   }
   // read body (chunked or content-length)
-  WiFiClient* stream = https_.getStreamPtr();
+  WiFiClient *stream = https_.getStreamPtr();
   if (!stream) {
     https_.end();
     return false;
@@ -908,37 +1128,46 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   }
   int total = https_.getSize(); // -1 means unknown (chunked)
   if (total <= 0) {
-    uint8_t* buf = nullptr;
+    uint8_t *buf = nullptr;
     size_t used = 0;
-    bool okChunked = readChunkedBody_(stream, &buf, &used, cfg_.chunkDataIdleTimeoutMs);
+    bool okChunked =
+        readChunkedBody_(stream, &buf, &used, cfg_.chunkDataIdleTimeoutMs);
     https_.end();
     if (!okChunked) {
-      if (buf) free(buf);
+      if (buf)
+        free(buf);
       return false;
     }
     salvageChunkedLeakIfNeeded_(&buf, &used);
-    MC_LOGT("TTS", "rx wav bytes=%u (chunked keepAlive=%d)",
-            (unsigned)used, useKeepAlive ? 1 : 0);
+    MC_LOGT("TTS", "rx wav bytes=%u (chunked keepAlive=%d)", (unsigned)used,
+            useKeepAlive ? 1 : 0);
     *outBuf = buf;
     *outLen = used;
     return true;
   }
   // content-length known
-  uint8_t* buf = (uint8_t*)malloc((size_t)total);
-  if (!buf) { https_.end(); return false; }
+  uint8_t *buf = (uint8_t *)malloc((size_t)total);
+  if (!buf) {
+    https_.end();
+    return false;
+  }
   size_t got = 0;
   uint32_t idleStart = millis();
   while (got < (size_t)total) {
     int a = stream->available();
     if (a <= 0) {
-      if (!stream->connected()) break;
-      if (millis() - idleStart > cfg_.contentReadIdleTimeoutMs) break;
+      if (!stream->connected())
+        break;
+      if (millis() - idleStart > cfg_.contentReadIdleTimeoutMs)
+        break;
       delay(1);
       continue;
     }
     idleStart = millis();
-    int r = stream->readBytes(buf + got, min<int>(a, (int)((size_t)total - got)));
-    if (r <= 0) break;
+    int r =
+        stream->readBytes(buf + got, min<int>(a, (int)((size_t)total - got)));
+    if (r <= 0)
+      break;
     got += (size_t)r;
   }
   https_.end();
@@ -948,8 +1177,8 @@ bool AzureTts::fetchWav_(const String& ssml, uint8_t** outBuf, size_t* outLen) {
   }
   size_t outN = got;
   salvageChunkedLeakIfNeeded_(&buf, &outN);
-  MC_LOGT("TTS", "rx wav bytes=%u (keepAlive=%d)",
-          (unsigned)outN, useKeepAlive ? 1 : 0);
+  MC_LOGT("TTS", "rx wav bytes=%u (keepAlive=%d)", (unsigned)outN,
+          useKeepAlive ? 1 : 0);
   *outBuf = buf;
   *outLen = outN;
   return true;
@@ -966,25 +1195,31 @@ void AzureTts::taskBody() {
     uint32_t t0 = millis();
     MC_EVT("TTS", "fetch start id=%lu", (unsigned long)currentSpeakId_);
     String ssml = buildSsml_(reqText_, reqVoice_);
-    uint8_t* buf = nullptr;
+    uint8_t *buf = nullptr;
     size_t len = 0;
     bool ok = fetchWav_(ssml, &buf, &len);
     last_.fetchMs = millis() - t0;
     last_.ok = ok;
     last_.bytes = (uint32_t)len;
     MC_EVT("TTS", "fetch done id=%lu ok=%d http=%d bytes=%lu took=%lums",
-           (unsigned long)currentSpeakId_,
-           ok ? 1 : 0,
-           last_.httpCode,
-           (unsigned long)len,
-           (unsigned long)last_.fetchMs);
-    auto makeCanceledReason = [&](char* out, size_t outLen) {
-      if (!out || outLen == 0) return;
-      if (cancelReason_[0]) snprintf(out, outLen, "canceled:%s", cancelReason_);
+           (unsigned long)currentSpeakId_, ok ? 1 : 0, last_.httpCode,
+           (unsigned long)len, (unsigned long)last_.fetchMs);
+    auto makeCanceledReason = [&](char *out, size_t outLen) {
+      if (!out || outLen == 0)
+        return;
+      if (cancelReason_[0])
+        snprintf(out, outLen, "canceled:%s", cancelReason_);
       else {
         strncpy(out, "canceled", outLen - 1);
         out[outLen - 1] = 0;
       }
+    };
+    auto hasCancelForCurrent = [&]() {
+      uint32_t cancelId = 0;
+      portENTER_CRITICAL(&cancelMux_);
+      cancelId = cancelSpeakId_;
+      portEXIT_CRITICAL(&cancelMux_);
+      return (cancelId != 0 && cancelId == currentSpeakId_);
     };
     auto clearCancel = [&]() {
       portENTER_CRITICAL(&cancelMux_);
@@ -992,7 +1227,7 @@ void AzureTts::taskBody() {
       cancelReason_[0] = 0;
       portEXIT_CRITICAL(&cancelMux_);
     };
-    auto setDone = [&](bool doneOk, const char* reason) {
+    auto setDone = [&](bool doneOk, const char *reason) {
       doneOk_ = doneOk;
       if (reason && reason[0]) {
         strncpy(doneReason_, reason, sizeof(doneReason_) - 1);
@@ -1002,7 +1237,7 @@ void AzureTts::taskBody() {
       }
       doneSpeakId_ = currentSpeakId_;
     };
-    auto setLastDrop = [&](const char* reason) {
+    auto setLastDrop = [&](const char *reason) {
       last_.ok = false;
       if (reason && reason[0]) {
         strncpy(last_.err, reason, sizeof(last_.err) - 1);
@@ -1012,31 +1247,39 @@ void AzureTts::taskBody() {
       }
     };
     // cancel guard: canceled while fetching -> never enqueue for playback
-    if (cancelSpeakId_ != 0 && cancelSpeakId_ == currentSpeakId_) {
+    if (hasCancelForCurrent()) {
       char r[24];
       makeCanceledReason(r, sizeof(r));
       MC_EVT("TTS", "canceled while fetching id=%lu reason=%s",
              (unsigned long)currentSpeakId_, r);
-      if (buf) free(buf);
+      if (buf)
+        free(buf);
+      portENTER_CRITICAL(&stateMux_);
       state_ = Idle;
+      portEXIT_CRITICAL(&stateMux_);
       setLastDrop(r);
       setDone(false, r);
       clearCancel();
       continue;
     }
     if (!ok || !buf || !len) {
-      if (buf) free(buf);
+      if (buf)
+        free(buf);
+      portENTER_CRITICAL(&stateMux_);
       state_ = Idle;
+      portEXIT_CRITICAL(&stateMux_);
       MC_EVT("TTS", "fail id=%lu reason=fetch_fail http=%d",
              (unsigned long)currentSpeakId_, last_.httpCode);
       setLastDrop("fetch_fail");
       setDone(false, "fetch_fail");
       continue;
     }
+    portENTER_CRITICAL(&stateMux_);
     wav_ = buf;
     wavLen_ = len;
-    lastOkMs_ = millis();
     state_ = Ready;
+    portEXIT_CRITICAL(&stateMux_);
+    lastOkMs_ = millis();
   }
 }
 void AzureTts::resetSession_() {

@@ -58,8 +58,108 @@ void AiTalkController::llmTaskEntry_(void *arg) {
   }
 }
 
+void AiTalkController::sttTaskEntry_(void *arg) {
+  auto *self = static_cast<AiTalkController *>(arg);
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    if (!self || !self->sttMutex_)
+      continue;
+
+    const int16_t *pcm = nullptr;
+    size_t samples = 0;
+    int sampleRate = 16000;
+    uint32_t timeoutMs = 0;
+    uint32_t reqId = 0;
+    xSemaphoreTake(self->sttMutex_, portMAX_DELAY);
+    pcm = self->sttPcm_;
+    samples = self->sttSamples_;
+    sampleRate = self->sttSampleRate_;
+    timeoutMs = self->sttTimeout_;
+    reqId = self->sttReqId_;
+    xSemaphoreGive(self->sttMutex_);
+
+    const auto res =
+        azure_stt::transcribePcm16Mono(pcm, samples, sampleRate, timeoutMs);
+
+    xSemaphoreTake(self->sttMutex_, portMAX_DELAY);
+    if (reqId == self->sttReqId_) {
+      self->sttResult_ = res;
+      self->sttDone_ = true;
+      self->sttBusy_ = false;
+    }
+    xSemaphoreGive(self->sttMutex_);
+  }
+}
+
+void AiTalkController::startSttRequest_(const int16_t *pcm, size_t samples,
+                                        int sampleRate, uint32_t timeoutMs) {
+  if (!sttTask_ || !sttMutex_) {
+    lastSttOk_ = false;
+    lastSttStatus_ = 0;
+    lastUserText_ = MC_AI_ERR_TEMP_FAIL_TRY_AGAIN;
+    errorFlag_ = true;
+    // Fallback: run STT synchronously if task not available
+    replyText_ = String(MC_AI_TEXT_FALLBACK);
+    bubbleText_ = replyText_;
+    replyReady_ = true;
+    sttStartedLlm_ = true;
+    return;
+  }
+  xSemaphoreTake(sttMutex_, portMAX_DELAY);
+  sttReqId_++;
+  if (sttReqId_ == 0)
+    sttReqId_ = 1;
+  sttPcm_ = pcm;
+  sttSamples_ = samples;
+  sttSampleRate_ = sampleRate;
+  sttTimeout_ = timeoutMs;
+  sttDone_ = false;
+  sttBusy_ = true;
+  xSemaphoreGive(sttMutex_);
+  xTaskNotifyGive(sttTask_);
+}
+
+bool AiTalkController::tryConsumeSttResult_() {
+  if (!sttDone_ || !sttMutex_)
+    return false;
+
+  azure_stt::SttResult res;
+  xSemaphoreTake(sttMutex_, portMAX_DELAY);
+  if (!sttDone_) {
+    xSemaphoreGive(sttMutex_);
+    return false;
+  }
+  res = sttResult_;
+  sttDone_ = false;
+  xSemaphoreGive(sttMutex_);
+
+  const uint32_t sttMs = millis() - thinkStartMs_;
+  lastSttOk_ = res.ok_;
+  lastSttStatus_ = res.status_;
+  if (res.ok_) {
+    lastUserText_ = mcUtf8ClampBytes(res.text_, MC_AI_MAX_INPUT_CHARS);
+    {
+      String head = mcLogHead(lastUserText_, MC_AI_LOG_HEAD_BYTES_STT_LOG);
+      if (lastUserText_.length() > head.length())
+        head += "...";
+      MC_LOGD("STT", "text_head=\"%s\"", head.c_str());
+    }
+  } else {
+    lastUserText_ =
+        res.err_.length() ? res.err_ : String(MC_AI_ERR_TEMP_FAIL_TRY_AGAIN);
+    errorFlag_ = true;
+  }
+  MC_EVT("STT", "done ok=%d http=%d took=%lums text_len=%u", lastSttOk_ ? 1 : 0,
+         lastSttStatus_, (unsigned long)sttMs,
+         (unsigned)lastUserText_.length());
+  MC_LOGD("STT", "done ok=%d http=%d took=%lums text_len=%u",
+          lastSttOk_ ? 1 : 0, lastSttStatus_, (unsigned long)sttMs,
+          (unsigned)lastUserText_.length());
+  return true;
+}
+
 void AiTalkController::startLlmRequest_(const String &userText,
-                                       uint32_t timeoutMs) {
+                                        uint32_t timeoutMs) {
   if (!llmTask_ || !llmMutex_) {
     lastLlmOk_ = false;
     lastLlmErr_ = "llm_task_not_ready";
@@ -127,8 +227,8 @@ bool AiTalkController::tryConsumeLlmResult_() {
     bubbleText_ = replyText_;
   }
   replyReady_ = true;
-  MC_EVT("LLM", "done ok=%d http=%d took=%lums outLen=%u",
-         lastLlmOk_ ? 1 : 0, lastLlmHttp_, (unsigned long)lastLlmTookMs_,
+  MC_EVT("LLM", "done ok=%d http=%d took=%lums outLen=%u", lastLlmOk_ ? 1 : 0,
+         lastLlmHttp_, (unsigned long)lastLlmTookMs_,
          (unsigned)replyText_.length());
   MC_LOGD("LLM", "http=%d ok=%d took=%lums outLen=%u", lastLlmHttp_,
           lastLlmOk_ ? 1 : 0, (unsigned long)lastLlmTookMs_,
@@ -150,6 +250,17 @@ void AiTalkController::begin(OrchestratorApi *orch) {
         (UBaseType_t)MC_AI_LLM_TASK_PRIO, &llmTask_,
         (BaseType_t)MC_AI_LLM_TASK_CORE);
     MC_LOGI("LLM", "task create ok=%d", ok == pdPASS ? 1 : 0);
+  }
+  // STT async task (same pattern as LLM)
+  if (!sttMutex_) {
+    sttMutex_ = xSemaphoreCreateMutex();
+  }
+  if (!sttTask_) {
+    const BaseType_t ok = xTaskCreatePinnedToCore(
+        sttTaskEntry_, "sttTask", (uint32_t)MC_AI_LLM_TASK_STACK, this,
+        (UBaseType_t)MC_AI_LLM_TASK_PRIO, &sttTask_,
+        (BaseType_t)MC_AI_LLM_TASK_CORE);
+    MC_LOGI("STT", "task create ok=%d", ok == pdPASS ? 1 : 0);
   }
   enterIdle_(millis(), "begin");
   abortTtsId_ = 0;
@@ -214,11 +325,12 @@ void AiTalkController::onSpeakDone(uint32_t rid, uint32_t nowMs) {
     enterPostSpeakBlank_(nowMs);
   }
 }
-void AiTalkController::forceStop(uint32_t nowMs, const char* reason) {
-  const char* stopReason = (reason && reason[0]) ? reason : "force_stop";
+void AiTalkController::forceStop(uint32_t nowMs, const char *reason) {
+  const char *stopReason = (reason && reason[0]) ? reason : "force_stop";
   if (awaitingOrchSpeak_ && orch_ && activeRid_ != 0) {
     uint32_t canceledId = 0;
-    orch_->cancelSpeakByRid(activeRid_, stopReason, OrchestratorApi::CancelSource::Ai, &canceledId);
+    orch_->cancelSpeakByRid(activeRid_, stopReason,
+                            OrchestratorApi::CancelSource::Ai, &canceledId);
     if (canceledId != 0) {
       abortTtsId_ = canceledId;
       strncpy(abortTtsReason_, stopReason, sizeof(abortTtsReason_) - 1);
@@ -265,6 +377,47 @@ void AiTalkController::tick(uint32_t nowMs) {
   }
   case AiState::Thinking: {
     const uint32_t elapsed = nowMs - thinkStartMs_;
+    // Phase 1: wait for STT result, then start LLM
+    if (!sttStartedLlm_) {
+      if (tryConsumeSttResult_()) {
+        sttStartedLlm_ = true;
+        if (lastSttOk_) {
+          const uint32_t elapsedNow = millis() - overallStartMs_;
+          uint32_t llmTimeout = 0;
+          if (elapsedNow + (uint32_t)MC_AI_OVERALL_MARGIN_MS <
+              (uint32_t)MC_AI_OVERALL_DEADLINE_MS) {
+            llmTimeout = (uint32_t)MC_AI_OVERALL_DEADLINE_MS - elapsedNow -
+                         (uint32_t)MC_AI_OVERALL_MARGIN_MS;
+            if (llmTimeout > (uint32_t)MC_AI_LLM_TIMEOUT_MS)
+              llmTimeout = (uint32_t)MC_AI_LLM_TIMEOUT_MS;
+          }
+          if (llmTimeout < 200) {
+            lastLlmOk_ = false;
+            lastLlmErr_ = "LLM timeout";
+            errorFlag_ = true;
+            replyText_ = String(MC_AI_TEXT_FALLBACK);
+            bubbleText_ = replyText_;
+            MC_LOGW("LLM", "skipped (budget) elapsed=%lums",
+                    (unsigned long)elapsedNow);
+            MC_EVT("LLM", "skip reason=budget elapsed=%lums",
+                   (unsigned long)elapsedNow);
+            replyReady_ = true;
+          } else {
+            MC_EVT("LLM", "start timeout=%lums", (unsigned long)llmTimeout);
+            startLlmRequest_(lastUserText_, llmTimeout);
+          }
+        } else {
+          // STT NG
+          replyText_ = String(MC_AI_TEXT_FALLBACK);
+          bubbleText_ = replyText_;
+          replyReady_ = true;
+        }
+      } else {
+        updateOverlay_(nowMs);
+      }
+      return;
+    }
+    // Phase 2: wait for LLM result
     if (!replyReady_) {
       tryConsumeLlmResult_();
     }
@@ -382,17 +535,16 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
   overlay_.hint_ = MC_AI_THINKING_HINT_TEXT;
   overlay_.line1_ = MC_AI_TEXT_THINKING;
   overlay_.line2_ = "";
-  // ---- STT ----
+  // ---- reset state for this round ----
   overallStartMs_ = millis();
-  const uint32_t overallT0 = overallStartMs_;
   errorFlag_ = false;
-  // ---- LLM ----
   replyReady_ = false;
   lastLlmOk_ = false;
   lastLlmHttp_ = 0;
   lastLlmTookMs_ = 0;
   lastLlmErr_ = "";
   lastLlmTextHead_ = "";
+  sttStartedLlm_ = false;
   if (!lastRecOk_ || recorder_.samples() == 0) {
     lastSttOk_ = false;
     lastSttStatus_ = 0;
@@ -402,9 +554,15 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
            (unsigned)recorder_.samples());
     MC_LOGW("STT", "skip (rec not ok) samples=%u",
             (unsigned)recorder_.samples());
+    // Mark STT as "done" so tick() falls through to LLM/fallback immediately
+    sttStartedLlm_ = true;
+    replyText_ = String(MC_AI_TEXT_FALLBACK);
+    bubbleText_ = replyText_;
+    replyReady_ = true;
   } else {
+    // ---- STT async start ----
     uint32_t sttTimeout = (uint32_t)MC_AI_STT_TIMEOUT_MS;
-    const uint32_t elapsed0 = millis() - overallT0;
+    const uint32_t elapsed0 = millis() - overallStartMs_;
     if (elapsed0 + (uint32_t)MC_AI_OVERALL_MARGIN_MS <
         (uint32_t)MC_AI_OVERALL_DEADLINE_MS) {
       const uint32_t remain = (uint32_t)MC_AI_OVERALL_DEADLINE_MS - elapsed0 -
@@ -412,64 +570,11 @@ void AiTalkController::enterThinking_(uint32_t nowMs) {
       if (remain < sttTimeout)
         sttTimeout = remain;
     }
-    MC_EVT("STT", "start samples=%u sr=%d timeout=%lums",
+    MC_EVT("STT", "start(async) samples=%u sr=%d timeout=%lums",
            (unsigned)recorder_.samples(), (int)MC_AI_REC_SAMPLE_RATE,
            (unsigned long)sttTimeout);
-    const uint32_t sttT0 = millis();
-    auto stt =
-        azure_stt::transcribePcm16Mono(recorder_.data(), recorder_.samples(),
-                                       MC_AI_REC_SAMPLE_RATE, sttTimeout);
-    const uint32_t sttMs = millis() - sttT0;
-    lastSttOk_ = stt.ok_;
-    lastSttStatus_ = stt.status_;
-    if (stt.ok_) {
-      lastUserText_ = mcUtf8ClampBytes(stt.text_, MC_AI_MAX_INPUT_CHARS);
-      {
-        String head = mcLogHead(lastUserText_, MC_AI_LOG_HEAD_BYTES_STT_LOG);
-        if (lastUserText_.length() > head.length())
-          head += "...";
-        MC_LOGD("STT", "text_head=\"%s\"", head.c_str());
-      }
-    } else {
-      lastUserText_ =
-          stt.err_.length() ? stt.err_ : String(MC_AI_ERR_TEMP_FAIL_TRY_AGAIN);
-      errorFlag_ = true;
-    }
-    MC_EVT("STT", "done ok=%d http=%d took=%lums text_len=%u",
-           lastSttOk_ ? 1 : 0, lastSttStatus_, (unsigned long)sttMs,
-           (unsigned)lastUserText_.length());
-    MC_LOGD("STT", "done ok=%d http=%d took=%lums text_len=%u",
-            lastSttOk_ ? 1 : 0, lastSttStatus_, (unsigned long)sttMs,
-            (unsigned)lastUserText_.length());
-  }
-  if (lastSttOk_) {
-    const uint32_t elapsed = millis() - overallT0;
-    uint32_t llmTimeout = 0;
-    if (elapsed + (uint32_t)MC_AI_OVERALL_MARGIN_MS <
-        (uint32_t)MC_AI_OVERALL_DEADLINE_MS) {
-      llmTimeout = (uint32_t)MC_AI_OVERALL_DEADLINE_MS - elapsed -
-                   (uint32_t)MC_AI_OVERALL_MARGIN_MS;
-      if (llmTimeout > (uint32_t)MC_AI_LLM_TIMEOUT_MS)
-        llmTimeout = (uint32_t)MC_AI_LLM_TIMEOUT_MS;
-    }
-    if (llmTimeout < 200) {
-      lastLlmOk_ = false;
-      lastLlmErr_ = "LLM timeout";
-      errorFlag_ = true;
-      replyText_ = String(MC_AI_TEXT_FALLBACK);
-      bubbleText_ = replyText_;
-      MC_LOGW("LLM", "skipped (budget) elapsed=%lums", (unsigned long)elapsed);
-      MC_EVT("LLM", "skip reason=budget elapsed=%lums", (unsigned long)elapsed);
-      replyReady_ = true;
-    } else {
-      MC_EVT("LLM", "start timeout=%lums", (unsigned long)llmTimeout);
-      startLlmRequest_(lastUserText_, llmTimeout);
-    }
-  } else {
-    // STT NG
-    replyText_ = String(MC_AI_TEXT_FALLBACK);
-    bubbleText_ = replyText_;
-    replyReady_ = true;
+    startSttRequest_(recorder_.data(), recorder_.samples(),
+                     MC_AI_REC_SAMPLE_RATE, sttTimeout);
   }
 }
 void AiTalkController::enterListening_(uint32_t nowMs) {

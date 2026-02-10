@@ -1,0 +1,168 @@
+Processing m5stack-core2 (platform: espressif32; board: m5stack-core2; framework: arduino)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/m5stack-core2.html
+PLATFORM: Espressif 32 (6.12.0) > M5Stack Core2
+HARDWARE: ESP32 240MHz, 4.31MB RAM, 16MB Flash
+DEBUG: Current (cmsis-dap) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b 
+ - tool-esptoolpy @ 2.40900.250804 (4.9.0) 
+ - toolchain-xtensa-esp32 @ 8.4.0+2021r2-patch5
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 37 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- M5Unified @ 0.1.16
+|-- M5Stack-Avatar @ 0.9.2
+|-- ArduinoJson @ 7.4.2
+|-- HTTPClient @ 2.0.0
+|-- WiFi @ 2.0.0
+|-- WiFiClientSecure @ 2.0.0
+|-- LittleFS @ 2.0.0
+|-- FS @ 2.0.0
+|-- M5GFX @ 0.2.18
+Building in debug mode
+Compiling .pio\build\m5stack-core2\src\ai\mining_task.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\misc\DividedFrameBuffer.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\misc\SpriteBuffer.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\misc\common_function.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\misc\pixelcopy.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_AMOLED.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_Device.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_EPDiy.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_FrameBufferBase.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_GDEW0154D67.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_GDEW0154M09.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_HasBuffer.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_IT8951.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_LCD.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_M5HDMI.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_M5UnitGLASS.cpp.o
+src/ai/mining_task.cpp:43:22: error: 'constexpr' needed for in-class initialization of static data member 'const char* DucoThreadStats::kDucoPoolUrl' of non-integral type [-fpermissive]
+ static const char*   kDucoPoolUrl      = "https://server.duinocoin.com/getPool";
+                      ^~~~~~~~~~~~
+src/ai/mining_task.cpp:44:8: error: 'DucoThreadStats::DucoThreadStats' has the same name as the class in which it is declared
+ struct DucoThreadStats {
+        ^~~~~~~~~~~~~~~
+src/ai/mining_task.cpp:60:26: error: 'constexpr' needed for in-class initialization of static data member 'QueueDefinition* DucoThreadStats::g_shaMutex' of non-integral type [-fpermissive]
+ static SemaphoreHandle_t g_shaMutex = nullptr;
+                          ^~~~~~~~~~
+src/ai/mining_task.cpp:61:21: error: 'constexpr' needed for in-class initialization of static data member 'portMUX_TYPE DucoThreadStats::g_statsMux' of non-integral type [-fpermissive]
+ static portMUX_TYPE g_statsMux = portMUX_INITIALIZER_UNLOCKED;
+                     ^~~~~~~~~~
+src/ai/mining_task.cpp:62:17: error: 'constexpr' needed for in-class initialization of static data member 'char DucoThreadStats::g_nodeName [48]' of non-integral type [-fpermissive]
+ static char     g_nodeName[48] = {0};
+                 ^~~~~~~~~~
+src/ai/mining_task.cpp:63:17: error: 'constexpr' needed for in-class initialization of static data member 'char DucoThreadStats::g_host [64]' of non-integral type [-fpermissive]
+ static char     g_host[64] = {0};
+                 ^~~~~~
+src/ai/mining_task.cpp:64:17: error: ISO C++ forbids in-class initialization of non-const static member 'DucoThreadStats::g_port'
+ static uint16_t g_port = 0;
+                 ^~~~~~
+src/ai/mining_task.cpp:65:17: error: ISO C++ forbids in-class initialization of non-const static member 'DucoThreadStats::g_accAll'
+ static uint32_t g_accAll = 0, g_rejAll = 0;
+                 ^~~~~~~~
+src/ai/mining_task.cpp:65:31: error: ISO C++ forbids in-class initialization of non-const static member 'DucoThreadStats::g_rejAll'
+ static uint32_t g_accAll = 0, g_rejAll = 0;
+                               ^~~~~~~~
+src/ai/mining_task.cpp:66:17: error: 'constexpr' needed for in-class initialization of static data member 'char DucoThreadStats::g_status [64]' of non-integral type [-fpermissive]
+ static char     g_status[64] = "boot";
+                 ^~~~~~~~
+src/ai/mining_task.cpp:67:17: error: ISO C++ forbids in-class initialization of non-const static member 'DucoThreadStats::g_anyConnected'
+ static bool     g_anyConnected = false;
+                 ^~~~~~~~~~~~~~
+src/ai/mining_task.cpp:68:17: error: 'constexpr' needed for in-class initialization of static data member 'char DucoThreadStats::g_chipId [16]' of non-integral type [-fpermissive]
+ static char     g_chipId[16] = {0};
+                 ^~~~~~~~
+src/ai/mining_task.cpp:69:17: error: ISO C++ forbids in-class initialization of non-const static member 'DucoThreadStats::g_walletId'
+ static int      g_walletId = 0;
+                 ^~~~~~~~~~
+src/ai/mining_task.cpp:70:17: error: 'constexpr' needed for in-class initialization of static data member 'char DucoThreadStats::g_poolDiagText [128]' of non-integral type [-fpermissive]
+ static char     g_poolDiagText[128] = "";
+                 ^~~~~~~~~~~~~~
+src/ai/mining_task.cpp:72:26: error: ISO C++ forbids in-class initialization of non-const static member 'DucoThreadStats::g_miningActiveThreads'
+ static volatile uint8_t  g_miningActiveThreads = kDucoMinerThreads; // 0..kDucoMinerThreads
+                          ^~~~~~~~~~~~~~~~~~~~~
+src/ai/mining_task.cpp:73:26: error: ISO C++ forbids in-class initialization of non-const static member 'DucoThreadStats::g_yieldEvery'
+ static volatile uint16_t g_yieldEvery = 1024;   // power-of-two recommended
+                          ^~~~~~~~~~~~
+src/ai/mining_task.cpp:74:26: error: ISO C++ forbids in-class initialization of non-const static member 'DucoThreadStats::g_yieldMs'
+ static volatile uint8_t  g_yieldMs    = 1;      // delay in ms at yield points
+                          ^~~~~~~~~
+src/ai/mining_task.cpp:609:1: error: expected '}' at end of input
+ }
+ ^
+src/ai/mining_task.cpp:33:24: note: to match this '{'
+ struct DucoThreadStats {
+                        ^
+src/ai/mining_task.cpp: In static member function 'static uint32_t DucoThreadStats::ducoSolveDucoS1_(const String&, const unsigned char*, uint32_t, uint32_t&, DucoThreadStats*)':
+src/ai/mining_task.cpp:200:16: error: 'struct DucoThreadStats' has no member named 'workNonce_'; did you mean 'workValid_'?
+         stats->workNonce_     = nonce;
+                ^~~~~~~~~~
+                workValid_
+src/ai/mining_task.cpp:201:16: error: 'struct DucoThreadStats' has no member named 'workMaxNonce_'
+         stats->workMaxNonce_ = maxNonce;
+                ^~~~~~~~~~~~~
+src/ai/mining_task.cpp:202:23: error: 'struct DucoThreadStats' has no member named 'workOut_'; did you mean 'workValid_'?
+         memcpy(stats->workOut_, out, 20);
+                       ^~~~~~~~
+                       workValid_
+src/ai/mining_task.cpp:214:16: error: 'struct DucoThreadStats' has no member named 'workNonce_'; did you mean 'workValid_'?
+         stats->workNonce_     = nonce;
+                ^~~~~~~~~~
+                workValid_
+src/ai/mining_task.cpp:215:16: error: 'struct DucoThreadStats' has no member named 'workMaxNonce_'
+         stats->workMaxNonce_ = maxNonce;
+                ^~~~~~~~~~~~~
+src/ai/mining_task.cpp:216:23: error: 'struct DucoThreadStats' has no member named 'workOut_'; did you mean 'workValid_'?
+         memcpy(stats->workOut_, out, 20);
+                       ^~~~~~~~
+                       workValid_
+src/ai/mining_task.cpp: In static member function 'static void DucoThreadStats::ducoTask_(void*)':
+src/ai/mining_task.cpp:353:10: error: 'struct DucoThreadStats' has no member named 'workDiff_'; did you mean 'workValid_'?
+       me.workDiff_ = (uint32_t)difficulty;
+          ^~~~~~~~~
+          workValid_
+src/ai/mining_task.cpp:355:18: error: 'struct DucoThreadStats' has no member named 'workSeed_'; did you mean 'workValid_'?
+       strncpy(me.workSeed_, prev.c_str(), 40);
+                  ^~~~~~~~~
+                  workValid_
+src/ai/mining_task.cpp:356:10: error: 'struct DucoThreadStats' has no member named 'workSeed_'; did you mean 'workValid_'?
+       me.workSeed_[40] = '\0';
+          ^~~~~~~~~
+          workValid_
+src/ai/mining_task.cpp: In member function 'void DucoThreadStats::updateMiningSummary(MiningSummary&)':
+src/ai/mining_task.cpp:565:25: error: 'struct DucoThreadStats' has no member named 'workNonce_'; did you mean 'workValid_'?
+     nonce   = g_thr[wi].workNonce_;
+                         ^~~~~~~~~~
+                         workValid_
+src/ai/mining_task.cpp:566:25: error: 'struct DucoThreadStats' has no member named 'workMaxNonce_'
+     maxNonce= g_thr[wi].workMaxNonce_;
+                         ^~~~~~~~~~~~~
+src/ai/mining_task.cpp:567:25: error: 'struct DucoThreadStats' has no member named 'workDiff_'; did you mean 'workValid_'?
+     diffv   = g_thr[wi].workDiff_;
+                         ^~~~~~~~~
+                         workValid_
+src/ai/mining_task.cpp:568:29: error: 'struct DucoThreadStats' has no member named 'workOut_'; did you mean 'workValid_'?
+     memcpy(out20, g_thr[wi].workOut_, 20);
+                             ^~~~~~~~
+                             workValid_
+src/ai/mining_task.cpp:569:31: error: 'struct DucoThreadStats' has no member named 'workSeed_'; did you mean 'workValid_'?
+     strncpy(seed40, g_thr[wi].workSeed_, 40);
+                               ^~~~~~~~~
+                               workValid_
+src/ai/mining_task.cpp: At global scope:
+src/ai/mining_task.cpp:609:1: error: expected unqualified-id at end of input
+ }
+ ^
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_M5UnitLCD.cpp.o
+Compiling .pio\build\m5stack-core2\libe6c\M5GFX\lgfx\v1\panel\Panel_SSD1306.cpp.o
+*** [.pio\build\m5stack-core2\src\ai\mining_task.cpp.o] Error 1
+========================== [FAILED] Took 6.17 seconds ==========================
+
+Environment    Status    Duration
+-------------  --------  ------------
+m5stack-core2  FAILED    00:00:06.169
+==================== 1 failed, 0 succeeded in 00:00:06.169 ====================
