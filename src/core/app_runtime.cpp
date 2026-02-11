@@ -31,7 +31,7 @@
 static AppRuntimeContext g_ctx;
 
 static unsigned long g_lastUiMs = 0;
-static AppMode g_mode = Stackchan;
+static AppMode g_mode = Dash; // Changed: Start in Dashboard (Splash) mode
 static bool g_prevAiBusyForBehavior = false;
 static uint32_t g_aiBusyStartMs = 0;
 static uint32_t g_aiBusyDebugLastMs = 0;
@@ -608,6 +608,17 @@ void appRuntimeTick(uint32_t now) {
       }
     }
     String ticker = buildTicker(summary);
+    // Boot transition: If in Dashboard mode and splash finished, switch to
+    // Stackchan
+    if (g_mode == Dash && !ui.isSplashActive()) {
+      static bool s_bootSwitchDone = false;
+      if (!s_bootSwitchDone) {
+        s_bootSwitchDone = true;
+        g_mode = Stackchan;
+        ui.onEnterStackchanMode();
+        MC_LOGI("MAIN", "Boot splash done -> auto-switch to Stackchan");
+      }
+    }
     if (g_mode == Stackchan) {
       ui.drawStackchanScreen(data);
     } else {

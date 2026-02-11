@@ -2,7 +2,8 @@
 // Module implementation.
 // ===== Mining-chan Core2 ? main entry (UI + orchestrator) =====
 // Board   : M5Stack Core2
-// Libs    : M5Unified, ArduinoJson, WiFi, WiFiClientSecure, HTTPClient, m5stack-avatar
+// Libs    : M5Unified, ArduinoJson, WiFi, WiFiClientSecure, HTTPClient,
+// m5stack-avatar
 #include <time.h>
 
 #include <Arduino.h>
@@ -22,8 +23,8 @@
 #include "ai/mining_task.h"
 #include "behavior/stackchan_behavior.h"
 #include "config/config.h"
-#include "core/public/app_runtime.h"
 #include "core/orchestrator.h"
+#include "core/public/app_runtime.h"
 #include "core/public/serial_setup.h"
 #include "core/public/tts_coordinator.h"
 #include "ui/ui_mining_core2.h"
@@ -34,14 +35,15 @@ static AzureTts g_tts;
 static StackchanBehavior g_behavior;
 static Orchestrator g_orch;
 static AiTalkController g_ai;
-static const uint8_t  kDisplayActiveBrightness = 128;
+static const uint8_t kDisplayActiveBrightness = 128;
 void setup() {
   Serial.begin(115200);
   mcConfigBegin();
   // Step5: suppress "ssl_client UNKNOWN ERROR CODE" wallpaper logs.
   // That line is emitted as ESP_LOG_ERROR even when STT succeeds (http=200),
   // so keeping ERROR will not silence it.
-  // Normal ops: mute it completely. Enable EVT_DEBUG_ENABLED when you want to see it.
+  // Normal ops: mute it completely. Enable EVT_DEBUG_ENABLED when you want to
+  // see it.
 #if EVT_DEBUG_ENABLED
   esp_log_level_set("ssl_client", ESP_LOG_ERROR);
 #else
@@ -51,9 +53,10 @@ void setup() {
   mc_logf("[MAIN] setup() start");
   const uint32_t reqMhz = mcCfgCpuMhz();
   setCpuFrequencyMhz((int)reqMhz);
-  mc_logf("[MAIN] cpu_mhz=%d (req=%lu)", getCpuFrequencyMhz(), (unsigned long)reqMhz);
+  mc_logf("[MAIN] cpu_mhz=%d (req=%lu)", getCpuFrequencyMhz(),
+          (unsigned long)reqMhz);
   auto cfgM5 = M5.config();
-  cfgM5.output_power  = true;
+  cfgM5.output_power = true;
   cfgM5.clear_display = true;
   cfgM5.internal_imu = false;
   cfgM5.internal_mic = true;
@@ -64,7 +67,7 @@ void setup() {
   mc_logf("[MAIN] M5.begin() done");
   M5.Speaker.setVolume(mcCfgSpkVolume());
   mc_logf("[MAIN] spk_volume=%u", (unsigned)mcCfgSpkVolume());
-  const auto& cfg = appConfig();
+  const auto &cfg = appConfig();
   g_tts.begin();
   AppRuntimeContext runtimeCtx;
   runtimeCtx.ai_ = &g_ai;
@@ -91,12 +94,10 @@ void setup() {
   M5.Display.fillScreen(BLACK);
   M5.Display.setTextColor(WHITE, BLACK);
   UIMining::instance().begin(cfg.appName_, cfg.appVersion_);
-  UIMining::instance().onEnterStackchanMode();
+  // UIMining::instance().onEnterStackchanMode(); // Changed: Boot to
+  // Splash/Dash first
   UIMining::instance().setAttentionDefaultText(mcCfgAttentionText());
-  UIMining::instance().setStackchanSpeechTiming(
-    2200, 1200,
-    900,  1400
-  );
+  UIMining::instance().setStackchanSpeechTiming(2200, 1200, 900, 1400);
   mc_logf("%s %s booting...", cfg.appName_, cfg.appVersion_);
   startMiner();
 }
