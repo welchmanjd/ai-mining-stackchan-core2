@@ -13,6 +13,7 @@
 #include <WiFi.h>
 #include <esp32-hal-cpu.h>
 
+#include "ai/openai_llm.h"
 #include "ai/azure_tts.h"
 #include "config/config.h"
 #include "config/mc_config_store.h"
@@ -24,11 +25,12 @@
 static SerialSetupContext g_ctx;
 
 // ===== Web setup serial commands (simple line protocol) =====
-static char   g_setupLine[512];
+static char g_setupLine[512];
 static size_t g_setupLineLen = 0;
 
-static void handleSetupLine_(const char* line) {
-  if (!line || !*line) return;
+static void handleSetupLine_(const char *line) {
+  if (!line || !*line)
+    return;
   String cmd(line);
   cmd.trim();
   // Simple serial command handler for web setup tooling.
@@ -41,14 +43,16 @@ static void handleSetupLine_(const char* line) {
     return;
   }
   if (cmd.equalsIgnoreCase("HELP")) {
-    Serial.println("@OK CMDS=HELLO,PING,GET INFO,GET CFG,SET,SAVE,REBOOT,AZTEST,HELP");
+    Serial.println("@OK CMDS=HELLO,PING,GET INFO,GET "
+                   "CFG,SET,SAVE,REBOOT,AZTEST,OAITEST,HELP");
     return;
   }
   if (cmd.equalsIgnoreCase("GET INFO")) {
-    const auto& cfg = appConfig();
+    const auto &cfg = appConfig();
     char buf[320];
     snprintf(buf, sizeof(buf),
-             "@INFO {\"app\":\"%s\",\"ver\":\"%s\",\"build_id\":\"%s\",\"baud\":%d}",
+             "@INFO "
+             "{\"app\":\"%s\",\"ver\":\"%s\",\"build_id\":\"%s\",\"baud\":%d}",
              cfg.appName_, cfg.appVersion_, cfg.appBuildId_, 115200);
     Serial.println(buf);
     return;
@@ -57,6 +61,25 @@ static void handleSetupLine_(const char* line) {
     String j = mcConfigGetMaskedJson();
     Serial.print("@CFG ");
     Serial.println(j);
+    return;
+  }
+  if (cmd.equalsIgnoreCase("OAITEST")) {
+    const RuntimeFeatures features = getRuntimeFeatures();
+    if (!features.aiEnabled_) {
+      Serial.println("@OAITEST NG ai_disabled");
+      return;
+    }
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("@OAITEST NG wifi_disconnected");
+      return;
+    }
+    const auto probe = openai_llm::probeConnection(8000);
+    if (probe.ok_) {
+      Serial.println("@OAITEST OK");
+    } else {
+      Serial.print("@OAITEST NG ");
+      Serial.println(probe.err_.length() ? probe.err_ : "probe_failed");
+    }
     return;
   }
   if (cmd.equalsIgnoreCase("AZTEST")) {
@@ -73,11 +96,14 @@ static void handleSetupLine_(const char* line) {
       Serial.println("@AZTEST NG tts_unavailable");
       return;
     }
-    // Reload runtime Azure config so tests after SET/SAVE work without reboot.
+    // Reload runtime Azure config so tests after SET/SAVE work without
+    // reboot.
     g_ctx.tts_->begin(mcCfgSpkVolume());
     bool ok = g_ctx.tts_->testCredentials();
-    if (ok) Serial.println("@AZTEST OK");
-    else    Serial.println("@AZTEST NG fetch_failed");
+    if (ok)
+      Serial.println("@AZTEST OK");
+    else
+      Serial.println("@AZTEST NG fetch_failed");
     return;
   }
   if (cmd.startsWith("SET ")) {
@@ -90,7 +116,8 @@ static void handleSetupLine_(const char* line) {
     }
     String key = rest.substring(0, sp);
     String val = rest.substring(sp + 1);
-    key.trim(); val.trim();
+    key.trim();
+    val.trim();
     String err;
     if (mcConfigSetKV(key, val, err)) {
       // ---- apply runtime effects immediately (optional but nice) ----
@@ -101,7 +128,7 @@ static void handleSetupLine_(const char* line) {
             *g_ctx.displaySleepTimeoutMs_ = (uint32_t)sec * 1000UL;
           } else {
             *g_ctx.displaySleepTimeoutMs_ =
-              (uint32_t)MC_DISPLAY_SLEEP_SECONDS * 1000UL;
+                (uint32_t)MC_DISPLAY_SLEEP_SECONDS * 1000UL;
           }
         }
         MC_LOGI("MAIN", "display_sleep_s set: %ld sec", sec);
@@ -112,8 +139,10 @@ static void handleSetupLine_(const char* line) {
       }
       if (key.equalsIgnoreCase("spk_volume")) {
         int v = val.toInt();
-        if (v < 0) v = 0;
-        if (v > 255) v = 255;
+        if (v < 0)
+          v = 0;
+        if (v > 255)
+          v = 255;
         M5.Speaker.setVolume((uint8_t)v);
         MC_LOGI("MAIN", "spk_volume set: %d", v);
       }
@@ -134,8 +163,12 @@ static void handleSetupLine_(const char* line) {
   }
   if (cmd.equalsIgnoreCase("SAVE")) {
     String err;
-    if (mcConfigSave(err)) Serial.println("@OK SAVE");
-    else { Serial.print("@ERR SAVE "); Serial.println(err); }
+    if (mcConfigSave(err))
+      Serial.println("@OK SAVE");
+    else {
+      Serial.print("@ERR SAVE ");
+      Serial.println(err);
+    }
     return;
   }
   if (cmd.equalsIgnoreCase("REBOOT")) {
@@ -149,15 +182,14 @@ static void handleSetupLine_(const char* line) {
   Serial.println(line);
 }
 
-void serialSetupInit(const SerialSetupContext& ctx) {
-  g_ctx = ctx;
-}
+void serialSetupInit(const SerialSetupContext &ctx) { g_ctx = ctx; }
 
 void pollSetupSerial() {
   // Line-based parser with basic length guarding.
   while (Serial.available() > 0) {
     const char c = (char)Serial.read();
-    if (c == '\r') continue;
+    if (c == '\r')
+      continue;
     if (c == '\n') {
       g_setupLine[g_setupLineLen] = '\0';
       appRuntimeNotifySerialActivity();

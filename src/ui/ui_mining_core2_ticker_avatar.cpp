@@ -70,8 +70,10 @@ void UIMining::updateAvatarMood(const PanelData& p) {
     int8_t target = 0;
     if (WiFi.status() != WL_CONNECTED) {
       target = -2;
-    } else if (!p.poolAlive_) {
+    } else if (p.miningEnabled_ && !p.poolAlive_) {
       target = -1;
+    } else if (!p.miningEnabled_) {
+      target = 0;
     } else if (isMiningPaused()) {
       target = moodLevel_;
     } else {

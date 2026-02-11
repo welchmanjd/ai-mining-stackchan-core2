@@ -57,8 +57,9 @@ public:
   };
   void setTouchSnapshot(const TouchSnapshot &s);
   void drawSplash(const String &wifiText, uint16_t wifiCol,
-                  const String &poolText, uint16_t poolCol,
-                  const String &wifiHint, const String &poolHint);
+                  const String &serviceLabel, const String &serviceText,
+                  uint16_t serviceCol, const String &wifiHint,
+                  const String &serviceHint);
   void drawSleepMessage();
   void drawStackchanScreen(const PanelData &p);
   void onEnterStackchanMode();
@@ -128,6 +129,7 @@ private:
   uint32_t splashStartMs_ = 0;
   uint32_t splashReadyMs_ = 0;
   String splashWifiText_;
+  String splashServiceLabel_;
   String splashPoolText_;
   String splashWifiHint_;
   String splashPoolHint_;

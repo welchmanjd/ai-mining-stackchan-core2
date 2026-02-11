@@ -23,6 +23,7 @@ Related docs:
 ### HELP
 - Request: `HELP`
 - Response: `@OK CMDS=HELLO,PING,GET INFO,GET CFG,SET,SAVE,REBOOT,AZTEST,HELP`
+  - Newer firmware may include: `...,OAITEST,...`
 
 ### GET INFO
 - Request: `GET INFO`
@@ -85,6 +86,15 @@ Dependency rule:
 Notes:
 - Requires Wi-Fi connection and Azure TTS credentials.
 - Reloads runtime Azure config before testing.
+
+### OAITEST
+- Request: `OAITEST`
+- Response: `@OAITEST OK`
+- Response (error): `@OAITEST NG <reason>`
+
+Notes:
+- Requires Wi-Fi connection and valid OpenAI runtime config.
+- Performs a lightweight OpenAI API probe from the device side.
 
 ## Error handling
 Unknown commands return:

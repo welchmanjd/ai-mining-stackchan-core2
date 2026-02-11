@@ -8,4 +8,6 @@
 #include "utils/mining_summary.h"
 String buildTicker(const MiningSummary &s);
 void buildPanelData(const MiningSummary &summary, UIMining &ui,
-                    UIMining::PanelData &data, NetworkStatus netStatus);
+                    UIMining::PanelData &data, NetworkStatus netStatus,
+                    bool aiEnabled, bool aiReady, const String &aiDiag,
+                    int bootStatus);

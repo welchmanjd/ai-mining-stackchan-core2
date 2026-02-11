@@ -52,12 +52,8 @@ void StackchanBehavior::update(const MiningPanelData& panel, uint32_t nowMs) {
     infoIndex_  = 0;
   }
   if (!panel.miningEnabled_) {
-    const uint32_t infoPeriodMs = 15000;
-    if (nextInfoMs_ == 0) nextInfoMs_ = nowMs;
-    if ((int32_t)(nowMs - nextInfoMs_) >= 0) {
-      triggerEvent(StackchanEventType::InfoMiningOff, nowMs);
-      nextInfoMs_ = nowMs + infoPeriodMs;
-    }
+    // AI mode: suppress periodic "mining off" chatter.
+    nextInfoMs_ = nowMs + 15000;
     lastPoolAlive_ = panel.poolAlive_;
     return;
   }

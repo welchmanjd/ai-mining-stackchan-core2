@@ -124,6 +124,74 @@ static String extractAnyText_(JsonVariant root) {
   return acc;
 }
 namespace openai_llm {
+OpenAiProbeResult probeConnection(uint32_t timeoutMs) {
+  OpenAiProbeResult r;
+  const uint32_t t0 = millis();
+  if (timeoutMs < 200)
+    timeoutMs = 200;
+
+  const char *apiKey = mcCfgOpenAiKey();
+  if (!apiKey || !*apiKey) {
+    r.err_ = "missing_openai_key";
+    r.tookMs_ = millis() - t0;
+    return r;
+  }
+
+  JsonDocument req;
+  const char *model = mcCfgOpenAiModel();
+  if (!model || !*model)
+    model = MC_OPENAI_MODEL;
+  req["model"] = model;
+  req["input"] = "ping";
+  req["max_output_tokens"] = 1;
+  req["text"]["format"]["type"] = "text";
+  String payload;
+  serializeJson(req, payload);
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setTimeout(timeoutMs);
+  HTTPClient http;
+  http.setTimeout(timeoutMs);
+  http.setConnectTimeout(timeoutMs);
+  if (!http.begin(client, MC_OPENAI_ENDPOINT)) {
+    r.err_ = "http_begin_failed";
+    r.tookMs_ = millis() - t0;
+    return r;
+  }
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Accept", "application/json");
+  http.addHeader("Authorization", String("Bearer ") + String(apiKey));
+
+  const int code = http.POST((uint8_t *)payload.c_str(), payload.length());
+  r.http_ = code;
+  String body;
+  if (code > 0) {
+    body = http.getString();
+  }
+  http.end();
+  r.tookMs_ = millis() - t0;
+
+  if (code <= 0) {
+    r.err_ = "http_post_failed";
+    return r;
+  }
+  if (code >= 200 && code < 300) {
+    r.ok_ = true;
+    return r;
+  }
+
+  JsonDocument doc;
+  if (!deserializeJson(doc, body) && doc["error"]["message"].is<const char*>()) {
+    r.err_ = String("http_") + String(code) + ":" +
+             mcLogHead(String((const char*)doc["error"]["message"]),
+                       MC_AI_LOG_HEAD_BYTES_LLM_HTTP_ERRMSG);
+  } else {
+    r.err_ = String("http_") + String(code);
+  }
+  return r;
+}
+
 LlmResult generateReply(const String& userText, uint32_t timeoutMs) {
   LlmResult r;
   const uint32_t t0 = millis();

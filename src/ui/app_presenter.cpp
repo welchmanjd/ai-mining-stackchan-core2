@@ -22,7 +22,9 @@ String buildTicker(const MiningSummary &s) {
   return t;
 }
 void buildPanelData(const MiningSummary &summary, UIMining &ui,
-                    UIMining::PanelData &data, NetworkStatus netStatus) {
+                    UIMining::PanelData &data, NetworkStatus netStatus,
+                    bool aiEnabled, bool aiReady, const String &aiDiag,
+                    int bootStatus) {
   const auto &cfg = appConfig();
   data.hrKh_ = summary.totalKh_;
   data.accepted_ = summary.accepted_;
@@ -58,4 +60,8 @@ void buildPanelData(const MiningSummary &summary, UIMining &ui,
     }
   }
   data.poolDiag_ = summary.poolDiag_;
+  data.aiEnabled_ = aiEnabled;
+  data.aiReady_ = aiReady;
+  data.aiDiag_ = aiDiag;
+  data.bootStatus_ = bootStatus;
 }

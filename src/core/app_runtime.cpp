@@ -17,6 +17,7 @@
 #include "ai/ai_talk_controller.h"
 #include "ai/azure_tts.h"
 #include "ai/mining_task.h"
+#include "ai/openai_llm.h"
 #include "behavior/stackchan_behavior.h"
 #include "config/config.h"
 #include "config/mc_config_store.h"
@@ -66,6 +67,13 @@ static BubbleSource g_bubbleOnlySource = BubbleSource::None;
 static bool g_lastPopEmptyBusy = false;
 static AppMode g_lastPopEmptyMode = Stackchan;
 static bool g_lastPopEmptyAttn = false;
+
+// ===== AI Boot Check State Machine =====
+enum class AiBootState { Init = 0, WifiWait, Checking, Ok, Fail };
+static AiBootState g_aiBootState = AiBootState::Init;
+static String g_aiBootDiag = "";
+static uint32_t g_aiBootNextCheckMs = 0;
+static int g_aiBootRetryCount = 0;
 
 static const char *aiStateName_(AiState s) {
   switch (s) {
@@ -218,6 +226,57 @@ static bool wifiConnect_() {
   }
 }
 
+static void checkOpenAiConnection_(uint32_t now) {
+  if (g_aiBootState == AiBootState::Ok)
+    return;
+
+  const RuntimeFeatures feats = getRuntimeFeatures();
+  if (!feats.wifiEnabled_ || WiFi.status() != WL_CONNECTED) {
+    g_aiBootState = AiBootState::WifiWait;
+    g_aiBootDiag = "Waiting for WiFi...";
+    return;
+  }
+
+  if (!feats.aiEnabled_) {
+    g_aiBootState = AiBootState::Fail;
+    g_aiBootDiag = "AI is disabled in settings.";
+    return;
+  }
+
+  switch (g_aiBootState) {
+  case AiBootState::Init:
+  case AiBootState::WifiWait:
+  case AiBootState::Fail:
+    if (now >= g_aiBootNextCheckMs) {
+      g_aiBootState = AiBootState::Checking;
+      g_aiBootDiag = "Checking OpenAI connection...";
+    }
+    break;
+
+  case AiBootState::Checking: {
+    const auto probe = openai_llm::probeConnection(5000);
+    if (probe.ok_) {
+      g_aiBootState = AiBootState::Ok;
+      g_aiBootDiag = "OpenAI connection is OK.";
+      g_aiBootNextCheckMs = 0;
+      g_aiBootRetryCount = 0;
+      MC_LOGI("BOOT", "OpenAI probe OK");
+    } else {
+      g_aiBootState = AiBootState::Fail;
+      g_aiBootDiag = probe.err_.length() ? probe.err_ : String("OpenAI probe failed");
+      static const uint32_t kBackoffMs[] = {5000, 10000, 30000};
+      const int idx = (g_aiBootRetryCount < 2) ? g_aiBootRetryCount : 2;
+      g_aiBootNextCheckMs = now + kBackoffMs[idx];
+      g_aiBootRetryCount++;
+      MC_LOGW("BOOT", "OpenAI probe NG: %s", g_aiBootDiag.c_str());
+    }
+    break;
+  }
+  default:
+    break;
+  }
+}
+
 static void setupTimeNtp_() {
   setenv("TZ", "JST-9", 1);
   tzset();
@@ -233,6 +292,10 @@ void appRuntimeInit(const AppRuntimeContext &ctx) {
   g_lastUiMs = 0;
   g_lastInputMs = millis();
   g_displaySleeping = false;
+  g_aiBootState = AiBootState::Init;
+  g_aiBootDiag = "";
+  g_aiBootNextCheckMs = 0;
+  g_aiBootRetryCount = 0;
 }
 
 void appRuntimeTick(uint32_t now) {
@@ -240,6 +303,14 @@ void appRuntimeTick(uint32_t now) {
     return;
 
   const RuntimeFeatures runtimeFeatures = getRuntimeFeatures();
+  if (!runtimeFeatures.miningEnabled_) {
+    checkOpenAiConnection_(now);
+  } else if (g_aiBootState != AiBootState::Init || g_aiBootDiag.length()) {
+    g_aiBootState = AiBootState::Init;
+    g_aiBootDiag = "";
+    g_aiBootNextCheckMs = 0;
+    g_aiBootRetryCount = 0;
+  }
   if (runtimeFeatures.aiEnabled_) {
     g_ctx.ai_->tick(now);
     {
@@ -492,7 +563,9 @@ void appRuntimeTick(uint32_t now) {
       ns = NetworkStatus::Unknown;
       break;
     }
-    buildPanelData(summary, ui, data, ns);
+    buildPanelData(summary, ui, data, ns, runtimeFeatures.aiEnabled_,
+                   g_aiBootState == AiBootState::Ok, g_aiBootDiag,
+                   (int)g_aiBootState);
     g_ctx.behavior_->update(data, now);
     StackchanReaction reaction;
     bool gotReaction = false;
