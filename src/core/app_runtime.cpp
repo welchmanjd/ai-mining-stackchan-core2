@@ -330,28 +330,19 @@ void appRuntimeTick(uint32_t now) {
     {
       String aiBubbleText;
       if (g_ctx.ai_->consumeBubbleUpdate(&aiBubbleText)) {
-        // Keep AI bubble timing aligned with actual TTS audio start.
-        // (TTS path updates speech text from tts_coordinator on audio start.)
         if (aiBubbleText.length() == 0) {
           bubbleClear_("ai_update", true);
-        } else if (!runtimeFeatures.ttsEnabled_) {
+        } else if (!runtimeFeatures.ttsEnabled_ ||
+                   g_ctx.ai_->state() == AiState::Listening ||
+                   g_ctx.ai_->state() == AiState::Thinking) {
           bubbleShow_(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
         }
       }
-    }
-    static uint32_t s_lastOverlayPushMs = 0;
-    static uint8_t s_lastAiState = 255;
-    const uint8_t st = (uint8_t)g_ctx.ai_->state();
-    if ((st != s_lastAiState) || (now - s_lastOverlayPushMs >= 200)) {
-      UIMining::instance().setAiOverlay(g_ctx.ai_->getOverlay());
-      s_lastOverlayPushMs = now;
-      s_lastAiState = st;
     }
   } else {
     if (g_ctx.ai_->isBusy()) {
       g_ctx.ai_->forceStop(now, "ai_disabled");
     }
-    UIMining::instance().setAiOverlay(AiUiOverlay());
   }
 
   // Orchestrator tick (timeout recovery)

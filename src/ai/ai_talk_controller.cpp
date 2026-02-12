@@ -530,6 +530,8 @@ void AiTalkController::tick(uint32_t nowMs) {
 void AiTalkController::enterThinking_(uint32_t nowMs) {
   state_ = AiState::Thinking;
   thinkStartMs_ = nowMs;
+  bubbleText_ = MC_AI_TEXT_THINKING;
+  bubbleDirty_ = true;
   overlay_.active_ = true;
   overlay_.state_ = state_;
   overlay_.hint_ = MC_AI_THINKING_HINT_TEXT;
@@ -601,7 +603,7 @@ void AiTalkController::enterListening_(uint32_t nowMs) {
   replyText_ = "";
   activeRid_ = 0;
   awaitingOrchSpeak_ = false;
-  bubbleText_ = "";
+  bubbleText_ = "聞いてるよ";
   bubbleDirty_ = true;
   overlay_ = AiUiOverlay();
   overlay_.active_ = true;
@@ -626,6 +628,8 @@ void AiTalkController::enterIdle_(uint32_t nowMs, const char *reason) {
   overlay_ = AiUiOverlay();
   overlay_.active_ = false;
   errorFlag_ = false;
+  bubbleText_ = "";
+  bubbleDirty_ = true;
   const uint32_t ttsId =
       (orch_ && oldRid != 0) ? orch_->ttsIdForRid(oldRid) : 0;
   LOG_EVT_INFO("EVT_AI_STATE", "state=IDLE reason=%s rid=%lu tts_id=%lu",

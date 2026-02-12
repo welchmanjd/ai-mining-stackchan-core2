@@ -357,37 +357,6 @@ void UIMining::drawStackchanScreen(const PanelData &p) {
   updateAvatarLiveliness();
   d.setClipRect(0, 0, W, H);
   avatar_.draw();
-  // ---- AI overlay ----
-  if (aiOverlay_.active_) {
-    if (aiOverlayDirty_ || !aiOverlayVisible_) {
-      overlaySprite_.fillScreen(TFT_BLACK);
-      overlaySprite_.setTextDatum(textdatum_t::top_left);
-      overlaySprite_.setTextColor(TFT_WHITE, TFT_BLACK);
-      overlaySprite_.setTextSize(1);
-      if (aiOverlay_.line1_.length() > 0) {
-        overlaySprite_.drawString(aiOverlay_.line1_, 4, 4);
-      }
-      if (aiOverlay_.line2_.length() > 0) {
-        overlaySprite_.drawString(aiOverlay_.line2_, 4, 4 + 12);
-      }
-      if (aiOverlay_.hint_.length() > 0) {
-        overlaySprite_.setTextDatum(textdatum_t::top_right);
-        overlaySprite_.setTextColor(TFT_WHITE, TFT_BLACK);
-        overlaySprite_.setTextSize(1);
-        overlaySprite_.drawString(aiOverlay_.hint_, W - 4, 4);
-      }
-      aiOverlayDirty_ = false;
-      aiOverlayVisible_ = true;
-    }
-    // Avatar redraw may overpaint the top area each frame, so re-blit the
-    // prepared overlay sprite every frame while active.
-    overlaySprite_.pushSprite(0, 0);
-  } else if (aiOverlayVisible_) {
-    overlaySprite_.fillScreen(TFT_BLACK);
-    overlaySprite_.pushSprite(0, 0);
-    aiOverlayVisible_ = false;
-    aiOverlayDirty_ = false;
-  }
   d.clearClipRect();
 }
 void UIMining::setStackchanSpeech(const String &text) {
