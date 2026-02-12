@@ -99,6 +99,7 @@ void setup() {
   UIMining::instance().setAttentionDefaultText(mcCfgAttentionText());
   UIMining::instance().setStackchanSpeechTiming(2200, 1200, 900, 1400);
   mc_logf("%s %s booting...", cfg.appName_, cfg.appVersion_);
+  setMiningBootHold(true);
   startMiner();
 }
 void loop() {

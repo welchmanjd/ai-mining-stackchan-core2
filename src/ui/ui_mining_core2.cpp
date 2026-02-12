@@ -60,6 +60,11 @@ void UIMining::begin(const char *appName, const char *appVer) {
   splashMiningText_ = "Waiting";
   splashOpenAiText_ = "Waiting";
   splashAzureText_ = "Waiting";
+  splashDispWifiState_ = PanelData::BootConnecting;
+  splashDispMiningState_ = PanelData::BootWaiting;
+  splashDispOpenAiState_ = PanelData::BootWaiting;
+  splashDispAzureState_ = PanelData::BootWaiting;
+  splashDispStepMs_ = splashStartMs_;
   splashHint_ = "";
   splashWifiCol_ = 0xFD20;
   splashMiningCol_ = kColLabel;
@@ -179,15 +184,70 @@ void UIMining::drawAll(const PanelData &p, const String &tickerText,
         break;
       }
     };
+    auto stepDisplayState = [&](uint8_t current, uint8_t target,
+                                bool allowStep) -> uint8_t {
+      if (current == target) {
+        return current;
+      }
+      if (target == PanelData::BootFail || target == PanelData::BootSkip ||
+          target == PanelData::BootWaiting) {
+        return target;
+      }
+      if (!allowStep) {
+        return current;
+      }
+      if (target == PanelData::BootConnecting) {
+        if (current == PanelData::BootWaiting || current == PanelData::BootConnecting) {
+          return PanelData::BootConnecting;
+        }
+        return target;
+      }
+      if (target == PanelData::BootOk) {
+        if (current == PanelData::BootWaiting) {
+          return PanelData::BootConnecting;
+        }
+        if (current == PanelData::BootConnecting) {
+          return PanelData::BootOk;
+        }
+        return PanelData::BootOk;
+      }
+      return target;
+    };
+    uint8_t rawStates[4] = {p.bootWifiState_, p.bootMiningState_,
+                            p.bootOpenAiState_, p.bootAzureState_};
+    uint8_t *dispStates[4] = {&splashDispWifiState_, &splashDispMiningState_,
+                              &splashDispOpenAiState_, &splashDispAzureState_};
+    const uint32_t kStepIntervalMs = 280UL;
+    bool stepped = false;
+    for (int i = 0; i < 4; ++i) {
+      uint8_t current = *dispStates[i];
+      uint8_t target = rawStates[i];
+      if (current == target) {
+        continue;
+      }
+      const bool allowStep =
+          (splashDispStepMs_ == 0) || ((now - splashDispStepMs_) >= kStepIntervalMs);
+      uint8_t next = stepDisplayState(current, target, allowStep);
+      if (next != current) {
+        *dispStates[i] = next;
+        splashDispStepMs_ = now;
+        stepped = true;
+      }
+      if (!stepped && !allowStep) {
+        break;
+      }
+      break;
+    }
+
     String wifiText, miningText, openAiText, azureText;
     uint16_t wifiCol = kColLabel;
     uint16_t miningCol = kColLabel;
     uint16_t openAiCol = kColLabel;
     uint16_t azureCol = kColLabel;
-    mapState(p.bootWifiState_, wifiText, wifiCol);
-    mapState(p.bootMiningState_, miningText, miningCol);
-    mapState(p.bootOpenAiState_, openAiText, openAiCol);
-    mapState(p.bootAzureState_, azureText, azureCol);
+    mapState(splashDispWifiState_, wifiText, wifiCol);
+    mapState(splashDispMiningState_, miningText, miningCol);
+    mapState(splashDispOpenAiState_, openAiText, openAiCol);
+    mapState(splashDispAzureState_, azureText, azureCol);
     const String hint = p.bootActiveDiag_;
     if (wifiText != splashWifiText_ || wifiCol != splashWifiCol_ ||
         miningText != splashMiningText_ || miningCol != splashMiningCol_ ||
@@ -208,14 +268,14 @@ void UIMining::drawAll(const PanelData &p, const String &tickerText,
                  splashAzureText_, splashAzureCol_, splashHint_);
     }
     const bool allPassedOrSkip =
-        (p.bootWifiState_ == PanelData::BootOk ||
-         p.bootWifiState_ == PanelData::BootSkip) &&
-        (p.bootMiningState_ == PanelData::BootOk ||
-         p.bootMiningState_ == PanelData::BootSkip) &&
-        (p.bootOpenAiState_ == PanelData::BootOk ||
-         p.bootOpenAiState_ == PanelData::BootSkip) &&
-        (p.bootAzureState_ == PanelData::BootOk ||
-         p.bootAzureState_ == PanelData::BootSkip);
+        (splashDispWifiState_ == PanelData::BootOk ||
+         splashDispWifiState_ == PanelData::BootSkip) &&
+        (splashDispMiningState_ == PanelData::BootOk ||
+         splashDispMiningState_ == PanelData::BootSkip) &&
+        (splashDispOpenAiState_ == PanelData::BootOk ||
+         splashDispOpenAiState_ == PanelData::BootSkip) &&
+        (splashDispAzureState_ == PanelData::BootOk ||
+         splashDispAzureState_ == PanelData::BootSkip);
 
     if (allPassedOrSkip) {
       if (splashReadyMs_ == 0) {

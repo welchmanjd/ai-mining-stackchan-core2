@@ -6,6 +6,7 @@
 #include "utils/mining_status.h"
 #include "utils/mining_summary.h"
 void setMiningPaused(bool paused);
+void setMiningBootHold(bool hold);
 void startMiner();
 void updateMiningSummary(MiningSummary& out);
 struct MiningYieldProfile {

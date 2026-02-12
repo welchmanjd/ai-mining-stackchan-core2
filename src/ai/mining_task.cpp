@@ -16,13 +16,18 @@
 #include "utils/logging.h"
 
 static volatile bool g_miningPaused = false;
+static volatile bool g_miningBootHold = false;
 // Pause flag checked by mining loops to reduce CPU without tearing down
 // connections.
 void setMiningPaused(bool paused) { g_miningPaused = paused; }
+void setMiningBootHold(bool hold) { g_miningBootHold = hold; }
 bool isMiningPaused() { return g_miningPaused; }
+static inline bool miningPauseActive_() {
+  return g_miningPaused || g_miningBootHold;
+}
 static inline void waitWhilePaused_() {
   // Busy wait with a tiny delay to keep WiFi alive without heavy load.
-  while (g_miningPaused) {
+  while (miningPauseActive_()) {
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
@@ -174,7 +179,7 @@ static uint32_t ducoSolveDucoS1_(const String &seed,
   for (uint32_t nonce = 0; nonce <= maxNonce; ++nonce) {
     // When paused, we yield here and resume from the same nonce (no disconnect
     // / no job drop).
-    if (g_miningPaused) {
+    if (miningPauseActive_()) {
       waitWhilePaused_();
       // If this thread got disabled while paused, abort cleanly.
       if (tIdx >= 0 && tIdx >= (int)g_miningActiveThreads) {
@@ -229,6 +234,13 @@ static void ducoTask_(void *pv) {
   snprintf(tag, sizeof(tag), "T%d", idx);
   MC_LOGI("DUCO", "miner task start %s", tag);
   for (;;) {
+    if (miningPauseActive_()) {
+      me.connected_ = false;
+      me.hashrateKh_ = 0.0f;
+      setStatus_("Mining paused");
+      vTaskDelay(pdMS_TO_TICKS(100));
+      continue;
+    }
     // ----- mining control: idle if this thread is disabled (STOP/HALF) -----
     if (idx >= (int)g_miningActiveThreads) {
       me.connected_ = false;
@@ -238,6 +250,13 @@ static void ducoTask_(void *pv) {
     }
     // WiFi
     while (WiFi.status() != WL_CONNECTED) {
+      if (miningPauseActive_()) {
+        me.connected_ = false;
+        me.hashrateKh_ = 0.0f;
+        setStatus_("Mining paused");
+        vTaskDelay(pdMS_TO_TICKS(100));
+        continue;
+      }
       // disabled while waiting for WiFi -> just idle
       if (idx >= (int)g_miningActiveThreads) {
         me.connected_ = false;
@@ -298,6 +317,14 @@ static void ducoTask_(void *pv) {
     me.connected_ = true;
     // ===== JOB loop =====
     while (cli.connected()) {
+      if (miningPauseActive_()) {
+        MC_LOGI("DUCO", "%s paused -> disconnect", tag);
+        cli.stop();
+        me.connected_ = false;
+        me.hashrateKh_ = 0.0f;
+        vTaskDelay(pdMS_TO_TICKS(100));
+        break;
+      }
       // disabled mid-connection -> disconnect and go idle
       if (idx >= (int)g_miningActiveThreads) {
         MC_LOGI("DUCO", "%s disabled -> disconnect", tag);

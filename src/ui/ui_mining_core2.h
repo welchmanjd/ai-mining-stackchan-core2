@@ -140,6 +140,11 @@ private:
   uint16_t splashMiningCol_ = WHITE;
   uint16_t splashOpenAiCol_ = WHITE;
   uint16_t splashAzureCol_ = WHITE;
+  uint8_t splashDispWifiState_ = PanelData::BootConnecting;
+  uint8_t splashDispMiningState_ = PanelData::BootWaiting;
+  uint8_t splashDispOpenAiState_ = PanelData::BootWaiting;
+  uint8_t splashDispAzureState_ = PanelData::BootWaiting;
+  uint32_t splashDispStepMs_ = 0;
   bool inStackchanMode_ = false;
   bool stackchanNeedsClear_ = false;
   bool stackchanTalking_ = false;

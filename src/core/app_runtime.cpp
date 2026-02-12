@@ -13,6 +13,8 @@
 #endif
 #include <WiFi.h>
 #include <esp32-hal-cpu.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include "ai/ai_talk_controller.h"
 #include "ai/azure_tts.h"
@@ -109,6 +111,20 @@ static uint32_t g_bootOpenAiNextCheckMs = 0;
 static int g_bootOpenAiRetryCount = 0;
 static uint32_t g_bootAzureNextCheckMs = 0;
 static int g_bootAzureRetryCount = 0;
+static bool g_bootMiningHold = true;
+struct BootProbeResult {
+  bool running_ = false;
+  bool done_ = false;
+  bool ok_ = false;
+  int http_ = 0;
+  uint32_t tookMs_ = 0;
+  char err_[96] = {0};
+};
+static portMUX_TYPE g_bootProbeMux = portMUX_INITIALIZER_UNLOCKED;
+static BootProbeResult g_bootOpenAiProbe;
+static BootProbeResult g_bootAzureProbe;
+static TaskHandle_t g_bootOpenAiProbeTask = nullptr;
+static TaskHandle_t g_bootAzureProbeTask = nullptr;
 
 static const char *aiStateName_(AiState s) {
   switch (s) {
@@ -327,6 +343,132 @@ static bool bootStateDone_(BootCheckState s) {
          s == BootCheckState::Skip;
 }
 
+static void bootStoreProbeResult_(BootProbeResult &dst, bool ok, int http,
+                                  uint32_t tookMs, const char *err) {
+  portENTER_CRITICAL(&g_bootProbeMux);
+  dst.running_ = false;
+  dst.done_ = true;
+  dst.ok_ = ok;
+  dst.http_ = http;
+  dst.tookMs_ = tookMs;
+  strncpy(dst.err_, err ? err : "", sizeof(dst.err_) - 1);
+  dst.err_[sizeof(dst.err_) - 1] = '\0';
+  portEXIT_CRITICAL(&g_bootProbeMux);
+}
+
+static bool bootConsumeProbeResult_(BootProbeResult &src, bool *ok, int *http,
+                                    uint32_t *tookMs, char *err,
+                                    size_t errLen) {
+  bool has = false;
+  bool okLocal = false;
+  int httpLocal = 0;
+  uint32_t tookLocal = 0;
+  char errLocal[96] = {0};
+  portENTER_CRITICAL(&g_bootProbeMux);
+  if (src.done_) {
+    has = true;
+    okLocal = src.ok_;
+    httpLocal = src.http_;
+    tookLocal = src.tookMs_;
+    strncpy(errLocal, src.err_, sizeof(errLocal) - 1);
+    errLocal[sizeof(errLocal) - 1] = '\0';
+    src.done_ = false;
+  }
+  portEXIT_CRITICAL(&g_bootProbeMux);
+  if (!has) {
+    return false;
+  }
+  if (ok) {
+    *ok = okLocal;
+  }
+  if (http) {
+    *http = httpLocal;
+  }
+  if (tookMs) {
+    *tookMs = tookLocal;
+  }
+  if (err && errLen > 0) {
+    strncpy(err, errLocal, errLen - 1);
+    err[errLen - 1] = '\0';
+  }
+  return true;
+}
+
+static void bootOpenAiProbeTask_(void *pv) {
+  (void)pv;
+  const auto probe = openai_llm::probeConnection(8000);
+  bootStoreProbeResult_(g_bootOpenAiProbe, probe.ok_, probe.http_,
+                        probe.tookMs_, probe.err_.c_str());
+  g_bootOpenAiProbeTask = nullptr;
+  vTaskDelete(nullptr);
+}
+
+static void bootAzureProbeTask_(void *pv) {
+  (void)pv;
+  if (!g_ctx.tts_) {
+    bootStoreProbeResult_(g_bootAzureProbe, false, 0, 0,
+                          "TTS service is unavailable.");
+    g_bootAzureProbeTask = nullptr;
+    vTaskDelete(nullptr);
+    return;
+  }
+  const uint32_t t0 = millis();
+  const bool ok = g_ctx.tts_->testCredentials();
+  const uint32_t tookMs = millis() - t0;
+  const char *err = ok ? "" : "Azure credential check failed.";
+  bootStoreProbeResult_(g_bootAzureProbe, ok, ok ? 200 : 0, tookMs, err);
+  g_bootAzureProbeTask = nullptr;
+  vTaskDelete(nullptr);
+}
+
+static bool bootStartOpenAiProbe_() {
+  portENTER_CRITICAL(&g_bootProbeMux);
+  if (g_bootOpenAiProbe.running_) {
+    portEXIT_CRITICAL(&g_bootProbeMux);
+    return true;
+  }
+  g_bootOpenAiProbe.running_ = true;
+  g_bootOpenAiProbe.done_ = false;
+  g_bootOpenAiProbe.ok_ = false;
+  g_bootOpenAiProbe.http_ = 0;
+  g_bootOpenAiProbe.tookMs_ = 0;
+  g_bootOpenAiProbe.err_[0] = '\0';
+  portEXIT_CRITICAL(&g_bootProbeMux);
+
+  if (xTaskCreatePinnedToCore(bootOpenAiProbeTask_, "BootOpenAiProbe", 8192,
+                              nullptr, 1, &g_bootOpenAiProbeTask, 1) !=
+      pdPASS) {
+    bootStoreProbeResult_(g_bootOpenAiProbe, false, 0, 0,
+                          "openai_probe_task_create_failed");
+    return false;
+  }
+  return true;
+}
+
+static bool bootStartAzureProbe_() {
+  portENTER_CRITICAL(&g_bootProbeMux);
+  if (g_bootAzureProbe.running_) {
+    portEXIT_CRITICAL(&g_bootProbeMux);
+    return true;
+  }
+  g_bootAzureProbe.running_ = true;
+  g_bootAzureProbe.done_ = false;
+  g_bootAzureProbe.ok_ = false;
+  g_bootAzureProbe.http_ = 0;
+  g_bootAzureProbe.tookMs_ = 0;
+  g_bootAzureProbe.err_[0] = '\0';
+  portEXIT_CRITICAL(&g_bootProbeMux);
+
+  if (xTaskCreatePinnedToCore(bootAzureProbeTask_, "BootAzureProbe", 8192,
+                              nullptr, 1, &g_bootAzureProbeTask, 1) !=
+      pdPASS) {
+    bootStoreProbeResult_(g_bootAzureProbe, false, 0, 0,
+                          "azure_probe_task_create_failed");
+    return false;
+  }
+  return true;
+}
+
 static void bootRunOpenAiCheck_(uint32_t now) {
   if (g_bootOpenAiState == BootCheckState::Ok ||
       g_bootOpenAiState == BootCheckState::Fail) {
@@ -337,25 +479,35 @@ static void bootRunOpenAiCheck_(uint32_t now) {
     g_bootOpenAiDiag = "Connecting to OpenAI...";
     return;
   }
-  g_bootOpenAiState = BootCheckState::Connecting;
-  g_bootOpenAiDiag = "Connecting to OpenAI...";
-  const auto probe = openai_llm::probeConnection(8000);
-  if (probe.ok_) {
+  bool ok = false;
+  int http = 0;
+  uint32_t tookMs = 0;
+  char err[96] = {0};
+  if (!bootConsumeProbeResult_(g_bootOpenAiProbe, &ok, &http, &tookMs, err,
+                               sizeof(err))) {
+    g_bootOpenAiState = BootCheckState::Connecting;
+    g_bootOpenAiDiag = "Connecting to OpenAI...";
+    (void)bootStartOpenAiProbe_();
+    return;
+  }
+
+  if (ok) {
     g_bootOpenAiState = BootCheckState::Ok;
     g_bootOpenAiDiag = "OpenAI connection is OK.";
     g_bootOpenAiRetryCount = 0;
     g_bootOpenAiNextCheckMs = 0;
-    MC_LOGI("BOOT", "OpenAI probe OK");
+    MC_LOGI("BOOT", "OpenAI probe OK (http=%d took=%lums)", http,
+            (unsigned long)tookMs);
     return;
   }
   g_bootOpenAiState = BootCheckState::Fail;
-  g_bootOpenAiDiag =
-      probe.err_.length() ? probe.err_ : String("OpenAI probe failed");
+  g_bootOpenAiDiag = err[0] ? String(err) : String("OpenAI probe failed");
   static const uint32_t kBackoffMs[] = {5000, 10000, 30000};
   const int idx = (g_bootOpenAiRetryCount < 2) ? g_bootOpenAiRetryCount : 2;
   g_bootOpenAiNextCheckMs = now + kBackoffMs[idx];
   g_bootOpenAiRetryCount++;
-  MC_LOGW("BOOT", "OpenAI probe NG: %s", g_bootOpenAiDiag.c_str());
+  MC_LOGW("BOOT", "OpenAI probe NG (http=%d took=%lums): %s", http,
+          (unsigned long)tookMs, g_bootOpenAiDiag.c_str());
 }
 
 static void bootRunAzureCheck_(uint32_t now) {
@@ -373,25 +525,35 @@ static void bootRunAzureCheck_(uint32_t now) {
     g_bootAzureDiag = "Connecting to Azure...";
     return;
   }
-  g_bootAzureState = BootCheckState::Connecting;
-  g_bootAzureDiag = "Connecting to Azure...";
-  g_ctx.tts_->begin(mcCfgSpkVolume());
-  const bool ok = g_ctx.tts_->testCredentials();
+  bool ok = false;
+  int http = 0;
+  uint32_t tookMs = 0;
+  char err[96] = {0};
+  if (!bootConsumeProbeResult_(g_bootAzureProbe, &ok, &http, &tookMs, err,
+                               sizeof(err))) {
+    g_bootAzureState = BootCheckState::Connecting;
+    g_bootAzureDiag = "Connecting to Azure...";
+    (void)bootStartAzureProbe_();
+    return;
+  }
+
   if (ok) {
     g_bootAzureState = BootCheckState::Ok;
     g_bootAzureDiag = "Azure connection is OK.";
     g_bootAzureRetryCount = 0;
     g_bootAzureNextCheckMs = 0;
-    MC_LOGI("BOOT", "Azure probe OK");
+    MC_LOGI("BOOT", "Azure probe OK (http=%d took=%lums)", http,
+            (unsigned long)tookMs);
     return;
   }
   g_bootAzureState = BootCheckState::Fail;
-  g_bootAzureDiag = "Azure credential check failed.";
+  g_bootAzureDiag = err[0] ? String(err) : String("Azure credential check failed.");
   static const uint32_t kBackoffMs[] = {5000, 10000, 30000};
   const int idx = (g_bootAzureRetryCount < 2) ? g_bootAzureRetryCount : 2;
   g_bootAzureNextCheckMs = now + kBackoffMs[idx];
   g_bootAzureRetryCount++;
-  MC_LOGW("BOOT", "Azure probe NG");
+  MC_LOGW("BOOT", "Azure probe NG (http=%d took=%lums): %s", http,
+          (unsigned long)tookMs, g_bootAzureDiag.c_str());
 }
 
 static void updateBootChecks_(uint32_t now, const RuntimeFeatures &features,
@@ -411,6 +573,18 @@ static void updateBootChecks_(uint32_t now, const RuntimeFeatures &features,
     g_bootMiningState = BootCheckState::Waiting;
     g_bootMiningDiag = "Waiting for WiFi...";
     g_bootMiningStartMs = 0;
+  } else if (g_bootMiningHold) {
+    if (g_bootMiningStartMs == 0) {
+      g_bootMiningStartMs = now;
+    }
+    const uint32_t holdConnectMs = 900UL;
+    if ((now - g_bootMiningStartMs) < holdConnectMs) {
+      g_bootMiningState = BootCheckState::Connecting;
+      g_bootMiningDiag = "Connecting to mining pool...";
+    } else {
+      g_bootMiningState = BootCheckState::Ok;
+      g_bootMiningDiag = "Mining check is OK.";
+    }
   } else if (summary.anyConnected_) {
     g_bootMiningState = BootCheckState::Ok;
     g_bootMiningDiag = "Mining pool connection is OK.";
@@ -538,6 +712,13 @@ void appRuntimeInit(const AppRuntimeContext &ctx) {
   g_bootOpenAiRetryCount = 0;
   g_bootAzureNextCheckMs = 0;
   g_bootAzureRetryCount = 0;
+  g_bootMiningHold = true;
+  portENTER_CRITICAL(&g_bootProbeMux);
+  g_bootOpenAiProbe = BootProbeResult();
+  g_bootAzureProbe = BootProbeResult();
+  portEXIT_CRITICAL(&g_bootProbeMux);
+  g_bootOpenAiProbeTask = nullptr;
+  g_bootAzureProbeTask = nullptr;
 }
 
 static void handleAiAndOrchestrator_(uint32_t now,
@@ -798,7 +979,9 @@ static void handleUiAndBehaviorFrame_(uint32_t now,
     break;
   }
 
-  updateBootChecks_(now, runtimeFeatures, summary);
+  if (g_mode == Dash && ui.isSplashActive()) {
+    updateBootChecks_(now, runtimeFeatures, summary);
+  }
   int legacyBootStatus = 0;
   if (g_bootOpenAiState == BootCheckState::Ok) {
     legacyBootStatus = 3;
@@ -945,6 +1128,14 @@ static void handleUiAndBehaviorFrame_(uint32_t now,
 static void handleNetworkUiAndSleep_(uint32_t now,
                                      const RuntimeFeatures &runtimeFeatures,
                                      UIMining &ui) {
+  const bool wantMiningHold =
+      runtimeFeatures.miningEnabled_ && g_mode == Dash && ui.isSplashActive();
+  if (wantMiningHold != g_bootMiningHold) {
+    g_bootMiningHold = wantMiningHold;
+    setMiningBootHold(g_bootMiningHold);
+    MC_EVT("BOOT", "mining hold: %d", g_bootMiningHold ? 1 : 0);
+  }
+
   const bool wifiDone = wifiConnect_();
   if (wifiDone && !g_timeNtpDone && WiFi.status() == WL_CONNECTED) {
     setupTimeNtp_();
