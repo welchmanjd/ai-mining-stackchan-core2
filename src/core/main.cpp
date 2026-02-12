@@ -68,7 +68,7 @@ void setup() {
   M5.Speaker.setVolume(mcCfgSpkVolume());
   mc_logf("[MAIN] spk_volume=%u", (unsigned)mcCfgSpkVolume());
   const auto &cfg = appConfig();
-  g_tts.begin();
+  g_tts.begin(mcCfgSpkVolume());
   AppRuntimeContext runtimeCtx;
   runtimeCtx.ai_ = &g_ai;
   runtimeCtx.tts_ = &g_tts;

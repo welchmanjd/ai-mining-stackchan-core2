@@ -9,7 +9,7 @@
 //
 class AzureTts {
 public:
-  void begin(uint8_t volume = MC_SPK_VOLUME);
+  void begin(uint8_t volume);
   bool speakAsync(const String &text, uint32_t speakId,
                   const char *voice = nullptr);
   bool speakAsync(const String &text, const char *voice = nullptr) {
