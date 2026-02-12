@@ -143,7 +143,8 @@ OpenAiProbeResult probeConnection(uint32_t timeoutMs) {
     model = MC_OPENAI_MODEL;
   req["model"] = model;
   req["input"] = "ping";
-  req["max_output_tokens"] = 1;
+  // Responses API now requires max_output_tokens >= 16.
+  req["max_output_tokens"] = 16;
   req["text"]["format"]["type"] = "text";
   String payload;
   serializeJson(req, payload);

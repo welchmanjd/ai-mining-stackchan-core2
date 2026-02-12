@@ -57,9 +57,10 @@ public:
   };
   void setTouchSnapshot(const TouchSnapshot &s);
   void drawSplash(const String &wifiText, uint16_t wifiCol,
-                  const String &serviceLabel, const String &serviceText,
-                  uint16_t serviceCol, const String &wifiHint,
-                  const String &serviceHint);
+                  const String &miningText, uint16_t miningCol,
+                  const String &openAiText, uint16_t openAiCol,
+                  const String &azureText, uint16_t azureCol,
+                  const String &hint);
   void drawSleepMessage();
   void drawStackchanScreen(const PanelData &p);
   void onEnterStackchanMode();
@@ -131,12 +132,14 @@ private:
   uint32_t splashStartMs_ = 0;
   uint32_t splashReadyMs_ = 0;
   String splashWifiText_;
-  String splashServiceLabel_;
-  String splashPoolText_;
-  String splashWifiHint_;
-  String splashPoolHint_;
+  String splashMiningText_;
+  String splashOpenAiText_;
+  String splashAzureText_;
+  String splashHint_;
   uint16_t splashWifiCol_ = WHITE;
-  uint16_t splashPoolCol_ = WHITE;
+  uint16_t splashMiningCol_ = WHITE;
+  uint16_t splashOpenAiCol_ = WHITE;
+  uint16_t splashAzureCol_ = WHITE;
   bool inStackchanMode_ = false;
   bool stackchanNeedsClear_ = false;
   bool stackchanTalking_ = false;

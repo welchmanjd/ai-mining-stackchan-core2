@@ -57,14 +57,17 @@ void UIMining::begin(const char *appName, const char *appVer) {
   splashStartMs_ = millis();
   splashReadyMs_ = 0;
   splashWifiText_ = "Connecting...";
-  splashServiceLabel_ = "Pool";
-  splashPoolText_ = "Waiting";
+  splashMiningText_ = "Waiting";
+  splashOpenAiText_ = "Waiting";
+  splashAzureText_ = "Waiting";
+  splashHint_ = "";
   splashWifiCol_ = 0xFD20;
-  splashPoolCol_ = kColLabel;
-  splashWifiHint_ = "";
-  splashPoolHint_ = "";
-  drawSplash(splashWifiText_, splashWifiCol_, splashServiceLabel_,
-             splashPoolText_, splashPoolCol_, splashWifiHint_, splashPoolHint_);
+  splashMiningCol_ = kColLabel;
+  splashOpenAiCol_ = kColLabel;
+  splashAzureCol_ = kColLabel;
+  drawSplash(splashWifiText_, splashWifiCol_, splashMiningText_, splashMiningCol_,
+             splashOpenAiText_, splashOpenAiCol_, splashAzureText_,
+             splashAzureCol_, splashHint_);
   tick_.fillScreen(BLACK);
   tick_.pushSprite(0, Y_LOG);
 }
@@ -135,9 +138,7 @@ void UIMining::drawAll(const PanelData &p, const String &tickerText,
                        bool suppressTouchBeep) {
   uint32_t now = millis();
   if (splashActive_) {
-    // Splash shows connection progress until Wi-Fi + pool are ready.
-    wl_status_t w = WiFi.status();
-    uint32_t dtSplash = now - splashStartMs_;
+    // Splash shows relay checks: WiFi -> Mining -> OpenAI -> Azure.
     auto makeConnecting = [&](const char *base) -> String {
       uint32_t elapsed = now - splashStartMs_;
       const uint32_t period = 200;
@@ -153,116 +154,78 @@ void UIMining::drawAll(const PanelData &p, const String &tickerText,
       }
       return s;
     };
-    String wifiText;
-    uint16_t wifiCol;
-    if (w == WL_CONNECTED) {
-      wifiText = "OK";
-      wifiCol = 0x07E0;
-    } else if (dtSplash < 10000) {
-      wifiText = makeConnecting("Connecting");
-      wifiCol = 0xFD20;
-    } else if (dtSplash < 15000) {
-      wifiText = makeConnecting("Retrying");
-      wifiCol = 0xFD20;
-    } else {
-      wifiText = "NG";
-      wifiCol = 0xF800;
-    }
-    String poolText;
-    uint16_t poolCol;
-    String serviceLabel = p.miningEnabled_ ? "Pool" : "OpenAI";
-    bool wifiOk = (w == WL_CONNECTED);
-    if (!wifiOk) {
-      poolText = "Waiting";
-      poolCol = kColLabel;
-    } else if (!p.miningEnabled_) {
-      if (p.aiEnabled_) {
-        if (p.aiReady_) {
-          poolText = "AI OK";
-          poolCol = 0x07E0;
-        } else if (p.bootStatus_ == 4) {
-          poolText = "NG";
-          poolCol = 0xF800;
-        } else {
-          poolText = makeConnecting("Checking");
-          poolCol = 0xFD20;
-        }
-      } else {
-        poolText = "NG";
-        poolCol = 0xF800;
+    auto mapState = [&](uint8_t st, String &text, uint16_t &col) {
+      switch (st) {
+      case PanelData::BootOk:
+        text = "OK";
+        col = 0x07E0;
+        break;
+      case PanelData::BootFail:
+        text = "NG";
+        col = 0xF800;
+        break;
+      case PanelData::BootSkip:
+        text = "SKIP";
+        col = kColLabel;
+        break;
+      case PanelData::BootWaiting:
+        text = "Waiting";
+        col = kColLabel;
+        break;
+      case PanelData::BootConnecting:
+      default:
+        text = makeConnecting("Connecting");
+        col = 0xFD20;
+        break;
       }
-    } else if (p.poolAlive_) {
-      poolText = "OK";
-      poolCol = 0x07E0;
-    } else if (dtSplash < 10000) {
-      poolText = makeConnecting("Connecting");
-      poolCol = 0xFD20;
-    } else if (dtSplash < 15000) {
-      poolText = makeConnecting("Retrying");
-      poolCol = 0xFD20;
-    } else {
-      poolText = "NG";
-      poolCol = 0xF800;
-    }
-    String wifiHint;
-    if (wifiText == "NG" && p.wifiDiag_.length()) {
-      wifiHint = p.wifiDiag_;
-    } else {
-      wifiHint = "";
-    }
-    String poolHint;
-    if (!p.miningEnabled_) {
-      if (p.aiEnabled_) {
-        poolHint = p.aiDiag_.length() ? p.aiDiag_ : String("Checking OpenAI...");
-      } else {
-        poolHint = "AI is disabled in settings.";
-      }
-    } else if (poolText == "OFF") {
-      poolHint = "Duco user is empty. Mining is disabled.";
-    } else if ((poolText == "NG" || poolText == "Waiting") &&
-               p.poolDiag_.length()) {
-      poolHint = p.poolDiag_;
-    } else {
-      poolHint = "";
-    }
+    };
+    String wifiText, miningText, openAiText, azureText;
+    uint16_t wifiCol = kColLabel;
+    uint16_t miningCol = kColLabel;
+    uint16_t openAiCol = kColLabel;
+    uint16_t azureCol = kColLabel;
+    mapState(p.bootWifiState_, wifiText, wifiCol);
+    mapState(p.bootMiningState_, miningText, miningCol);
+    mapState(p.bootOpenAiState_, openAiText, openAiCol);
+    mapState(p.bootAzureState_, azureText, azureCol);
+    const String hint = p.bootActiveDiag_;
     if (wifiText != splashWifiText_ || wifiCol != splashWifiCol_ ||
-        serviceLabel != splashServiceLabel_ ||
-        poolText != splashPoolText_ || poolCol != splashPoolCol_ ||
-        wifiHint != splashWifiHint_ || poolHint != splashPoolHint_) {
+        miningText != splashMiningText_ || miningCol != splashMiningCol_ ||
+        openAiText != splashOpenAiText_ || openAiCol != splashOpenAiCol_ ||
+        azureText != splashAzureText_ || azureCol != splashAzureCol_ ||
+        hint != splashHint_) {
       splashWifiText_ = wifiText;
-      splashServiceLabel_ = serviceLabel;
-      splashPoolText_ = poolText;
       splashWifiCol_ = wifiCol;
-      splashPoolCol_ = poolCol;
-      splashWifiHint_ = wifiHint;
-      splashPoolHint_ = poolHint;
-      drawSplash(splashWifiText_, splashWifiCol_, splashServiceLabel_,
-                 splashPoolText_, splashPoolCol_, splashWifiHint_,
-                 splashPoolHint_);
+      splashMiningText_ = miningText;
+      splashMiningCol_ = miningCol;
+      splashOpenAiText_ = openAiText;
+      splashOpenAiCol_ = openAiCol;
+      splashAzureText_ = azureText;
+      splashAzureCol_ = azureCol;
+      splashHint_ = hint;
+      drawSplash(splashWifiText_, splashWifiCol_, splashMiningText_,
+                 splashMiningCol_, splashOpenAiText_, splashOpenAiCol_,
+                 splashAzureText_, splashAzureCol_, splashHint_);
     }
-    bool okNow = false;
-    if (p.miningEnabled_) {
-      okNow = (w == WL_CONNECTED) && p.poolAlive_;
-    } else if (p.aiEnabled_) {
-      okNow = (w == WL_CONNECTED) && p.aiReady_;
-    } else {
-      okNow = false;
-    }
+    const bool allPassedOrSkip =
+        (p.bootWifiState_ == PanelData::BootOk ||
+         p.bootWifiState_ == PanelData::BootSkip) &&
+        (p.bootMiningState_ == PanelData::BootOk ||
+         p.bootMiningState_ == PanelData::BootSkip) &&
+        (p.bootOpenAiState_ == PanelData::BootOk ||
+         p.bootOpenAiState_ == PanelData::BootSkip) &&
+        (p.bootAzureState_ == PanelData::BootOk ||
+         p.bootAzureState_ == PanelData::BootSkip);
 
-    if (okNow) {
+    if (allPassedOrSkip) {
       if (splashReadyMs_ == 0) {
         splashReadyMs_ = now;
       }
     } else {
       splashReadyMs_ = 0;
     }
-    bool ready = okNow && (now - splashStartMs_ > 3000) &&
+    bool ready = allPassedOrSkip && (now - splashStartMs_ > 3000) &&
                  (splashReadyMs_ != 0) && (now - splashReadyMs_ > 1000);
-    // In AI-only mode, do not block forever on OpenAI probe NG.
-    if (!ready && !p.miningEnabled_ && p.aiEnabled_ && p.bootStatus_ == 4 &&
-        (now - splashStartMs_ > 12000)) {
-      ready = true;
-    }
     if (!ready) {
       return;
     }
@@ -499,9 +462,10 @@ UIMining::TextLayoutY UIMining::computeTextLayoutY() const {
   return ly;
 }
 void UIMining::drawSplash(const String &wifiText, uint16_t wifiCol,
-                          const String &serviceLabel, const String &serviceText,
-                          uint16_t serviceCol, const String &wifiHint,
-                          const String &serviceHint) {
+                          const String &miningText, uint16_t miningCol,
+                          const String &openAiText, uint16_t openAiCol,
+                          const String &azureText, uint16_t azureCol,
+                          const String &hint) {
   auto &d = M5.Display;
   d.drawFastVLine(X_INF, 0, INF_H, 0x18C3);
   d.drawFastHLine(0, Y_LOG - 1, W, 0x18C3);
@@ -533,13 +497,12 @@ void UIMining::drawSplash(const String &wifiText, uint16_t wifiCol,
   drawCenter("Mining-");
   drawCenter("Stackchan");
   y += 6;
-  auto drawGroup = [&](const char *label, const String &status, uint16_t col,
-                       const String &hint) {
+  auto drawGroup = [&](const char *label, const String &status, uint16_t col) {
     info_.setTextSize(1);
     info_.setTextColor(kColLabel, BLACK);
     info_.setCursor(kPadLr, y);
     info_.print(label);
-    y += 12;
+    y += 10;
     info_.setTextSize(2);
     info_.setTextColor(col, BLACK);
     int tw = info_.textWidth(status);
@@ -548,58 +511,40 @@ void UIMining::drawSplash(const String &wifiText, uint16_t wifiCol,
       sx = kPadLr;
     info_.setCursor(sx, y);
     info_.print(status);
-    y += 22;
-    if (hint.length()) {
-      info_.setTextSize(1);
-      info_.setTextColor(kColLabel, BLACK);
-      int maxW = INF_W - kPadLr * 2;
-      auto fillLine = [&](String &src, String &dest) {
-        dest = "";
-        while (src.length()) {
-          int spacePos = src.indexOf(' ');
-          String word;
-          if (spacePos == -1) {
-            word = src;
-            src = "";
-          } else {
-            word = src.substring(0, spacePos + 1);
-            src.remove(0, spacePos + 1);
-          }
-          String candidate = dest + word;
-          if (info_.textWidth(candidate) > maxW) {
-            if (dest.length() == 0) {
-              dest = candidate;
-            } else {
-              src = word + src;
-            }
-            break;
-          }
-          dest = candidate;
-        }
-        dest.trim();
-      };
-      String remaining = hint;
-      String line1, line2;
-      fillLine(remaining, line1);
-      if (remaining.length()) {
-        fillLine(remaining, line2);
-      }
-      if (line1.length()) {
-        info_.setCursor(kPadLr, y);
-        info_.print(line1);
-        y += 12;
-      }
-      if (line2.length()) {
-        info_.setCursor(kPadLr, y);
-        info_.print(line2);
-        y += 12;
-      }
-      y += 2;
-    }
-    y += 4;
+    y += 20;
   };
-  drawGroup("WiFi", wifiText, wifiCol, wifiHint);
-  drawGroup(serviceLabel.c_str(), serviceText, serviceCol, serviceHint);
+  drawGroup("WiFi", wifiText, wifiCol);
+  drawGroup("Mining", miningText, miningCol);
+  drawGroup("OpenAI", openAiText, openAiCol);
+  drawGroup("Azure", azureText, azureCol);
+  if (hint.length()) {
+    info_.setTextSize(1);
+    info_.setTextColor(kColLabel, BLACK);
+    int maxW = INF_W - kPadLr * 2;
+    auto clampLine = [&](const String &src) {
+      String s = src;
+      while (s.length() && info_.textWidth(s) > maxW) {
+        s.remove(s.length() - 1);
+      }
+      return s;
+    };
+    String line1 = hint;
+    String line2 = "";
+    int split = hint.lastIndexOf(' ');
+    if (split > 0) {
+      line1 = hint.substring(0, split);
+      line2 = hint.substring(split + 1);
+    }
+    line1 = clampLine(line1);
+    line2 = clampLine(line2);
+    int hintY = INF_H - 38;
+    info_.setCursor(kPadLr, hintY);
+    info_.print(line1);
+    if (line2.length()) {
+      info_.setCursor(kPadLr, hintY + 10);
+      info_.print(line2);
+    }
+  }
   info_.setTextSize(1);
   info_.setTextColor(kColLabel, BLACK);
   String ver = String("v") + appVer_;

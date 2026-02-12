@@ -68,13 +68,37 @@ static bool g_lastPopEmptyBusy = false;
 static AppMode g_lastPopEmptyMode = Stackchan;
 static bool g_lastPopEmptyAttn = false;
 
-// ===== AI Boot Check State Machine =====
-enum class AiBootState { Init = 0, WifiWait, Checking, Ok, Fail };
-static AiBootState g_aiBootState = AiBootState::Init;
-static String g_aiBootDiag = "";
-static uint32_t g_aiBootNextCheckMs = 0;
-static int g_aiBootRetryCount = 0;
-static uint32_t g_aiBootWifiConnectedSinceMs = 0;
+// ===== Splash boot checks (relay) =====
+enum class BootCheckState : uint8_t {
+  Waiting = 0,
+  Connecting = 1,
+  Ok = 2,
+  Fail = 3,
+  Skip = 4
+};
+enum class BootRelayStage : uint8_t {
+  Wifi = 0,
+  Mining,
+  OpenAi,
+  Azure,
+  Done
+};
+static BootRelayStage g_bootStage = BootRelayStage::Wifi;
+static BootCheckState g_bootWifiState = BootCheckState::Waiting;
+static BootCheckState g_bootMiningState = BootCheckState::Waiting;
+static BootCheckState g_bootOpenAiState = BootCheckState::Waiting;
+static BootCheckState g_bootAzureState = BootCheckState::Waiting;
+static String g_bootWifiDiag = "";
+static String g_bootMiningDiag = "";
+static String g_bootOpenAiDiag = "";
+static String g_bootAzureDiag = "";
+static String g_bootActiveDiag = "";
+static uint32_t g_bootWifiConnectedSinceMs = 0;
+static uint32_t g_bootMiningStartMs = 0;
+static uint32_t g_bootOpenAiNextCheckMs = 0;
+static int g_bootOpenAiRetryCount = 0;
+static uint32_t g_bootAzureNextCheckMs = 0;
+static int g_bootAzureRetryCount = 0;
 
 static const char *aiStateName_(AiState s) {
   switch (s) {
@@ -179,11 +203,15 @@ static OrchPrio toOrchPrio_(ReactionPriority p) {
 static bool wifiConnect_() {
   const RuntimeFeatures features = getRuntimeFeatures();
   const auto &cfg = appConfig();
-  enum WifiState { NotStarted, Connecting, Done };
+  enum WifiState { NotStarted, Connecting, RetryWait, Done };
   static WifiState s_state = NotStarted;
   static bool s_forcedOff = false;
   static uint32_t s_startMs = 0;
+  static uint32_t s_retryAtMs = 0;
+  static uint8_t s_attempt = 0;
   static const uint32_t wifiConnectTimeoutMs = 20000UL;
+  static const uint32_t wifiRetryDelayMs = 1000UL;
+  static const uint8_t wifiMaxAttempts = 2;
   if (!features.wifiEnabled_) {
     if (!s_forcedOff) {
       MC_LOGI("WIFI", "disabled by runtime config");
@@ -192,19 +220,31 @@ static bool wifiConnect_() {
       s_forcedOff = true;
       s_state = NotStarted;
     }
+    g_bootWifiState = BootCheckState::Skip;
+    g_bootWifiDiag = "WiFi is disabled in settings.";
+    return true;
+  }
+  if (!features.wifiConfigured_) {
+    g_bootWifiState = BootCheckState::Fail;
+    g_bootWifiDiag = "WiFi SSID is empty.";
     return true;
   }
   if (s_forcedOff) {
     s_forcedOff = false;
     s_state = NotStarted;
+    s_attempt = 0;
   }
   switch (s_state) {
   case NotStarted: {
+    s_attempt = 1;
     WiFi.mode(WIFI_STA);
     WiFi.begin(cfg.wifiSsid_, cfg.wifiPass_);
     s_startMs = millis();
-    MC_LOGI("WIFI", "begin connect (ssid=%s)", cfg.wifiSsid_);
+    MC_LOGI("WIFI", "begin connect (ssid=%s, attempt=%u)", cfg.wifiSsid_,
+            (unsigned)s_attempt);
     s_state = Connecting;
+    g_bootWifiState = BootCheckState::Connecting;
+    g_bootWifiDiag = "Connecting to WiFi...";
     return false;
   }
   case Connecting: {
@@ -212,82 +252,248 @@ static bool wifiConnect_() {
     if (st == WL_CONNECTED) {
       MC_EVT("WIFI", "connected: %s", WiFi.localIP().toString().c_str());
       s_state = Done;
+      g_bootWifiState = BootCheckState::Ok;
+      g_bootWifiDiag = "WiFi connection is OK.";
       return true;
     }
     if (millis() - s_startMs > wifiConnectTimeoutMs) {
-      MC_LOGW("WIFI", "connect timeout (status=%d)", (int)st);
+      MC_LOGW("WIFI", "connect timeout (status=%d attempt=%u/%u)", (int)st,
+              (unsigned)s_attempt, (unsigned)wifiMaxAttempts);
+      if (s_attempt < wifiMaxAttempts) {
+        s_attempt++;
+        WiFi.disconnect(true, false);
+        s_retryAtMs = millis() + wifiRetryDelayMs;
+        s_state = RetryWait;
+        g_bootWifiState = BootCheckState::Connecting;
+        g_bootWifiDiag = "WiFi timeout. Retrying...";
+        return false;
+      }
       s_state = Done;
+      g_bootWifiState = BootCheckState::Fail;
+      switch (st) {
+      case WL_NO_SSID_AVAIL:
+        g_bootWifiDiag = "SSID not found. Check AP name.";
+        break;
+      case WL_CONNECT_FAILED:
+        g_bootWifiDiag = "WiFi password/auth failed.";
+        break;
+      default:
+        g_bootWifiDiag = "WiFi connect timeout.";
+        break;
+      }
       return true;
     }
+    g_bootWifiState = BootCheckState::Connecting;
+    g_bootWifiDiag = "Connecting to WiFi...";
     return false;
   }
+  case RetryWait:
+    if ((int32_t)(millis() - s_retryAtMs) >= 0) {
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(cfg.wifiSsid_, cfg.wifiPass_);
+      s_startMs = millis();
+      s_state = Connecting;
+      MC_LOGI("WIFI", "retry connect (attempt=%u/%u)", (unsigned)s_attempt,
+              (unsigned)wifiMaxAttempts);
+      g_bootWifiState = BootCheckState::Connecting;
+      g_bootWifiDiag = "Connecting to WiFi...";
+    }
+    return false;
   case Done:
   default:
+    if (WiFi.status() == WL_CONNECTED) {
+      g_bootWifiState = BootCheckState::Ok;
+      g_bootWifiDiag = "WiFi connection is OK.";
+    } else if (g_bootWifiState != BootCheckState::Fail) {
+      g_bootWifiState = BootCheckState::Connecting;
+      g_bootWifiDiag = "Connecting to WiFi...";
+    }
     return true;
   }
 }
 
-static void checkOpenAiConnection_(uint32_t now) {
-  if (g_aiBootState == AiBootState::Ok)
-    return;
+static bool bootStateDone_(BootCheckState s) {
+  return s == BootCheckState::Ok || s == BootCheckState::Fail ||
+         s == BootCheckState::Skip;
+}
 
-  const RuntimeFeatures feats = getRuntimeFeatures();
-  if (!feats.wifiEnabled_ || WiFi.status() != WL_CONNECTED) {
-    g_aiBootWifiConnectedSinceMs = 0;
-    g_aiBootState = AiBootState::WifiWait;
-    g_aiBootDiag = "Waiting for WiFi...";
+static void bootRunOpenAiCheck_(uint32_t now) {
+  if (g_bootOpenAiState == BootCheckState::Ok ||
+      g_bootOpenAiState == BootCheckState::Fail) {
     return;
   }
-  if (g_aiBootWifiConnectedSinceMs == 0) {
-    g_aiBootWifiConnectedSinceMs = now;
-    g_aiBootState = AiBootState::WifiWait;
-    g_aiBootDiag = "WiFi connected. Preparing OpenAI check...";
+  if (now < g_bootOpenAiNextCheckMs) {
+    g_bootOpenAiState = BootCheckState::Connecting;
+    g_bootOpenAiDiag = "Connecting to OpenAI...";
     return;
   }
-  // Give WiFi/DNS stack a short warm-up window after association.
-  if ((now - g_aiBootWifiConnectedSinceMs) < 2000) {
-    g_aiBootState = AiBootState::WifiWait;
-    g_aiBootDiag = "Preparing OpenAI check...";
+  g_bootOpenAiState = BootCheckState::Connecting;
+  g_bootOpenAiDiag = "Connecting to OpenAI...";
+  const auto probe = openai_llm::probeConnection(8000);
+  if (probe.ok_) {
+    g_bootOpenAiState = BootCheckState::Ok;
+    g_bootOpenAiDiag = "OpenAI connection is OK.";
+    g_bootOpenAiRetryCount = 0;
+    g_bootOpenAiNextCheckMs = 0;
+    MC_LOGI("BOOT", "OpenAI probe OK");
     return;
   }
+  g_bootOpenAiState = BootCheckState::Fail;
+  g_bootOpenAiDiag =
+      probe.err_.length() ? probe.err_ : String("OpenAI probe failed");
+  static const uint32_t kBackoffMs[] = {5000, 10000, 30000};
+  const int idx = (g_bootOpenAiRetryCount < 2) ? g_bootOpenAiRetryCount : 2;
+  g_bootOpenAiNextCheckMs = now + kBackoffMs[idx];
+  g_bootOpenAiRetryCount++;
+  MC_LOGW("BOOT", "OpenAI probe NG: %s", g_bootOpenAiDiag.c_str());
+}
 
-  if (!feats.aiEnabled_) {
-    g_aiBootState = AiBootState::Fail;
-    g_aiBootDiag = "AI is disabled in settings.";
+static void bootRunAzureCheck_(uint32_t now) {
+  if (g_bootAzureState == BootCheckState::Ok ||
+      g_bootAzureState == BootCheckState::Fail) {
     return;
   }
+  if (!g_ctx.tts_) {
+    g_bootAzureState = BootCheckState::Fail;
+    g_bootAzureDiag = "TTS service is unavailable.";
+    return;
+  }
+  if (now < g_bootAzureNextCheckMs) {
+    g_bootAzureState = BootCheckState::Connecting;
+    g_bootAzureDiag = "Connecting to Azure...";
+    return;
+  }
+  g_bootAzureState = BootCheckState::Connecting;
+  g_bootAzureDiag = "Connecting to Azure...";
+  g_ctx.tts_->begin(mcCfgSpkVolume());
+  const bool ok = g_ctx.tts_->testCredentials();
+  if (ok) {
+    g_bootAzureState = BootCheckState::Ok;
+    g_bootAzureDiag = "Azure connection is OK.";
+    g_bootAzureRetryCount = 0;
+    g_bootAzureNextCheckMs = 0;
+    MC_LOGI("BOOT", "Azure probe OK");
+    return;
+  }
+  g_bootAzureState = BootCheckState::Fail;
+  g_bootAzureDiag = "Azure credential check failed.";
+  static const uint32_t kBackoffMs[] = {5000, 10000, 30000};
+  const int idx = (g_bootAzureRetryCount < 2) ? g_bootAzureRetryCount : 2;
+  g_bootAzureNextCheckMs = now + kBackoffMs[idx];
+  g_bootAzureRetryCount++;
+  MC_LOGW("BOOT", "Azure probe NG");
+}
 
-  switch (g_aiBootState) {
-  case AiBootState::Init:
-  case AiBootState::WifiWait:
-  case AiBootState::Fail:
-    if (now >= g_aiBootNextCheckMs) {
-      g_aiBootState = AiBootState::Checking;
-      g_aiBootDiag = "Checking OpenAI connection...";
+static void updateBootChecks_(uint32_t now, const RuntimeFeatures &features,
+                              const MiningSummary &summary) {
+  if (g_bootWifiState == BootCheckState::Ok) {
+    if (g_bootWifiConnectedSinceMs == 0) {
+      g_bootWifiConnectedSinceMs = now;
     }
-    break;
+  } else {
+    g_bootWifiConnectedSinceMs = 0;
+  }
 
-  case AiBootState::Checking: {
-    const auto probe = openai_llm::probeConnection(8000);
-    if (probe.ok_) {
-      g_aiBootState = AiBootState::Ok;
-      g_aiBootDiag = "OpenAI connection is OK.";
-      g_aiBootNextCheckMs = 0;
-      g_aiBootRetryCount = 0;
-      MC_LOGI("BOOT", "OpenAI probe OK");
+  if (!features.miningEnabled_) {
+    g_bootMiningState = BootCheckState::Skip;
+    g_bootMiningDiag = "Mining is disabled.";
+  } else if (g_bootWifiState != BootCheckState::Ok) {
+    g_bootMiningState = BootCheckState::Waiting;
+    g_bootMiningDiag = "Waiting for WiFi...";
+    g_bootMiningStartMs = 0;
+  } else if (summary.anyConnected_) {
+    g_bootMiningState = BootCheckState::Ok;
+    g_bootMiningDiag = "Mining pool connection is OK.";
+  } else {
+    if (g_bootMiningStartMs == 0) {
+      g_bootMiningStartMs = now;
+    }
+    const uint32_t miningTimeoutMs = 15000UL;
+    if ((now - g_bootMiningStartMs) > miningTimeoutMs) {
+      g_bootMiningState = BootCheckState::Fail;
+      g_bootMiningDiag = summary.poolDiag_.length()
+                             ? summary.poolDiag_
+                             : String("Mining pool connection failed.");
     } else {
-      g_aiBootState = AiBootState::Fail;
-      g_aiBootDiag = probe.err_.length() ? probe.err_ : String("OpenAI probe failed");
-      static const uint32_t kBackoffMs[] = {5000, 10000, 30000};
-      const int idx = (g_aiBootRetryCount < 2) ? g_aiBootRetryCount : 2;
-      g_aiBootNextCheckMs = now + kBackoffMs[idx];
-      g_aiBootRetryCount++;
-      MC_LOGW("BOOT", "OpenAI probe NG: %s", g_aiBootDiag.c_str());
+      g_bootMiningState = BootCheckState::Connecting;
+      g_bootMiningDiag = "Connecting to mining pool...";
     }
-    break;
   }
-  default:
-    break;
+
+  if (!features.aiEnabled_) {
+    g_bootOpenAiState = BootCheckState::Skip;
+    g_bootOpenAiDiag = "OpenAI is disabled.";
+  } else if (g_bootWifiState != BootCheckState::Ok) {
+    g_bootOpenAiState = BootCheckState::Waiting;
+    g_bootOpenAiDiag = "Waiting for WiFi...";
+  } else if (features.miningEnabled_ && !bootStateDone_(g_bootMiningState)) {
+    g_bootOpenAiState = BootCheckState::Waiting;
+    g_bootOpenAiDiag = "Waiting for Mining check...";
+  } else if (g_bootMiningState == BootCheckState::Fail) {
+    g_bootOpenAiState = BootCheckState::Waiting;
+    g_bootOpenAiDiag = "Waiting for Mining check...";
+  } else if ((now - g_bootWifiConnectedSinceMs) < 2000) {
+    g_bootOpenAiState = BootCheckState::Connecting;
+    g_bootOpenAiDiag = "Connecting to OpenAI...";
+  } else {
+    bootRunOpenAiCheck_(now);
+  }
+
+  if (!features.ttsEnabled_) {
+    g_bootAzureState = BootCheckState::Skip;
+    g_bootAzureDiag = "Azure TTS is disabled.";
+  } else if (g_bootWifiState != BootCheckState::Ok) {
+    g_bootAzureState = BootCheckState::Waiting;
+    g_bootAzureDiag = "Waiting for WiFi...";
+  } else if (features.aiEnabled_ && !bootStateDone_(g_bootOpenAiState)) {
+    g_bootAzureState = BootCheckState::Waiting;
+    g_bootAzureDiag = "Waiting for OpenAI check...";
+  } else if (g_bootOpenAiState == BootCheckState::Fail) {
+    g_bootAzureState = BootCheckState::Waiting;
+    g_bootAzureDiag = "Waiting for OpenAI check...";
+  } else if ((now - g_bootWifiConnectedSinceMs) < 2000) {
+    g_bootAzureState = BootCheckState::Connecting;
+    g_bootAzureDiag = "Connecting to Azure...";
+  } else {
+    bootRunAzureCheck_(now);
+  }
+
+  if (g_bootWifiState == BootCheckState::Fail) {
+    g_bootStage = BootRelayStage::Wifi;
+    g_bootActiveDiag = g_bootWifiDiag;
+    return;
+  }
+  if (g_bootMiningState == BootCheckState::Fail) {
+    g_bootStage = BootRelayStage::Mining;
+    g_bootActiveDiag = g_bootMiningDiag;
+    return;
+  }
+  if (g_bootOpenAiState == BootCheckState::Fail) {
+    g_bootStage = BootRelayStage::OpenAi;
+    g_bootActiveDiag = g_bootOpenAiDiag;
+    return;
+  }
+  if (g_bootAzureState == BootCheckState::Fail) {
+    g_bootStage = BootRelayStage::Azure;
+    g_bootActiveDiag = g_bootAzureDiag;
+    return;
+  }
+
+  if (g_bootWifiState != BootCheckState::Ok) {
+    g_bootStage = BootRelayStage::Wifi;
+    g_bootActiveDiag = g_bootWifiDiag;
+  } else if (!bootStateDone_(g_bootMiningState)) {
+    g_bootStage = BootRelayStage::Mining;
+    g_bootActiveDiag = g_bootMiningDiag;
+  } else if (!bootStateDone_(g_bootOpenAiState)) {
+    g_bootStage = BootRelayStage::OpenAi;
+    g_bootActiveDiag = g_bootOpenAiDiag;
+  } else if (!bootStateDone_(g_bootAzureState)) {
+    g_bootStage = BootRelayStage::Azure;
+    g_bootActiveDiag = g_bootAzureDiag;
+  } else {
+    g_bootStage = BootRelayStage::Done;
+    g_bootActiveDiag = "All checks passed.";
   }
 }
 
@@ -306,10 +512,22 @@ void appRuntimeInit(const AppRuntimeContext &ctx) {
   g_lastUiMs = 0;
   g_lastInputMs = millis();
   g_displaySleeping = false;
-  g_aiBootState = AiBootState::Init;
-  g_aiBootDiag = "";
-  g_aiBootNextCheckMs = 0;
-  g_aiBootRetryCount = 0;
+  g_bootStage = BootRelayStage::Wifi;
+  g_bootWifiState = BootCheckState::Waiting;
+  g_bootMiningState = BootCheckState::Waiting;
+  g_bootOpenAiState = BootCheckState::Waiting;
+  g_bootAzureState = BootCheckState::Waiting;
+  g_bootWifiDiag = "";
+  g_bootMiningDiag = "";
+  g_bootOpenAiDiag = "";
+  g_bootAzureDiag = "";
+  g_bootActiveDiag = "";
+  g_bootWifiConnectedSinceMs = 0;
+  g_bootMiningStartMs = 0;
+  g_bootOpenAiNextCheckMs = 0;
+  g_bootOpenAiRetryCount = 0;
+  g_bootAzureNextCheckMs = 0;
+  g_bootAzureRetryCount = 0;
 }
 
 void appRuntimeTick(uint32_t now) {
@@ -317,14 +535,6 @@ void appRuntimeTick(uint32_t now) {
     return;
 
   const RuntimeFeatures runtimeFeatures = getRuntimeFeatures();
-  if (!runtimeFeatures.miningEnabled_) {
-    checkOpenAiConnection_(now);
-  } else if (g_aiBootState != AiBootState::Init || g_aiBootDiag.length()) {
-    g_aiBootState = AiBootState::Init;
-    g_aiBootDiag = "";
-    g_aiBootNextCheckMs = 0;
-    g_aiBootRetryCount = 0;
-  }
   if (runtimeFeatures.aiEnabled_) {
     g_ctx.ai_->tick(now);
     {
@@ -583,9 +793,23 @@ void appRuntimeTick(uint32_t now) {
       ns = NetworkStatus::Unknown;
       break;
     }
+    updateBootChecks_(now, runtimeFeatures, summary);
+    int legacyBootStatus = 0;
+    if (g_bootOpenAiState == BootCheckState::Ok) {
+      legacyBootStatus = 3;
+    } else if (g_bootOpenAiState == BootCheckState::Fail) {
+      legacyBootStatus = 4;
+    } else if (g_bootOpenAiState == BootCheckState::Connecting) {
+      legacyBootStatus = 2;
+    } else if (g_bootWifiState != BootCheckState::Ok) {
+      legacyBootStatus = 1;
+    }
     buildPanelData(summary, ui, data, ns, runtimeFeatures.aiEnabled_,
-                   g_aiBootState == AiBootState::Ok, g_aiBootDiag,
-                   (int)g_aiBootState);
+                   g_bootOpenAiState == BootCheckState::Ok, g_bootOpenAiDiag,
+                   legacyBootStatus, (uint8_t)g_bootWifiState,
+                   (uint8_t)g_bootMiningState, (uint8_t)g_bootOpenAiState,
+                   (uint8_t)g_bootAzureState, g_bootWifiDiag, g_bootMiningDiag,
+                   g_bootOpenAiDiag, g_bootAzureDiag, g_bootActiveDiag);
     g_ctx.behavior_->update(data, now);
     StackchanReaction reaction;
     bool gotReaction = false;

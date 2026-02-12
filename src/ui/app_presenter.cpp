@@ -24,7 +24,11 @@ String buildTicker(const MiningSummary &s) {
 void buildPanelData(const MiningSummary &summary, UIMining &ui,
                     UIMining::PanelData &data, NetworkStatus netStatus,
                     bool aiEnabled, bool aiReady, const String &aiDiag,
-                    int bootStatus) {
+                    int bootStatus, uint8_t bootWifiState,
+                    uint8_t bootMiningState, uint8_t bootOpenAiState,
+                    uint8_t bootAzureState, const String &bootWifiDiag,
+                    const String &bootMiningDiag, const String &bootOpenAiDiag,
+                    const String &bootAzureDiag, const String &bootActiveDiag) {
   const auto &cfg = appConfig();
   data.hrKh_ = summary.totalKh_;
   data.accepted_ = summary.accepted_;
@@ -64,4 +68,13 @@ void buildPanelData(const MiningSummary &summary, UIMining &ui,
   data.aiReady_ = aiReady;
   data.aiDiag_ = aiDiag;
   data.bootStatus_ = bootStatus;
+  data.bootWifiState_ = bootWifiState;
+  data.bootMiningState_ = bootMiningState;
+  data.bootOpenAiState_ = bootOpenAiState;
+  data.bootAzureState_ = bootAzureState;
+  data.bootWifiDiag_ = bootWifiDiag;
+  data.bootMiningDiag_ = bootMiningDiag;
+  data.bootOpenAiDiag_ = bootOpenAiDiag;
+  data.bootAzureDiag_ = bootAzureDiag;
+  data.bootActiveDiag_ = bootActiveDiag;
 }
