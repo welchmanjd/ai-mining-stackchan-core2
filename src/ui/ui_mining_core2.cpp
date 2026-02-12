@@ -34,8 +34,8 @@ void UIMining::begin(const char *appName, const char *appVer) {
   d.setBrightness(128);
   avatar_.setScale(0.45f);
   avatar_.setPosition(-12, -88);
-  // Use a Japanese-capable font (size ~8) so bubble text renders correctly.
-  avatar_.setSpeechFont(&fonts::lgfxJapanMinchoP_8);
+  // Use a readable Japanese font for speech balloons.
+  avatar_.setSpeechFont(&fonts::efontJA_12);
   avatar_.setSpeechText("");
   // Off-screen sprites reduce flicker during partial redraws.
   info_.setColorDepth(8);
@@ -365,18 +365,50 @@ void UIMining::setStackchanSpeech(const String &text) {
   // Format: trim to 20 chars and insert a manual wrap to keep the balloon
   // narrow.
   auto formatBubble = [](const String &in) -> String {
-    const size_t maxLen = 20;
+    auto bytesForUtf8Chars = [](const String &s, size_t maxChars) -> size_t {
+      const size_t n = s.length();
+      size_t i = 0;
+      size_t chars = 0;
+      while (i < n && chars < maxChars) {
+        uint8_t c = (uint8_t)s[i];
+        size_t L = 1;
+        if (c < 0x80) {
+          L = 1;
+        } else if ((c & 0xE0) == 0xC0) {
+          L = 2;
+        } else if ((c & 0xF0) == 0xE0) {
+          L = 3;
+        } else if ((c & 0xF8) == 0xF0) {
+          L = 4;
+        }
+        if (i + L > n) break;
+        bool ok = true;
+        for (size_t k = 1; k < L; ++k) {
+          uint8_t cc = (uint8_t)s[i + k];
+          if ((cc & 0xC0) != 0x80) {
+            ok = false;
+            break;
+          }
+        }
+        i += ok ? L : 1;
+        chars++;
+      }
+      return i;
+    };
+
+    const size_t maxChars = 20;
     String s = in;
-    if (s.length() > maxLen) {
-      s = s.substring(0, maxLen);
+    const size_t maxBytes = bytesForUtf8Chars(s, maxChars);
+    if (maxBytes < s.length()) {
+      s = s.substring(0, maxBytes);
       s += "..."; // ellipsis after trim
     }
-    // Insert a newline after ~8 chars to clamp width (only if there's more than
-    // 8 chars).
-    const size_t wrapPos = 8;
-    if (s.length() > wrapPos) {
-      String first = s.substring(0, wrapPos);
-      String rest = s.substring(wrapPos);
+    // Insert a newline after ~8 UTF-8 chars to clamp width.
+    const size_t wrapChars = 8;
+    const size_t wrapBytes = bytesForUtf8Chars(s, wrapChars);
+    if (wrapBytes < s.length()) {
+      String first = s.substring(0, wrapBytes);
+      String rest = s.substring(wrapBytes);
       s = first + "\n" + rest;
     }
     return s;

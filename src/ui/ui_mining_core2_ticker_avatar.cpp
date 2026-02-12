@@ -3,8 +3,20 @@
 
 #include <WiFi.h>
 
+#include "config/config.h"
 #include "utils/logging.h"
 #include "utils/mining_status.h"
+
+static bool isAiStatusBubbleText_(const String& rawText) {
+  String t = rawText;
+  t.replace("\r", "");
+  t.replace("\n", "");
+  t.trim();
+  if (t == "聞いてるよ") return true;
+  if (t == "聞いているよ") return true;
+  if (t == String(MC_AI_TEXT_THINKING)) return true;
+  return false;
+}
 // ===== Ticker =====
 void UIMining::drawTicker(const String& text) {
   String incoming = text;
@@ -148,6 +160,7 @@ void UIMining::updateAvatarLiveliness() {
   uint32_t now = millis();
   // bubble text showing? used to modify gaze/mouth behavior
   const bool bubbleActive = inStackchanMode_ && (stackchanBubbleText_.length() > 0);
+  const bool aiStatusBubble = bubbleActive && isAiStatusBubbleText_(stackchanBubbleText_);
   float energy = 0.9f;      // neutral
   float eyeOpen = 1.0f;
   float gazeAmp = 1.0f;
@@ -216,7 +229,7 @@ void UIMining::updateAvatarLiveliness() {
   s_state.count = (s_state.count + step) % 100;
   float breath = sinf(s_state.count * 2.0f * PI / 100.0f);
   avatar_.setBreath(breath * energy);
-  if (bubbleActive) {
+  if (bubbleActive && !aiStatusBubble) {
     float t = millis() * 0.02f;
     float mouth = 0.35f + 0.35f * (sinf(t) * 0.5f + 0.5f);
     avatar_.setMouthOpenRatio(mouth);
