@@ -74,6 +74,7 @@ static AiBootState g_aiBootState = AiBootState::Init;
 static String g_aiBootDiag = "";
 static uint32_t g_aiBootNextCheckMs = 0;
 static int g_aiBootRetryCount = 0;
+static uint32_t g_aiBootWifiConnectedSinceMs = 0;
 
 static const char *aiStateName_(AiState s) {
   switch (s) {
@@ -232,8 +233,21 @@ static void checkOpenAiConnection_(uint32_t now) {
 
   const RuntimeFeatures feats = getRuntimeFeatures();
   if (!feats.wifiEnabled_ || WiFi.status() != WL_CONNECTED) {
+    g_aiBootWifiConnectedSinceMs = 0;
     g_aiBootState = AiBootState::WifiWait;
     g_aiBootDiag = "Waiting for WiFi...";
+    return;
+  }
+  if (g_aiBootWifiConnectedSinceMs == 0) {
+    g_aiBootWifiConnectedSinceMs = now;
+    g_aiBootState = AiBootState::WifiWait;
+    g_aiBootDiag = "WiFi connected. Preparing OpenAI check...";
+    return;
+  }
+  // Give WiFi/DNS stack a short warm-up window after association.
+  if ((now - g_aiBootWifiConnectedSinceMs) < 2000) {
+    g_aiBootState = AiBootState::WifiWait;
+    g_aiBootDiag = "Preparing OpenAI check...";
     return;
   }
 
@@ -254,7 +268,7 @@ static void checkOpenAiConnection_(uint32_t now) {
     break;
 
   case AiBootState::Checking: {
-    const auto probe = openai_llm::probeConnection(5000);
+    const auto probe = openai_llm::probeConnection(8000);
     if (probe.ok_) {
       g_aiBootState = AiBootState::Ok;
       g_aiBootDiag = "OpenAI connection is OK.";
@@ -316,7 +330,13 @@ void appRuntimeTick(uint32_t now) {
     {
       String aiBubbleText;
       if (g_ctx.ai_->consumeBubbleUpdate(&aiBubbleText)) {
-        bubbleShow_(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
+        // Keep AI bubble timing aligned with actual TTS audio start.
+        // (TTS path updates speech text from tts_coordinator on audio start.)
+        if (aiBubbleText.length() == 0) {
+          bubbleClear_("ai_update", true);
+        } else if (!runtimeFeatures.ttsEnabled_) {
+          bubbleShow_(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
+        }
       }
     }
     static uint32_t s_lastOverlayPushMs = 0;

@@ -81,6 +81,8 @@ public:
 private:
   M5Canvas overlaySprite_;
   AiUiOverlay aiOverlay_{};
+  bool aiOverlayDirty_ = true;
+  bool aiOverlayVisible_ = false;
   UIMining();
   // ---------- Spec constants (relative to right panel origin) ----------
   static constexpr int kPadLr = 4;

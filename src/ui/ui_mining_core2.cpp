@@ -47,6 +47,8 @@ void UIMining::begin(const char *appName, const char *appVer) {
   overlaySprite_.setColorDepth(8);
   overlaySprite_.createSprite(W, 30);
   overlaySprite_.setTextWrap(false);
+  aiOverlayDirty_ = true;
+  aiOverlayVisible_ = false;
   lastPageMs_ = millis();
   lastShareMs_ = 0;
   lastTotalShares_ = 0;
@@ -256,6 +258,11 @@ void UIMining::drawAll(const PanelData &p, const String &tickerText,
     }
     bool ready = okNow && (now - splashStartMs_ > 3000) &&
                  (splashReadyMs_ != 0) && (now - splashReadyMs_ > 1000);
+    // In AI-only mode, do not block forever on OpenAI probe NG.
+    if (!ready && !p.miningEnabled_ && p.aiEnabled_ && p.bootStatus_ == 4 &&
+        (now - splashStartMs_ > 12000)) {
+      ready = true;
+    }
     if (!ready) {
       return;
     }
@@ -352,23 +359,34 @@ void UIMining::drawStackchanScreen(const PanelData &p) {
   avatar_.draw();
   // ---- AI overlay ----
   if (aiOverlay_.active_) {
-    overlaySprite_.fillScreen(TFT_BLACK);
-    overlaySprite_.setTextDatum(textdatum_t::top_left);
-    overlaySprite_.setTextColor(TFT_WHITE, TFT_BLACK);
-    overlaySprite_.setTextSize(1);
-    if (aiOverlay_.line1_.length() > 0) {
-      overlaySprite_.drawString(aiOverlay_.line1_, 4, 4);
-    }
-    if (aiOverlay_.line2_.length() > 0) {
-      overlaySprite_.drawString(aiOverlay_.line2_, 4, 4 + 12);
-    }
-    if (aiOverlay_.hint_.length() > 0) {
-      overlaySprite_.setTextDatum(textdatum_t::top_right);
+    if (aiOverlayDirty_ || !aiOverlayVisible_) {
+      overlaySprite_.fillScreen(TFT_BLACK);
+      overlaySprite_.setTextDatum(textdatum_t::top_left);
       overlaySprite_.setTextColor(TFT_WHITE, TFT_BLACK);
       overlaySprite_.setTextSize(1);
-      overlaySprite_.drawString(aiOverlay_.hint_, W - 4, 4);
+      if (aiOverlay_.line1_.length() > 0) {
+        overlaySprite_.drawString(aiOverlay_.line1_, 4, 4);
+      }
+      if (aiOverlay_.line2_.length() > 0) {
+        overlaySprite_.drawString(aiOverlay_.line2_, 4, 4 + 12);
+      }
+      if (aiOverlay_.hint_.length() > 0) {
+        overlaySprite_.setTextDatum(textdatum_t::top_right);
+        overlaySprite_.setTextColor(TFT_WHITE, TFT_BLACK);
+        overlaySprite_.setTextSize(1);
+        overlaySprite_.drawString(aiOverlay_.hint_, W - 4, 4);
+      }
+      aiOverlayDirty_ = false;
+      aiOverlayVisible_ = true;
     }
+    // Avatar redraw may overpaint the top area each frame, so re-blit the
+    // prepared overlay sprite every frame while active.
     overlaySprite_.pushSprite(0, 0);
+  } else if (aiOverlayVisible_) {
+    overlaySprite_.fillScreen(TFT_BLACK);
+    overlaySprite_.pushSprite(0, 0);
+    aiOverlayVisible_ = false;
+    aiOverlayDirty_ = false;
   }
   d.clearClipRect();
 }
@@ -394,12 +412,25 @@ void UIMining::setStackchanSpeech(const String &text) {
     }
     return s;
   };
-  stackchanBubbleText_ = formatBubble(text);
-  stackchanSpeechDesired_ = stackchanBubbleText_;
+  const String formatted = formatBubble(text);
+  if (formatted == stackchanBubbleText_ && !stackchanSpeechPending_) {
+    return;
+  }
+  stackchanBubbleText_ = formatted;
+  stackchanSpeechDesired_ = formatted;
   stackchanSpeechPending_ = true;
-  stackchanNeedsClear_ = true;
 }
-void UIMining::setAiOverlay(const AiUiOverlay &ov) { aiOverlay_ = ov; }
+void UIMining::setAiOverlay(const AiUiOverlay &ov) {
+  const bool changed = (aiOverlay_.active_ != ov.active_) ||
+                       (aiOverlay_.line1_ != ov.line1_) ||
+                       (aiOverlay_.line2_ != ov.line2_) ||
+                       (aiOverlay_.hint_ != ov.hint_) ||
+                       (aiOverlay_.state_ != ov.state_);
+  aiOverlay_ = ov;
+  if (changed) {
+    aiOverlayDirty_ = true;
+  }
+}
 void UIMining::setStackchanExpression(m5avatar::Expression exp) {
   // Defer avatar touching to drawStackchanScreen().
   stackchanExprDesired_ = exp;

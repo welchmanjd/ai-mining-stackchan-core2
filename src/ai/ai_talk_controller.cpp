@@ -703,12 +703,22 @@ void AiTalkController::updateOverlay_(uint32_t nowMs) {
   }
   case AiState::Thinking: {
     overlay_.hint_ = MC_AI_THINKING_HINT_TEXT;
+    if (!sttStartedLlm_) {
+      overlay_.line1_ = "STT...";
+      overlay_.line2_ = "";
+      return;
+    }
     if (!lastSttOk_) {
       overlay_.line1_ = "STT: ERR";
       String head = mcLogHead(lastUserText_, MC_AI_LOG_HEAD_BYTES_OVERLAY);
       if (!head.length())
         head = "...";
       overlay_.line2_ = head;
+      return;
+    }
+    if (!replyReady_) {
+      overlay_.line1_ = "LLM...";
+      overlay_.line2_ = "";
       return;
     }
     overlay_.line1_ = lastLlmOk_ ? "LLM: OK" : "LLM: ERR";
