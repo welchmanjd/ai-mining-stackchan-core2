@@ -364,6 +364,9 @@
 #ifndef MC_BUILD_ID
   #define MC_BUILD_ID "unknown"
 #endif
+#ifndef MC_APP_VERSION
+  #define MC_APP_VERSION "0.0.0"
+#endif
 // ---------------------------------------------------------
 // ---------------------------------------------------------
 struct AppConfig {
@@ -404,7 +407,7 @@ inline const AppConfig& appConfig() {
     "",
     // app
     "Mining-Stackchan-Core2", // app_name
-    "0.764",                  // app_version
+    MC_APP_VERSION,           // app_version
     MC_BUILD_ID,              // app_build_id
     // attention
     "",
