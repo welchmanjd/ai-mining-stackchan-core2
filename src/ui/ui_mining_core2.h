@@ -186,7 +186,8 @@ private:
   void prepHeaderFont();
   // ---------- Header + dots ----------
   void drawDots(const TextLayoutY &ly);
-  void drawHeader(const char *title, const TextLayoutY &ly);
+  void drawHeader(const char *title, const TextLayoutY &ly,
+                  bool miningEnabled);
   // ---------- Line primitive ----------
   void drawLine(int y, const char *label4, const String &value,
                 uint16_t colLabel, uint16_t colValue);

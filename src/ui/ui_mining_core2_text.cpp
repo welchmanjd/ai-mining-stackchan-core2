@@ -28,7 +28,8 @@ void UIMining::drawDots(const TextLayoutY& ly) {
     else                 info_.drawCircle(xs[i], ly.indY, kIndR, inactive);
   }
 }
-void UIMining::drawHeader(const char* title, const TextLayoutY& ly) {
+void UIMining::drawHeader(const char* title, const TextLayoutY& ly,
+                          bool miningEnabled) {
   info_.fillRect(0, ly.header, INF_W, 8, BLACK);
   prepHeaderFont();
   info_.setTextColor(TFT_CYAN, BLACK);
@@ -42,6 +43,11 @@ void UIMining::drawHeader(const char* title, const TextLayoutY& ly) {
   if (x < kPadLr) x = kPadLr;
   info_.setCursor(x, ly.header);
   info_.print(t);
+  if (!miningEnabled) {
+    info_.setTextColor(WHITE, BLACK);
+    info_.setCursor(98, ly.header);
+    info_.print("MINING OFF");
+  }
   drawDots(ly);
 }
 // ===== Line primitive =====
@@ -253,7 +259,11 @@ String UIMining::vBatt() {
 void UIMining::drawPage0(const PanelData& p) {
   // Mining summary page.
   auto ly = computeTextLayoutY();
-  drawHeader("MINING STATUS", ly);
+  drawHeader("MINING STATUS", ly, p.miningEnabled_);
+  if (!p.miningEnabled_) {
+    drawLine(ly.y1, "MINE", " OFF", WHITE, WHITE);
+    return;
+  }
   drawLine(ly.y1, "HASH", vHash(p.hrKh_), kColLabel, cHash(p));
   uint8_t success = 0;
   String shrVal = vShare(p.accepted_, p.rejected_, success);
@@ -265,7 +275,7 @@ void UIMining::drawPage0(const PanelData& p) {
 void UIMining::drawPage1(const PanelData& p) {
   // Device health/status page.
   auto ly = computeTextLayoutY();
-  drawHeader("DEVICE STATUS", ly);
+  drawHeader("DEVICE STATUS", ly, p.miningEnabled_);
   drawLine(ly.y1, "UP  ", vUp(p.elapsedS_), kColLabel, WHITE);
   float tc = readTempC();
   drawLine(ly.y2, "TEMP", vTemp(tc), kColLabel, cTemp(tc));
@@ -277,7 +287,7 @@ void UIMining::drawPage1(const PanelData& p) {
 void UIMining::drawPage2(const PanelData& p) {
   // Network status page.
   auto ly = computeTextLayoutY();
-  drawHeader("NETWORK", ly);
+  drawHeader("NETWORK", ly, p.miningEnabled_);
   String nv = vNet(p);
   drawLine(ly.y1, "NET ", nv, kColLabel, cNet(nv));
   String pv;

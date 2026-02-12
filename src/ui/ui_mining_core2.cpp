@@ -293,7 +293,12 @@ void UIMining::drawAll(const PanelData &p, const String &tickerText,
     drawStaticFrame();
   }
   handlePageInput(suppressTouchBeep);
-  drawTicker(tickerText);
+  if (p.miningEnabled_) {
+    drawTicker(tickerText);
+  } else {
+    tick_.fillScreen(BLACK);
+    tick_.pushSprite(0, Y_LOG);
+  }
   static uint32_t s_lastDrawMs = 0;
   if (now - s_lastDrawMs < 80) {
     return;
