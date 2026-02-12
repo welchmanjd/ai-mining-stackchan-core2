@@ -554,7 +554,7 @@ void UIMining::drawSplash(const String &wifiText, uint16_t wifiCol,
     info_.print(s);
     y += 18;
   };
-  drawCenter("Mining-");
+  drawCenter("AI-Mining");
   drawCenter("Stackchan");
   y += 6;
   auto drawGroup = [&](const char *label, const String &status, uint16_t col) {
