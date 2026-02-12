@@ -553,7 +553,16 @@ void appRuntimeTick(uint32_t now) {
     MiningSummary summary;
     updateMiningSummary(summary);
     if (g_bubbleOnlyActive && (int32_t)(g_bubbleOnlyUntilMs - now) <= 0) {
-      bubbleClear_("timeout", false);
+      const AiState aiStateNow = g_ctx.ai_->state();
+      const bool holdAiStatusBubble =
+          (g_bubbleOnlySource == BubbleSource::Ai) &&
+          (aiStateNow == AiState::Listening || aiStateNow == AiState::Thinking);
+      if (holdAiStatusBubble) {
+        // Keep "listening/thinking" status bubble visible while AI is in that state.
+        g_bubbleOnlyUntilMs = now + 1000;
+      } else {
+        bubbleClear_("timeout", false);
+      }
     }
     UIMining::PanelData data;
     NetworkStatus ns = NetworkStatus::Unknown;
