@@ -147,7 +147,7 @@ void AudioRecorder::endMic_() {
       MC_LOGW("REC", "endMic: temp lockForMic failed (continue cleanup)");
     }
   }
-  waitMicIdle_(200);
+  waitMicIdle_(MC_REC_MIC_IDLE_WAIT_MS);
   MC_LOGD("REC", "mic end");
   M5.Mic.end();
   delay(20);
@@ -193,7 +193,8 @@ void AudioRecorder::freeBuffer_() {
 bool AudioRecorder::startTask_() {
   if (task_) return true;
   BaseType_t ok = xTaskCreatePinnedToCore(
-      taskEntry_, "recTask", 4096, this, 2, &task_, 1 /* core1 */);
+      taskEntry_, "recTask", MC_REC_TASK_STACK_SIZE, this, MC_REC_TASK_PRIO,
+      &task_, 1 /* core1 */);
   if (ok != pdPASS) {
     task_ = nullptr;
     MC_LOGE("REC", "task create FAIL");
@@ -310,7 +311,7 @@ bool AudioRecorder::stop(uint32_t nowMs) {
   requestStop_(false);
   bool ok = waitTaskDone_(2000);
   stopMs_ = nowMs;
-  waitMicIdle_(200);
+  waitMicIdle_(MC_REC_MIC_IDLE_WAIT_MS);
   MC_LOGD("REC", "stop finalize mic: rec=%d en=%d",
           M5.Mic.isRecording() ? 1 : 0,
           M5.Mic.isEnabled() ? 1 : 0);
@@ -346,7 +347,7 @@ void AudioRecorder::cancel() {
   requestStop_(true);
   waitTaskDone_(2000);
   freeBuffer_();
-  waitMicIdle_(200);
+  waitMicIdle_(MC_REC_MIC_IDLE_WAIT_MS);
   MC_LOGD("REC", "cancel finalize mic: rec=%d en=%d",
           M5.Mic.isRecording() ? 1 : 0,
           M5.Mic.isEnabled() ? 1 : 0);
@@ -447,7 +448,7 @@ void AudioRecorder::taskLoop_() {
       vTaskDelay(pdMS_TO_TICKS(2));
     }
     if (naturalEnd) {
-      waitMicIdle_(200);
+      waitMicIdle_(MC_REC_MIC_IDLE_WAIT_MS);
       MC_LOGD("REC", "autoStop finalize mic: rec=%d en=%d",
               M5.Mic.isRecording() ? 1 : 0,
               M5.Mic.isEnabled() ? 1 : 0);

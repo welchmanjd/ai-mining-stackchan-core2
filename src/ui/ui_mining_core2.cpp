@@ -12,6 +12,7 @@
 #endif
 #include <WiFi.h>
 
+#include "config/config.h"
 #include "utils/logging.h"
 // ===== Singleton / ctor =====
 UIMining &UIMining::instance() {
@@ -31,8 +32,8 @@ void UIMining::begin(const char *appName, const char *appVer) {
   auto &d = M5.Display;
   // Base display setup: rotation, brightness, and sprite buffers.
   d.setRotation(1);
-  d.setBrightness(128);
-  avatar_.setScale(0.45f);
+  d.setBrightness(MC_UI_DEFAULT_BRIGHTNESS);
+  avatar_.setScale(MC_UI_AVATAR_SCALE_MINI);
   avatar_.setPosition(-12, -88);
   // Use a readable Japanese font for speech balloons.
   avatar_.setSpeechFont(&fonts::efontJA_12);
@@ -90,7 +91,7 @@ void UIMining::onEnterStackchanMode() {
   stackchanPhaseStartMs_ = millis();
   stackchanPhaseDurMs_ = 0;
   stackchanBubbleText_ = "";
-  avatar_.setScale(1.0f);
+  avatar_.setScale(MC_UI_AVATAR_SCALE_FULL);
   avatar_.setPosition(0, 0);
   avatar_.setSpeechText("");
 }
@@ -102,7 +103,7 @@ void UIMining::onLeaveStackchanMode() {
   stackchanPhaseDurMs_ = 0;
   stackchanBubbleText_ = "";
   avatar_.setSpeechText("");
-  avatar_.setScale(0.45f);
+  avatar_.setScale(MC_UI_AVATAR_SCALE_MINI);
   avatar_.setPosition(-12, -88);
 }
 void UIMining::triggerAttention(uint32_t durationMs, const char *text) {
@@ -300,7 +301,7 @@ void UIMining::drawAll(const PanelData &p, const String &tickerText,
     tick_.pushSprite(0, Y_LOG);
   }
   static uint32_t s_lastDrawMs = 0;
-  if (now - s_lastDrawMs < 80) {
+  if (now - s_lastDrawMs < MC_UI_REFRESH_INTERVAL_MS) {
     return;
   }
   s_lastDrawMs = now;
@@ -308,7 +309,7 @@ void UIMining::drawAll(const PanelData &p, const String &tickerText,
   drawInfo(p);
 #ifndef DISABLE_AVATAR
   auto &d = M5.Display;
-  avatar_.setScale(0.45f);
+  avatar_.setScale(MC_UI_AVATAR_SCALE_MINI);
   avatar_.setPosition(-12, -88);
   avatar_.setSpeechText("");
   d.setClipRect(0, 0, AV_W, AV_H);
@@ -322,7 +323,7 @@ void UIMining::drawStackchanScreen(const PanelData &p) {
   auto &d = M5.Display;
   uint32_t now = millis();
   static uint32_t s_lastFrameMs = 0;
-  if (now - s_lastFrameMs < 80) {
+  if (now - s_lastFrameMs < MC_UI_REFRESH_INTERVAL_MS) {
     return;
   }
   s_lastFrameMs = now;
@@ -331,7 +332,7 @@ void UIMining::drawStackchanScreen(const PanelData &p) {
     d.fillScreen(BLACK);
     stackchanNeedsClear_ = false;
   }
-  avatar_.setScale(1.0f);
+  avatar_.setScale(MC_UI_AVATAR_SCALE_FULL);
   int bubbleLines = 1;
   for (int i = 0; i < stackchanBubbleText_.length(); ++i) {
     if (stackchanBubbleText_.charAt(i) == '\n')
@@ -350,7 +351,7 @@ void UIMining::drawStackchanScreen(const PanelData &p) {
   // Log only on attention state changes and with low-rate heartbeat.
   static uint32_t s_lastUiHbMs = 0;
   static bool s_prevAttnActive = false;
-  const uint32_t uiHeartbeatMs = 5000;
+  const uint32_t uiHeartbeatMs = MC_UI_HEARTBEAT_INTERVAL_MS;
   bool attnActiveNow =
       attentionActive_ && ((int32_t)(attentionUntilMs_ - now) > 0);
   bool attnChanged = (attnActiveNow != s_prevAttnActive);
@@ -536,7 +537,7 @@ void UIMining::drawSplash(const String &wifiText, uint16_t wifiCol,
   d.drawFastHLine(0, Y_LOG - 1, W, 0x18C3);
 #ifndef DISABLE_AVATAR
   PanelData p;
-  avatar_.setScale(0.45f);
+  avatar_.setScale(MC_UI_AVATAR_SCALE_MINI);
   avatar_.setPosition(-12, -88);
   avatar_.setSpeechText("");
   d.setClipRect(0, 0, AV_W, AV_H);
@@ -668,7 +669,7 @@ void UIMining::handlePageInput(bool suppressTouchBeep) {
   }
   if (pressed && !s_prevPressed) {
     if (!suppressTouchBeep) {
-      M5.Speaker.tone(1500, 50);
+      M5.Speaker.tone(MC_UI_TOUCH_BEEP_FREQ, MC_UI_TOUCH_BEEP_MS);
     }
     if (x >= X_INF && x < X_INF + INF_W && y >= 0 && y < INF_H) {
       infoPage_ = (infoPage_ + 1) % 3;

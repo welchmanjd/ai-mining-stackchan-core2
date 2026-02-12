@@ -96,7 +96,7 @@ static bool ducoGetPool_() {
   WiFiClientSecure s;
   s.setInsecure();
   HTTPClient http;
-  http.setTimeout(7000);
+  http.setTimeout(MC_DUCO_POOL_TIMEOUT_MS);
   if (!http.begin(s, kDucoPoolUrl)) {
     setPoolDiag_("Cannot connect to the pool info server.");
     return false;
@@ -280,12 +280,12 @@ static void ducoTask_(void *pv) {
       if (g_shaMutex)
         xSemaphoreGive(g_shaMutex);
       if (!poolOk) {
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(MC_DUCO_POOL_RECOVERY_DELAY_MS));
         continue;
       }
     }
     WiFiClient cli;
-    cli.setTimeout(15000);
+    cli.setTimeout(MC_DUCO_CLI_TIMEOUT_MS);
     MC_LOGI_RL("duco_connect", 10000, "DUCO", "%s connect %s:%u ...", tag,
                g_host, g_port);
     if (!cli.connect(g_host, g_port)) {
@@ -296,7 +296,8 @@ static void ducoTask_(void *pv) {
     }
     // banner
     unsigned long t0 = millis();
-    while (!cli.available() && cli.connected() && millis() - t0 < 5000) {
+    while (!cli.available() && cli.connected() &&
+           millis() - t0 < MC_DUCO_BANNER_TIMEOUT_MS) {
       vTaskDelay(pdMS_TO_TICKS(10));
     }
     if (!cli.available()) {
@@ -343,7 +344,8 @@ static void ducoTask_(void *pv) {
       unsigned long ping0 = millis();
       cli.print(req);
       t0 = millis();
-      while (!cli.available() && cli.connected() && millis() - t0 < 10000) {
+      while (!cli.available() && cli.connected() &&
+             millis() - t0 < MC_DUCO_JOB_TIMEOUT_MS) {
         vTaskDelay(pdMS_TO_TICKS(10));
       }
       if (!cli.available()) {
@@ -437,7 +439,8 @@ static void ducoTask_(void *pv) {
               hps);
       // feedback
       t0 = millis();
-      while (!cli.available() && cli.connected() && millis() - t0 < 10000) {
+      while (!cli.available() && cli.connected() &&
+             millis() - t0 < MC_DUCO_FEEDBACK_TIMEOUT_MS) {
         vTaskDelay(pdMS_TO_TICKS(10));
       }
       if (!cli.available()) {
@@ -508,9 +511,9 @@ void startMiner() {
   static const char *kTaskNames[] = {"DucoMiner0", "DucoMiner1"};
   for (int i = 0; i < kDucoMinerThreads; ++i) {
     int core = (i == 0) ? 0 : 1;
-    UBaseType_t prio = 1;
-    xTaskCreatePinnedToCore(ducoTask_, kTaskNames[i], 8192, (void *)(intptr_t)i,
-                            prio, nullptr, core);
+    UBaseType_t prio = MC_DUCO_TASK_PRIO;
+    xTaskCreatePinnedToCore(ducoTask_, kTaskNames[i], MC_DUCO_TASK_STACK_SIZE,
+                            (void *)(intptr_t)i, prio, nullptr, core);
   }
 }
 void updateMiningSummary(MiningSummary &out) {

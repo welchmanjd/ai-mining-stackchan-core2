@@ -166,6 +166,91 @@
 #ifndef MC_AI_TTS_HARD_TIMEOUT_MAX_MS
   #define MC_AI_TTS_HARD_TIMEOUT_MAX_MS 60000 // ai_talk_controller.cpp: ハードタイムアウト最大
 #endif
+
+// ---------------------------------------------------------
+// ===== MINING (Duco) =====
+// ---------------------------------------------------------
+#ifndef MC_DUCO_POOL_TIMEOUT_MS
+  #define MC_DUCO_POOL_TIMEOUT_MS 7000 // mining_task.cpp: pool info HTTP timeout
+#endif
+#ifndef MC_DUCO_CLI_TIMEOUT_MS
+  #define MC_DUCO_CLI_TIMEOUT_MS 15000 // mining_task.cpp: pool node TCP timeout
+#endif
+#ifndef MC_DUCO_BANNER_TIMEOUT_MS
+  #define MC_DUCO_BANNER_TIMEOUT_MS 5000 // mining_task.cpp: banner wait timeout
+#endif
+#ifndef MC_DUCO_JOB_TIMEOUT_MS
+  #define MC_DUCO_JOB_TIMEOUT_MS 10000 // mining_task.cpp: job wait timeout
+#endif
+#ifndef MC_DUCO_FEEDBACK_TIMEOUT_MS
+  #define MC_DUCO_FEEDBACK_TIMEOUT_MS 10000 // mining_task.cpp: feedback wait timeout
+#endif
+#ifndef MC_DUCO_POOL_RECOVERY_DELAY_MS
+  #define MC_DUCO_POOL_RECOVERY_DELAY_MS 5000 // mining_task.cpp: retry delay after pool lookup fail
+#endif
+#ifndef MC_DUCO_TASK_STACK_SIZE
+  #define MC_DUCO_TASK_STACK_SIZE 8192 // mining_task.cpp: Duco miner task stack
+#endif
+#ifndef MC_DUCO_TASK_PRIO
+  #define MC_DUCO_TASK_PRIO 1 // mining_task.cpp: Duco miner task priority
+#endif
+
+// ---------------------------------------------------------
+// ===== UI =====
+// ---------------------------------------------------------
+#ifndef MC_UI_DEFAULT_BRIGHTNESS
+  #define MC_UI_DEFAULT_BRIGHTNESS 128 // ui_mining_core2.cpp/app_runtime.cpp: active brightness
+#endif
+#ifndef MC_UI_AVATAR_SCALE_MINI
+  #define MC_UI_AVATAR_SCALE_MINI 0.45f // ui_mining_core2.cpp: dashboard avatar scale
+#endif
+#ifndef MC_UI_AVATAR_SCALE_FULL
+  #define MC_UI_AVATAR_SCALE_FULL 1.0f // ui_mining_core2.cpp: stackchan avatar scale
+#endif
+#ifndef MC_UI_REFRESH_INTERVAL_MS
+  #define MC_UI_REFRESH_INTERVAL_MS 80 // ui_mining_core2.cpp: redraw interval
+#endif
+#ifndef MC_UI_HEARTBEAT_INTERVAL_MS
+  #define MC_UI_HEARTBEAT_INTERVAL_MS 5000 // ui_mining_core2.cpp: UI heartbeat log interval
+#endif
+#ifndef MC_UI_TOUCH_BEEP_FREQ
+  #define MC_UI_TOUCH_BEEP_FREQ 1500 // ui_mining_core2.cpp: touch beep frequency
+#endif
+#ifndef MC_UI_TOUCH_BEEP_MS
+  #define MC_UI_TOUCH_BEEP_MS 50 // ui_mining_core2.cpp: touch beep duration
+#endif
+
+// ---------------------------------------------------------
+// ===== APP RUNTIME =====
+// ---------------------------------------------------------
+#ifndef MC_WIFI_CONNECT_TIMEOUT_MS
+  #define MC_WIFI_CONNECT_TIMEOUT_MS 20000 // app_runtime.cpp: WiFi connect timeout
+#endif
+#ifndef MC_MINING_BOOT_TIMEOUT_MS
+  #define MC_MINING_BOOT_TIMEOUT_MS 15000 // app_runtime.cpp: mining boot timeout
+#endif
+#ifndef MC_BUBBLE_MIN_MS
+  #define MC_BUBBLE_MIN_MS 1500 // app_runtime.cpp: bubble minimum display time
+#endif
+#ifndef MC_BUBBLE_PER_CHAR_MS
+  #define MC_BUBBLE_PER_CHAR_MS 120 // app_runtime.cpp: per-character bubble time
+#endif
+#ifndef MC_BOOT_PROBE_BACKOFF_MS
+  #define MC_BOOT_PROBE_BACKOFF_MS {5000, 10000, 30000} // app_runtime.cpp: probe retry backoff
+#endif
+
+// ---------------------------------------------------------
+// ===== AUDIO RECORDER =====
+// ---------------------------------------------------------
+#ifndef MC_REC_TASK_STACK_SIZE
+  #define MC_REC_TASK_STACK_SIZE 4096 // audio_recorder.cpp: recorder task stack
+#endif
+#ifndef MC_REC_TASK_PRIO
+  #define MC_REC_TASK_PRIO 2 // audio_recorder.cpp: recorder task priority
+#endif
+#ifndef MC_REC_MIC_IDLE_WAIT_MS
+  #define MC_REC_MIC_IDLE_WAIT_MS 200 // audio_recorder.cpp: idle wait before mic end
+#endif
 // ---- Error messages (short, searchable; no codes) ----
 #ifndef MC_AI_ERR_TEMP_FAIL_TRY_AGAIN
   #define MC_AI_ERR_TEMP_FAIL_TRY_AGAIN "一時的に失敗。もう一回" // ai_talk_controller.cpp: STT失敗の代替文言

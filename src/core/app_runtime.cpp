@@ -53,7 +53,7 @@ static unsigned long g_lastInputMs = 0;
 static bool g_displaySleeping = false;
 static bool g_suppressTouchBeepOnce = false;
 static bool g_timeNtpDone = false;
-static const uint8_t kDisplayActiveBrightness = 128;
+static const uint8_t kDisplayActiveBrightness = MC_UI_DEFAULT_BRIGHTNESS;
 static bool g_bubbleOnlyActive = false;
 static uint32_t g_bubbleOnlyUntilMs = 0;
 static uint32_t g_bubbleOnlyRid = 0;
@@ -168,7 +168,7 @@ static long getDisplaySleepSecondsFromStore_(long fallbackSec) {
 
 static uint32_t bubbleShow_Ms(const String &text) {
   const size_t len = text.length();
-  uint32_t ms = 1500 + (uint32_t)(len * 120);
+  uint32_t ms = MC_BUBBLE_MIN_MS + (uint32_t)(len * MC_BUBBLE_PER_CHAR_MS);
   const uint32_t maxMs = 8000;
   if (ms > maxMs)
     ms = maxMs;
@@ -235,7 +235,7 @@ static bool wifiConnect_() {
   static uint32_t s_startMs = 0;
   static uint32_t s_retryAtMs = 0;
   static uint8_t s_attempt = 0;
-  static const uint32_t wifiConnectTimeoutMs = 20000UL;
+  static const uint32_t wifiConnectTimeoutMs = MC_WIFI_CONNECT_TIMEOUT_MS;
   static const uint32_t wifiRetryDelayMs = 1000UL;
   static const uint8_t wifiMaxAttempts = 2;
   if (!features.wifiEnabled_) {
@@ -502,7 +502,7 @@ static void bootRunOpenAiCheck_(uint32_t now) {
   }
   g_bootOpenAiState = BootCheckState::Fail;
   g_bootOpenAiDiag = err[0] ? String(err) : String("OpenAI probe failed");
-  static const uint32_t kBackoffMs[] = {5000, 10000, 30000};
+  static const uint32_t kBackoffMs[] = MC_BOOT_PROBE_BACKOFF_MS;
   const int idx = (g_bootOpenAiRetryCount < 2) ? g_bootOpenAiRetryCount : 2;
   g_bootOpenAiNextCheckMs = now + kBackoffMs[idx];
   g_bootOpenAiRetryCount++;
@@ -548,7 +548,7 @@ static void bootRunAzureCheck_(uint32_t now) {
   }
   g_bootAzureState = BootCheckState::Fail;
   g_bootAzureDiag = err[0] ? String(err) : String("Azure credential check failed.");
-  static const uint32_t kBackoffMs[] = {5000, 10000, 30000};
+  static const uint32_t kBackoffMs[] = MC_BOOT_PROBE_BACKOFF_MS;
   const int idx = (g_bootAzureRetryCount < 2) ? g_bootAzureRetryCount : 2;
   g_bootAzureNextCheckMs = now + kBackoffMs[idx];
   g_bootAzureRetryCount++;
@@ -592,7 +592,7 @@ static void updateBootChecks_(uint32_t now, const RuntimeFeatures &features,
     if (g_bootMiningStartMs == 0) {
       g_bootMiningStartMs = now;
     }
-    const uint32_t miningTimeoutMs = 15000UL;
+    const uint32_t miningTimeoutMs = MC_MINING_BOOT_TIMEOUT_MS;
     if ((now - g_bootMiningStartMs) > miningTimeoutMs) {
       g_bootMiningState = BootCheckState::Fail;
       g_bootMiningDiag = summary.poolDiag_.length()
