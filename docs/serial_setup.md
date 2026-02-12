@@ -22,12 +22,11 @@ Related docs:
 
 ### HELP
 - Request: `HELP`
-- Response: `@OK CMDS=HELLO,PING,GET INFO,GET CFG,SET,SAVE,REBOOT,AZTEST,HELP`
-  - Newer firmware may include: `...,OAITEST,...`
+- Response: `@OK CMDS=HELLO,PING,GET INFO,GET CFG,SET,SAVE,REBOOT,AZTEST,OAITEST,HELP`
 
 ### GET INFO
 - Request: `GET INFO`
-- Response: `@INFO {"app":"<name>","ver":"<version>","baud":115200}`
+- Response: `@INFO {"app":"<name>","ver":"<version>","build_id":"<id>","baud":115200}`
 
 ### GET CFG
 - Request: `GET CFG`
@@ -102,4 +101,4 @@ Unknown commands return:
 
 ## Implementation reference
 - `src/core/serial_setup.cpp` (search for `handleSetupLine_`)
-- `src/core/serial_setup.h`
+- `src/core/public/serial_setup.h`

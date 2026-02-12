@@ -28,7 +28,7 @@ ESP32（M5Stack Core2）向けのマイニングダッシュボード。スタ�
 - `src/behavior` : Stackchan behavior / 振る舞いの制御
 - `src/config` : settings + secrets + persistence / 設定と永続化
 - `src/utils` : small helpers / 小さな補助関数
-- `src/core/app_types.h` : app-level shared types / アプリ共通の型定義
+- `src/utils/app_types.h` : app-level shared types / アプリ共通の型定義
 
 ## Configuration / 設定
 - Secrets live in `src/config/config_private.h` (not committed).

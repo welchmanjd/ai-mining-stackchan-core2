@@ -77,13 +77,12 @@ Main flow: main.cpp -> app_runtime -> tts_coordinator.
 Status: config, utils, audio, ai, core, ui, and behavior are already moved under `/src` subfolders.
 - core
   - core/main.cpp
-  - core/app_types.h
-  - core/app_runtime.cpp / core/app_runtime.h
+  - utils/app_types.h
+  - core/app_runtime.cpp / core/public/app_runtime.h
   - core/orchestrator.cpp / core/orchestrator.h
-  - core/serial_setup.cpp / core/serial_setup.h
-  - core/tts_coordinator.cpp / core/tts_coordinator.h
+  - core/serial_setup.cpp / core/public/serial_setup.h
+  - core/tts_coordinator.cpp / core/public/tts_coordinator.h
 - ai
-  - ai/ai_interface.h
   - ai/ai_talk_controller.cpp / ai/ai_talk_controller.h
   - ai/openai_llm.cpp / ai/openai_llm.h
   - ai/azure_stt.cpp / ai/azure_stt.h

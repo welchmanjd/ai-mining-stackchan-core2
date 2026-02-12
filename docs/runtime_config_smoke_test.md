@@ -39,12 +39,18 @@ Send:
 - `SET display_sleep_s 90`
 - `SET spk_volume 120`
 - `SET openai_model gpt-5-nano`
-- `SET openai_instructions あなたは短く日本語で答えてください。`
-- `SET share_accepted_text シェア獲得！`
+- `SET openai_instructions 日本語で短く答えてください`
+- `SET share_accepted_text シェア獲得したよ！`
 - `SET attention_text こんにちは`
-- `SET hello_text ボタンBだよ`
+- `SET hello_text こんにちは`
 - `SAVE`
 - `REBOOT`
+
+ASCII-safe examples (for serial tools with encoding issues):
+- `SET openai_instructions Please answer briefly in Japanese.`
+- `SET share_accepted_text Share accepted!`
+- `SET attention_text Hi`
+- `SET hello_text Hello`
 
 Expect:
 - each `SET` returns `@OK SET <key>`

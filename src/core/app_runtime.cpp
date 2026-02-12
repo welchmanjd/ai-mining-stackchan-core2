@@ -67,6 +67,16 @@ static BubbleSource g_bubbleOnlySource = BubbleSource::None;
 static bool g_lastPopEmptyBusy = false;
 static AppMode g_lastPopEmptyMode = Stackchan;
 static bool g_lastPopEmptyAttn = false;
+struct RuntimeInputState {
+  bool anyInput_ = false;
+  bool btnA_ = false;
+  bool btnB_ = false;
+  bool btnC_ = false;
+  bool touchPressed_ = false;
+  bool touchDown_ = false;
+  int touchX_ = 0;
+  int touchY_ = 0;
+};
 
 // ===== Splash boot checks (relay) =====
 enum class BootCheckState : uint8_t {
@@ -530,32 +540,24 @@ void appRuntimeInit(const AppRuntimeContext &ctx) {
   g_bootAzureRetryCount = 0;
 }
 
-void appRuntimeTick(uint32_t now) {
-  if (!g_ctx.ai_ || !g_ctx.orch_ || !g_ctx.behavior_)
-    return;
-
-  const RuntimeFeatures runtimeFeatures = getRuntimeFeatures();
+static void handleAiAndOrchestrator_(uint32_t now,
+                                     const RuntimeFeatures &runtimeFeatures) {
   if (runtimeFeatures.aiEnabled_) {
     g_ctx.ai_->tick(now);
-    {
-      String aiBubbleText;
-      if (g_ctx.ai_->consumeBubbleUpdate(&aiBubbleText)) {
-        if (aiBubbleText.length() == 0) {
-          bubbleClear_("ai_update", true);
-        } else if (!runtimeFeatures.ttsEnabled_ ||
-                   g_ctx.ai_->state() == AiState::Listening ||
-                   g_ctx.ai_->state() == AiState::Thinking) {
-          bubbleShow_(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
-        }
+    String aiBubbleText;
+    if (g_ctx.ai_->consumeBubbleUpdate(&aiBubbleText)) {
+      if (aiBubbleText.length() == 0) {
+        bubbleClear_("ai_update", true);
+      } else if (!runtimeFeatures.ttsEnabled_ ||
+                 g_ctx.ai_->state() == AiState::Listening ||
+                 g_ctx.ai_->state() == AiState::Thinking) {
+        bubbleShow_(aiBubbleText, now, 0, -1, 0, BubbleSource::Ai);
       }
     }
-  } else {
-    if (g_ctx.ai_->isBusy()) {
-      g_ctx.ai_->forceStop(now, "ai_disabled");
-    }
+  } else if (g_ctx.ai_->isBusy()) {
+    g_ctx.ai_->forceStop(now, "ai_disabled");
   }
 
-  // Orchestrator tick (timeout recovery)
   if (g_ctx.orch_->tick(now)) {
     LOG_EVT_INFO("EVT_ORCH_TIMEOUT_MAIN",
                  "recover=1 expect_tts_id=%lu expect_rid=%lu",
@@ -566,7 +568,6 @@ void appRuntimeTick(uint32_t now) {
     }
     ttsCoordinatorClearInflight();
   }
-
   ttsCoordinatorTick(now);
 
   static wl_status_t s_prevWifi = WL_IDLE_STATUS;
@@ -579,20 +580,19 @@ void appRuntimeTick(uint32_t now) {
     }
   }
   s_prevWifi = wifiNow;
+}
 
-  bool anyInput = false;
-  const bool btnA = M5.BtnA.wasPressed();
-  const bool btnB = M5.BtnB.wasPressed();
-  const bool btnC = M5.BtnC.wasPressed();
-  if (btnA || btnB || btnC) {
-    anyInput = true;
+static RuntimeInputState pollRuntimeInputs_(uint32_t now) {
+  RuntimeInputState in;
+  in.btnA_ = M5.BtnA.wasPressed();
+  in.btnB_ = M5.BtnB.wasPressed();
+  in.btnC_ = M5.BtnC.wasPressed();
+  if (in.btnA_ || in.btnB_ || in.btnC_) {
+    in.anyInput_ = true;
     g_suppressTouchBeepOnce = true;
   }
+
   static bool s_prevTouchPressed = false;
-  bool touchPressed = false;
-  bool touchDown = false;
-  int touchX = 0;
-  int touchY = 0;
   auto &tp = M5.Touch;
   static uint32_t s_lastTouchPollMs = 0;
   static int s_touchX = 0;
@@ -608,40 +608,45 @@ void appRuntimeTick(uint32_t now) {
         s_touchY = det.y;
       }
     }
-    touchPressed = s_touchPressed;
-    touchX = s_touchX;
-    touchY = s_touchY;
-    touchDown = touchPressed && !s_prevTouchPressed;
-    s_prevTouchPressed = touchPressed;
-    if (touchPressed)
-      anyInput = true;
-  }
-  // Cache touch state for UI
-  {
-    UIMining::TouchSnapshot ts;
-    ts.enabled_ = tp.isEnabled();
-    ts.pressed_ = touchPressed;
-    ts.down_ = touchDown;
-    ts.x_ = touchX;
-    ts.y_ = touchY;
-    UIMining::instance().setTouchSnapshot(ts);
-  }
-
-  if (g_displaySleeping) {
-    if (anyInput) {
-      MC_EVT("MAIN", "display wake (sleep off)");
-      M5.Display.setBrightness(kDisplayActiveBrightness);
-      g_displaySleeping = false;
-      g_lastInputMs = now;
+    in.touchPressed_ = s_touchPressed;
+    in.touchX_ = s_touchX;
+    in.touchY_ = s_touchY;
+    in.touchDown_ = in.touchPressed_ && !s_prevTouchPressed;
+    s_prevTouchPressed = in.touchPressed_;
+    if (in.touchPressed_) {
+      in.anyInput_ = true;
     }
-    return;
   }
 
-  UIMining &ui = UIMining::instance();
-  if (btnB) {
+  UIMining::TouchSnapshot ts;
+  ts.enabled_ = tp.isEnabled();
+  ts.pressed_ = in.touchPressed_;
+  ts.down_ = in.touchDown_;
+  ts.x_ = in.touchX_;
+  ts.y_ = in.touchY_;
+  UIMining::instance().setTouchSnapshot(ts);
+  return in;
+}
+
+static bool handleSleepWake_(uint32_t now, const RuntimeInputState &in) {
+  if (!g_displaySleeping) {
+    return false;
+  }
+  if (in.anyInput_) {
+    MC_EVT("MAIN", "display wake (sleep off)");
+    M5.Display.setBrightness(kDisplayActiveBrightness);
+    g_displaySleeping = false;
+    g_lastInputMs = now;
+  }
+  return true;
+}
+
+static void handleButtonAndTouch_(uint32_t now,
+                                  const RuntimeFeatures &runtimeFeatures,
+                                  const RuntimeInputState &in, UIMining &ui) {
+  if (in.btnB_) {
     const char *text = appConfig().helloText_;
-    const RuntimeFeatures features = getRuntimeFeatures();
-    if (features.ttsEnabled_ && g_ctx.tts_) {
+    if (runtimeFeatures.ttsEnabled_ && g_ctx.tts_) {
       static uint32_t s_ttsFailLastLogMs = 0;
       static uint32_t s_ttsFailSuppressed = 0;
       if (!g_ctx.tts_->speakAsync(text, (uint32_t)0, nullptr)) {
@@ -660,7 +665,6 @@ void appRuntimeTick(uint32_t now) {
           s_ttsFailLastLogMs = now;
         }
       } else {
-        // success: reset suppression window
         s_ttsFailSuppressed = 0;
       }
     } else {
@@ -668,9 +672,10 @@ void appRuntimeTick(uint32_t now) {
     }
   }
 
-  if (anyInput)
+  if (in.anyInput_) {
     g_lastInputMs = now;
-  if (btnA) {
+  }
+  if (in.btnA_) {
     M5.Speaker.tone(1500, 50);
     if (g_mode == Dash) {
       g_mode = Stackchan;
@@ -680,8 +685,9 @@ void appRuntimeTick(uint32_t now) {
       ui.onLeaveStackchanMode();
       if (g_attentionActive) {
         g_attentionActive = false;
-        if (g_savedYieldValid)
+        if (g_savedYieldValid) {
           setMiningYieldProfile(g_savedYield);
+        }
         ui.triggerAttention(0);
       }
     }
@@ -689,40 +695,42 @@ void appRuntimeTick(uint32_t now) {
   }
 
   bool aiConsumedTap = false;
-  if (runtimeFeatures.aiEnabled_ && g_mode == Stackchan && touchDown) {
+  if (runtimeFeatures.aiEnabled_ && g_mode == Stackchan && in.touchDown_) {
     const AiState stateBeforeTap = g_ctx.ai_->state();
     const int screenH = M5.Display.height();
-    aiConsumedTap = g_ctx.ai_->onTap(touchX, touchY, screenH);
+    aiConsumedTap = g_ctx.ai_->onTap(in.touchX_, in.touchY_, screenH);
     if (aiConsumedTap) {
       if (g_aiTapConsumedCount == 0) {
-        g_aiTapFirstX = touchX;
-        g_aiTapFirstY = touchY;
+        g_aiTapFirstX = in.touchX_;
+        g_aiTapFirstY = in.touchY_;
         g_aiTapFirstMs = now;
       }
       g_aiTapConsumedCount++;
-      g_aiTapLastX = touchX;
-      g_aiTapLastY = touchY;
+      g_aiTapLastX = in.touchX_;
+      g_aiTapLastY = in.touchY_;
       const AiState sNow = g_ctx.ai_->state();
       if (sNow != AiState::Idle) {
         g_aiTapLastState = sNow;
       } else if (stateBeforeTap != AiState::Idle) {
         g_aiTapLastState = stateBeforeTap;
       }
-      MC_LOGT("AI", "tap consumed by AI (%d,%d)", touchX, touchY);
+      MC_LOGT("AI", "tap consumed by AI (%d,%d)", in.touchX_, in.touchY_);
     }
   }
+
   if (g_mode == Stackchan && g_ctx.ai_->isBusy() && g_attentionActive) {
     MC_EVT("ATTN", "force exit (aiBusy=1)");
     g_attentionActive = false;
     g_attentionUntilMs = 0;
-    if (g_savedYieldValid)
+    if (g_savedYieldValid) {
       setMiningYieldProfile(g_savedYield);
-    else
+    } else {
       setMiningYieldProfile(MiningYieldNormal());
+    }
     ui.triggerAttention(0);
   }
-  // --- Attention mode: tap in Stackchan screen ---
-  if (!aiConsumedTap && (g_mode == Stackchan) && touchDown) {
+
+  if (!aiConsumedTap && g_mode == Stackchan && in.touchDown_) {
     if (g_attentionActive) {
     } else if (g_ctx.ai_->isBusy()) {
       MC_LOGT("ATTN", "suppressed (aiBusy=1)");
@@ -740,17 +748,203 @@ void appRuntimeTick(uint32_t now) {
       }
     }
   }
-  // Attention timeout
+
   if (g_attentionActive && (int32_t)(g_attentionUntilMs - now) <= 0) {
     g_attentionActive = false;
     MC_EVT("ATTN", "exit");
-    if (g_savedYieldValid)
+    if (g_savedYieldValid) {
       setMiningYieldProfile(g_savedYield);
-    else
+    } else {
       setMiningYieldProfile(MiningYieldNormal());
+    }
     ui.triggerAttention(0);
   }
+}
 
+static void handleUiAndBehaviorFrame_(uint32_t now,
+                                      const RuntimeFeatures &runtimeFeatures,
+                                      bool ttsBusyNow, UIMining &ui) {
+  MiningSummary summary;
+  updateMiningSummary(summary);
+  if (g_bubbleOnlyActive && (int32_t)(g_bubbleOnlyUntilMs - now) <= 0) {
+    const AiState aiStateNow = g_ctx.ai_->state();
+    const bool holdAiStatusBubble =
+        (g_bubbleOnlySource == BubbleSource::Ai) &&
+        (aiStateNow == AiState::Listening || aiStateNow == AiState::Thinking);
+    if (holdAiStatusBubble) {
+      g_bubbleOnlyUntilMs = now + 1000;
+    } else {
+      bubbleClear_("timeout", false);
+    }
+  }
+
+  UIMining::PanelData data;
+  NetworkStatus ns = NetworkStatus::Unknown;
+  switch (WiFi.status()) {
+  case WL_CONNECTED:
+    ns = NetworkStatus::Connected;
+    break;
+  case WL_NO_SSID_AVAIL:
+    ns = NetworkStatus::NoSsid;
+    break;
+  case WL_CONNECT_FAILED:
+    ns = NetworkStatus::ConnectFailed;
+    break;
+  case WL_DISCONNECTED:
+    ns = NetworkStatus::Disconnected;
+    break;
+  default:
+    ns = NetworkStatus::Unknown;
+    break;
+  }
+
+  updateBootChecks_(now, runtimeFeatures, summary);
+  int legacyBootStatus = 0;
+  if (g_bootOpenAiState == BootCheckState::Ok) {
+    legacyBootStatus = 3;
+  } else if (g_bootOpenAiState == BootCheckState::Fail) {
+    legacyBootStatus = 4;
+  } else if (g_bootOpenAiState == BootCheckState::Connecting) {
+    legacyBootStatus = 2;
+  } else if (g_bootWifiState != BootCheckState::Ok) {
+    legacyBootStatus = 1;
+  }
+  buildPanelData(summary, ui, data, ns, runtimeFeatures.aiEnabled_,
+                 g_bootOpenAiState == BootCheckState::Ok, g_bootOpenAiDiag,
+                 legacyBootStatus, (uint8_t)g_bootWifiState,
+                 (uint8_t)g_bootMiningState, (uint8_t)g_bootOpenAiState,
+                 (uint8_t)g_bootAzureState, g_bootWifiDiag, g_bootMiningDiag,
+                 g_bootOpenAiDiag, g_bootAzureDiag, g_bootActiveDiag);
+  g_ctx.behavior_->update(data, now);
+
+  StackchanReaction reaction;
+  bool gotReaction = false;
+  const bool suppressBehaviorNow = (g_mode == Stackchan) && g_ctx.ai_->isBusy();
+  if (suppressBehaviorNow && !g_prevAiBusyForBehavior) {
+    g_aiBusyStartMs = now;
+    MC_EVT("AI", "busy enter state=%s reason=ai_busy",
+           aiStateName_(g_ctx.ai_->state()));
+  } else if (!suppressBehaviorNow && g_prevAiBusyForBehavior) {
+    const float durS = (now - g_aiBusyStartMs) / 1000.0f;
+    MC_EVT("AI", "busy exit state=%s dur=%.1fs reason=ai_idle",
+           aiStateName_(g_ctx.ai_->state()), durS);
+    if (g_aiTapConsumedCount > 0) {
+      const float spanS = (now - g_aiTapFirstMs) / 1000.0f;
+      MC_LOGD("AI",
+              "tap consumed x%lu last=(%d,%d) first=(%d,%d) span=%.1fs during=%s",
+              (unsigned long)g_aiTapConsumedCount, g_aiTapLastX, g_aiTapLastY,
+              g_aiTapFirstX, g_aiTapFirstY, spanS, aiStateName_(g_aiTapLastState));
+      g_aiTapConsumedCount = 0;
+    }
+  }
+  g_prevAiBusyForBehavior = suppressBehaviorNow;
+  if (suppressBehaviorNow) {
+    gotReaction = false;
+    if ((now - g_aiBusyDebugLastMs) >= 1000) {
+      MC_LOGT("AI", "suppress Behavior while busy (state=%s)",
+              aiStateName_(g_ctx.ai_->state()));
+      g_aiBusyDebugLastMs = now;
+    }
+  } else {
+    gotReaction = g_ctx.behavior_->popReaction(&reaction);
+  }
+
+  if (gotReaction) {
+    LOG_EVT_INFO("EVT_PRESENT_POP",
+                 "rid=%lu type=%d prio=%d speak=%d busy=%d mode=%d attn=%d",
+                 (unsigned long)reaction.rid_, (int)reaction.evType_,
+                 (int)reaction.priority_, reaction.speak_ ? 1 : 0,
+                 ttsBusyNow ? 1 : 0, (int)g_mode, g_attentionActive ? 1 : 0);
+    const bool suppressedByAttention = (g_mode == Stackchan) && g_attentionActive;
+    const bool isIdleTick = (reaction.evType_ == StackchanEventType::IdleTick);
+    if (g_mode == Stackchan && !isIdleTick) {
+      const bool isBubbleInfo =
+          (reaction.evType_ == StackchanEventType::InfoPool) ||
+          (reaction.evType_ == StackchanEventType::InfoPing) ||
+          (reaction.evType_ == StackchanEventType::InfoHashrate) ||
+          (reaction.evType_ == StackchanEventType::InfoShares);
+      if (!reaction.speak_ && !isBubbleInfo) {
+        static bool s_hasLastExp = false;
+        static m5avatar::Expression s_lastExp = m5avatar::Expression::Neutral;
+        if (!s_hasLastExp || reaction.expression_ != s_lastExp) {
+          ui.setStackchanExpression(reaction.expression_);
+          s_lastExp = reaction.expression_;
+          s_hasLastExp = true;
+        }
+      }
+    }
+
+    if (g_mode == Stackchan) {
+      if (reaction.speak_ && g_bubbleOnlyActive) {
+        bubbleClear_("tts_event", false);
+      }
+      if (!reaction.speak_ && !isIdleTick && reaction.speechText_.length() &&
+          !suppressedByAttention) {
+        const bool isBubbleInfo =
+            (reaction.evType_ == StackchanEventType::InfoPool) ||
+            (reaction.evType_ == StackchanEventType::InfoPing) ||
+            (reaction.evType_ == StackchanEventType::InfoHashrate) ||
+            (reaction.evType_ == StackchanEventType::InfoShares) ||
+            (reaction.evType_ == StackchanEventType::InfoMiningOff);
+        const BubbleSource bubbleSource =
+            isBubbleInfo ? BubbleSource::Info : BubbleSource::Behavior;
+        bubbleShow_(reaction.speechText_, now, reaction.rid_,
+                    (int)reaction.evType_, (int)reaction.priority_,
+                    bubbleSource);
+      }
+    }
+
+    if (reaction.speak_ && reaction.speechText_.length() &&
+        runtimeFeatures.ttsEnabled_) {
+      auto cmd = g_ctx.orch_->makeSpeakStartCmd(
+          reaction.rid_, reaction.speechText_, toOrchPrio_(reaction.priority_),
+          Orchestrator::OrchKind::BehaviorSpeak);
+      if (cmd.valid_) {
+        ttsCoordinatorMaybeSpeak(cmd, (int)reaction.evType_);
+      }
+    }
+  } else {
+    static uint32_t s_lastHbMs = 0;
+    static uint32_t s_emptyStreak = 0;
+    s_emptyStreak++;
+    const uint32_t PRESENTER_HEARTBEAT_MS = 10000;
+    const bool stateChanged = (ttsBusyNow != g_lastPopEmptyBusy) ||
+                              (g_mode != g_lastPopEmptyMode) ||
+                              (g_attentionActive != g_lastPopEmptyAttn);
+    if (stateChanged || (now - s_lastHbMs) >= PRESENTER_HEARTBEAT_MS) {
+      LOG_EVT_HEARTBEAT("EVT_PRESENT_HEARTBEAT",
+                        "busy=%d mode=%d attn=%d empty_streak=%lu",
+                        ttsBusyNow ? 1 : 0, (int)g_mode,
+                        g_attentionActive ? 1 : 0, (unsigned long)s_emptyStreak);
+      s_lastHbMs = now;
+      s_emptyStreak = 0;
+      g_lastPopEmptyBusy = ttsBusyNow;
+      g_lastPopEmptyMode = g_mode;
+      g_lastPopEmptyAttn = g_attentionActive;
+    }
+  }
+
+  String ticker = buildTicker(summary);
+  if (g_mode == Dash && !ui.isSplashActive()) {
+    static bool s_bootSwitchDone = false;
+    if (!s_bootSwitchDone) {
+      s_bootSwitchDone = true;
+      g_mode = Stackchan;
+      ui.onEnterStackchanMode();
+      MC_LOGI("MAIN", "Boot splash done -> auto-switch to Stackchan");
+    }
+  }
+  if (g_mode == Stackchan) {
+    ui.drawStackchanScreen(data);
+  } else {
+    ui.drawAll(data, ticker);
+  }
+  g_suppressTouchBeepOnce = false;
+}
+
+static void handleNetworkUiAndSleep_(uint32_t now,
+                                     const RuntimeFeatures &runtimeFeatures,
+                                     UIMining &ui) {
   const bool wifiDone = wifiConnect_();
   if (wifiDone && !g_timeNtpDone && WiFi.status() == WL_CONNECTED) {
     setupTimeNtp_();
@@ -760,188 +954,7 @@ void appRuntimeTick(uint32_t now) {
   const bool ttsBusyNow = ttsCoordinatorIsBusy();
   if ((uint32_t)(now - g_lastUiMs) >= 100) {
     g_lastUiMs = now;
-    MiningSummary summary;
-    updateMiningSummary(summary);
-    if (g_bubbleOnlyActive && (int32_t)(g_bubbleOnlyUntilMs - now) <= 0) {
-      const AiState aiStateNow = g_ctx.ai_->state();
-      const bool holdAiStatusBubble =
-          (g_bubbleOnlySource == BubbleSource::Ai) &&
-          (aiStateNow == AiState::Listening || aiStateNow == AiState::Thinking);
-      if (holdAiStatusBubble) {
-        // Keep "listening/thinking" status bubble visible while AI is in that state.
-        g_bubbleOnlyUntilMs = now + 1000;
-      } else {
-        bubbleClear_("timeout", false);
-      }
-    }
-    UIMining::PanelData data;
-    NetworkStatus ns = NetworkStatus::Unknown;
-    switch (WiFi.status()) {
-    case WL_CONNECTED:
-      ns = NetworkStatus::Connected;
-      break;
-    case WL_NO_SSID_AVAIL:
-      ns = NetworkStatus::NoSsid;
-      break;
-    case WL_CONNECT_FAILED:
-      ns = NetworkStatus::ConnectFailed;
-      break;
-    case WL_DISCONNECTED:
-      ns = NetworkStatus::Disconnected;
-      break;
-    default:
-      ns = NetworkStatus::Unknown;
-      break;
-    }
-    updateBootChecks_(now, runtimeFeatures, summary);
-    int legacyBootStatus = 0;
-    if (g_bootOpenAiState == BootCheckState::Ok) {
-      legacyBootStatus = 3;
-    } else if (g_bootOpenAiState == BootCheckState::Fail) {
-      legacyBootStatus = 4;
-    } else if (g_bootOpenAiState == BootCheckState::Connecting) {
-      legacyBootStatus = 2;
-    } else if (g_bootWifiState != BootCheckState::Ok) {
-      legacyBootStatus = 1;
-    }
-    buildPanelData(summary, ui, data, ns, runtimeFeatures.aiEnabled_,
-                   g_bootOpenAiState == BootCheckState::Ok, g_bootOpenAiDiag,
-                   legacyBootStatus, (uint8_t)g_bootWifiState,
-                   (uint8_t)g_bootMiningState, (uint8_t)g_bootOpenAiState,
-                   (uint8_t)g_bootAzureState, g_bootWifiDiag, g_bootMiningDiag,
-                   g_bootOpenAiDiag, g_bootAzureDiag, g_bootActiveDiag);
-    g_ctx.behavior_->update(data, now);
-    StackchanReaction reaction;
-    bool gotReaction = false;
-    const bool suppressBehaviorNow =
-        (g_mode == Stackchan) && g_ctx.ai_->isBusy();
-    if (suppressBehaviorNow && !g_prevAiBusyForBehavior) {
-      g_aiBusyStartMs = now;
-      MC_EVT("AI", "busy enter state=%s reason=ai_busy",
-             aiStateName_(g_ctx.ai_->state()));
-    } else if (!suppressBehaviorNow && g_prevAiBusyForBehavior) {
-      const float durS = (now - g_aiBusyStartMs) / 1000.0f;
-      MC_EVT("AI", "busy exit state=%s dur=%.1fs reason=ai_idle",
-             aiStateName_(g_ctx.ai_->state()), durS);
-      if (g_aiTapConsumedCount > 0) {
-        const float spanS = (now - g_aiTapFirstMs) / 1000.0f;
-        MC_LOGD(
-            "AI",
-            "tap consumed x%lu last=(%d,%d) first=(%d,%d) span=%.1fs during=%s",
-            (unsigned long)g_aiTapConsumedCount, g_aiTapLastX, g_aiTapLastY,
-            g_aiTapFirstX, g_aiTapFirstY, spanS,
-            aiStateName_(g_aiTapLastState));
-        g_aiTapConsumedCount = 0;
-      }
-    }
-    g_prevAiBusyForBehavior = suppressBehaviorNow;
-    if (suppressBehaviorNow) {
-      gotReaction = false;
-      if ((now - g_aiBusyDebugLastMs) >= 1000) {
-        MC_LOGT("AI", "suppress Behavior while busy (state=%s)",
-                aiStateName_(g_ctx.ai_->state()));
-        g_aiBusyDebugLastMs = now;
-      }
-    } else {
-      gotReaction = g_ctx.behavior_->popReaction(&reaction);
-    }
-    if (gotReaction) {
-      LOG_EVT_INFO("EVT_PRESENT_POP",
-                   "rid=%lu type=%d prio=%d speak=%d busy=%d mode=%d attn=%d",
-                   (unsigned long)reaction.rid_, (int)reaction.evType_,
-                   (int)reaction.priority_, reaction.speak_ ? 1 : 0,
-                   ttsBusyNow ? 1 : 0, (int)g_mode, g_attentionActive ? 1 : 0);
-      const bool suppressedByAttention =
-          (g_mode == Stackchan) && g_attentionActive;
-      const bool isIdleTick =
-          (reaction.evType_ == StackchanEventType::IdleTick);
-      if (g_mode == Stackchan && !isIdleTick) {
-        const bool isBubbleInfo =
-            (reaction.evType_ == StackchanEventType::InfoPool) ||
-            (reaction.evType_ == StackchanEventType::InfoPing) ||
-            (reaction.evType_ == StackchanEventType::InfoHashrate) ||
-            (reaction.evType_ == StackchanEventType::InfoShares);
-        if (!reaction.speak_ && !isBubbleInfo) {
-          static bool s_hasLastExp = false;
-          static m5avatar::Expression s_lastExp = m5avatar::Expression::Neutral;
-          if (!s_hasLastExp || reaction.expression_ != s_lastExp) {
-            ui.setStackchanExpression(reaction.expression_);
-            s_lastExp = reaction.expression_;
-            s_hasLastExp = true;
-          }
-        }
-      }
-      // ---- bubble-only present (speak=0) ----
-      if (g_mode == Stackchan) {
-        if (reaction.speak_ && g_bubbleOnlyActive) {
-          bubbleClear_("tts_event", false);
-        }
-        if (!reaction.speak_ && !isIdleTick && reaction.speechText_.length() &&
-            !suppressedByAttention) {
-          const bool isBubbleInfo =
-              (reaction.evType_ == StackchanEventType::InfoPool) ||
-              (reaction.evType_ == StackchanEventType::InfoPing) ||
-              (reaction.evType_ == StackchanEventType::InfoHashrate) ||
-              (reaction.evType_ == StackchanEventType::InfoShares) ||
-              (reaction.evType_ == StackchanEventType::InfoMiningOff);
-          const BubbleSource bubbleSource =
-              isBubbleInfo ? BubbleSource::Info : BubbleSource::Behavior;
-          bubbleShow_(reaction.speechText_, now, reaction.rid_,
-                      (int)reaction.evType_, (int)reaction.priority_,
-                      bubbleSource);
-        }
-      }
-      // TTS
-      const RuntimeFeatures features = getRuntimeFeatures();
-      if (reaction.speak_ && reaction.speechText_.length() &&
-          features.ttsEnabled_) {
-        auto cmd = g_ctx.orch_->makeSpeakStartCmd(
-            reaction.rid_, reaction.speechText_,
-            toOrchPrio_(reaction.priority_),
-            Orchestrator::OrchKind::BehaviorSpeak);
-        if (cmd.valid_) {
-          ttsCoordinatorMaybeSpeak(cmd, (int)reaction.evType_);
-        }
-      }
-    } else {
-      // low-rate heartbeat only
-      static uint32_t s_lastHbMs = 0;
-      static uint32_t s_emptyStreak = 0;
-      s_emptyStreak++;
-      const uint32_t PRESENTER_HEARTBEAT_MS = 10000;
-      const bool stateChanged = (ttsBusyNow != g_lastPopEmptyBusy) ||
-                                (g_mode != g_lastPopEmptyMode) ||
-                                (g_attentionActive != g_lastPopEmptyAttn);
-      if (stateChanged || (now - s_lastHbMs) >= PRESENTER_HEARTBEAT_MS) {
-        LOG_EVT_HEARTBEAT(
-            "EVT_PRESENT_HEARTBEAT", "busy=%d mode=%d attn=%d empty_streak=%lu",
-            ttsBusyNow ? 1 : 0, (int)g_mode, g_attentionActive ? 1 : 0,
-            (unsigned long)s_emptyStreak);
-        s_lastHbMs = now;
-        s_emptyStreak = 0;
-        g_lastPopEmptyBusy = ttsBusyNow;
-        g_lastPopEmptyMode = g_mode;
-        g_lastPopEmptyAttn = g_attentionActive;
-      }
-    }
-    String ticker = buildTicker(summary);
-    // Boot transition: If in Dashboard mode and splash finished, switch to
-    // Stackchan
-    if (g_mode == Dash && !ui.isSplashActive()) {
-      static bool s_bootSwitchDone = false;
-      if (!s_bootSwitchDone) {
-        s_bootSwitchDone = true;
-        g_mode = Stackchan;
-        ui.onEnterStackchanMode();
-        MC_LOGI("MAIN", "Boot splash done -> auto-switch to Stackchan");
-      }
-    }
-    if (g_mode == Stackchan) {
-      ui.drawStackchanScreen(data);
-    } else {
-      ui.drawAll(data, ticker);
-    }
-    g_suppressTouchBeepOnce = false;
+    handleUiAndBehaviorFrame_(now, runtimeFeatures, ttsBusyNow, ui);
   }
 
   if (!g_displaySleeping &&
@@ -953,6 +966,23 @@ void appRuntimeTick(uint32_t now) {
     M5.Display.setBrightness(0);
     g_displaySleeping = true;
   }
+}
+
+void appRuntimeTick(uint32_t now) {
+  if (!g_ctx.ai_ || !g_ctx.orch_ || !g_ctx.behavior_) {
+    return;
+  }
+  const RuntimeFeatures runtimeFeatures = getRuntimeFeatures();
+  handleAiAndOrchestrator_(now, runtimeFeatures);
+
+  const RuntimeInputState in = pollRuntimeInputs_(now);
+  if (handleSleepWake_(now, in)) {
+    return;
+  }
+
+  UIMining &ui = UIMining::instance();
+  handleButtonAndTouch_(now, runtimeFeatures, in, ui);
+  handleNetworkUiAndSleep_(now, runtimeFeatures, ui);
 }
 
 void appRuntimeNotifySerialActivity() {

@@ -7,6 +7,7 @@ Run from the repo root:
 
 ```powershell
 tools/check_deps.ps1
+tools/check_docs_consistency.ps1
 ```
 
 What it checks:
