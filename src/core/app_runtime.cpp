@@ -396,7 +396,7 @@ static bool bootConsumeProbeResult_(BootProbeResult &src, bool *ok, int *http,
 
 static void bootOpenAiProbeTask_(void *pv) {
   (void)pv;
-  const auto probe = openai_llm::probeConnection(8000);
+  const auto probe = openai_llm::probeConnection(MC_OPENAI_PROBE_TIMEOUT_MS);
   bootStoreProbeResult_(g_bootOpenAiProbe, probe.ok_, probe.http_,
                         probe.tookMs_, probe.err_.c_str());
   g_bootOpenAiProbeTask = nullptr;
@@ -435,8 +435,10 @@ static bool bootStartOpenAiProbe_() {
   g_bootOpenAiProbe.err_[0] = '\0';
   portEXIT_CRITICAL(&g_bootProbeMux);
 
-  if (xTaskCreatePinnedToCore(bootOpenAiProbeTask_, "BootOpenAiProbe", 8192,
-                              nullptr, 1, &g_bootOpenAiProbeTask, 1) !=
+  if (xTaskCreatePinnedToCore(bootOpenAiProbeTask_, "BootOpenAiProbe",
+                              MC_BOOT_PROBE_TASK_STACK, nullptr,
+                              MC_BOOT_PROBE_TASK_PRIO, &g_bootOpenAiProbeTask,
+                              MC_BOOT_PROBE_TASK_CORE) !=
       pdPASS) {
     bootStoreProbeResult_(g_bootOpenAiProbe, false, 0, 0,
                           "openai_probe_task_create_failed");
@@ -459,8 +461,10 @@ static bool bootStartAzureProbe_() {
   g_bootAzureProbe.err_[0] = '\0';
   portEXIT_CRITICAL(&g_bootProbeMux);
 
-  if (xTaskCreatePinnedToCore(bootAzureProbeTask_, "BootAzureProbe", 8192,
-                              nullptr, 1, &g_bootAzureProbeTask, 1) !=
+  if (xTaskCreatePinnedToCore(bootAzureProbeTask_, "BootAzureProbe",
+                              MC_BOOT_PROBE_TASK_STACK, nullptr,
+                              MC_BOOT_PROBE_TASK_PRIO, &g_bootAzureProbeTask,
+                              MC_BOOT_PROBE_TASK_CORE) !=
       pdPASS) {
     bootStoreProbeResult_(g_bootAzureProbe, false, 0, 0,
                           "azure_probe_task_create_failed");
@@ -616,7 +620,7 @@ static void updateBootChecks_(uint32_t now, const RuntimeFeatures &features,
   } else if (g_bootMiningState == BootCheckState::Fail) {
     g_bootOpenAiState = BootCheckState::Waiting;
     g_bootOpenAiDiag = "Waiting for Mining check...";
-  } else if ((now - g_bootWifiConnectedSinceMs) < 2000) {
+  } else if ((now - g_bootWifiConnectedSinceMs) < MC_BOOT_WIFI_STABILIZE_MS) {
     g_bootOpenAiState = BootCheckState::Connecting;
     g_bootOpenAiDiag = "Connecting to OpenAI...";
   } else {
@@ -635,7 +639,7 @@ static void updateBootChecks_(uint32_t now, const RuntimeFeatures &features,
   } else if (g_bootOpenAiState == BootCheckState::Fail) {
     g_bootAzureState = BootCheckState::Waiting;
     g_bootAzureDiag = "Waiting for OpenAI check...";
-  } else if ((now - g_bootWifiConnectedSinceMs) < 2000) {
+  } else if ((now - g_bootWifiConnectedSinceMs) < MC_BOOT_WIFI_STABILIZE_MS) {
     g_bootAzureState = BootCheckState::Connecting;
     g_bootAzureDiag = "Connecting to Azure...";
   } else {
@@ -780,7 +784,7 @@ static RuntimeInputState pollRuntimeInputs_(uint32_t now) {
   static int s_touchY = 0;
   static bool s_touchPressed = false;
   if (tp.isEnabled()) {
-    if ((uint32_t)(now - s_lastTouchPollMs) >= 25) {
+    if ((uint32_t)(now - s_lastTouchPollMs) >= MC_TOUCH_POLL_INTERVAL_MS) {
       s_lastTouchPollMs = now;
       auto det = tp.getDetail();
       s_touchPressed = det.isPressed();
@@ -857,7 +861,7 @@ static void handleButtonAndTouch_(uint32_t now,
     g_lastInputMs = now;
   }
   if (in.btnA_) {
-    M5.Speaker.tone(1500, 50);
+    M5.Speaker.tone(MC_APP_BTN_A_BEEP_FREQ, MC_APP_BTN_A_BEEP_MS);
     if (g_mode == Dash) {
       g_mode = Stackchan;
       ui.onEnterStackchanMode();
@@ -923,7 +927,7 @@ static void handleButtonAndTouch_(uint32_t now,
       g_attentionActive = true;
       g_attentionUntilMs = now + dur;
       ui.triggerAttention(dur, nullptr);
-      M5.Speaker.tone(1800, 30);
+      M5.Speaker.tone(MC_APP_ATTENTION_BEEP_FREQ, MC_APP_ATTENTION_BEEP_MS);
       if (g_bubbleOnlyActive) {
         bubbleClear_("attention_start", true);
       }
@@ -1090,7 +1094,7 @@ static void handleUiAndBehaviorFrame_(uint32_t now,
     static uint32_t s_lastHbMs = 0;
     static uint32_t s_emptyStreak = 0;
     s_emptyStreak++;
-    const uint32_t PRESENTER_HEARTBEAT_MS = 10000;
+    const uint32_t PRESENTER_HEARTBEAT_MS = MC_PRESENTER_HEARTBEAT_MS;
     const bool stateChanged = (ttsBusyNow != g_lastPopEmptyBusy) ||
                               (g_mode != g_lastPopEmptyMode) ||
                               (g_attentionActive != g_lastPopEmptyAttn);
@@ -1143,7 +1147,7 @@ static void handleNetworkUiAndSleep_(uint32_t now,
   }
 
   const bool ttsBusyNow = ttsCoordinatorIsBusy();
-  if ((uint32_t)(now - g_lastUiMs) >= 100) {
+  if ((uint32_t)(now - g_lastUiMs) >= MC_APP_UI_FRAME_INTERVAL_MS) {
     g_lastUiMs = now;
     handleUiAndBehaviorFrame_(now, runtimeFeatures, ttsBusyNow, ui);
   }

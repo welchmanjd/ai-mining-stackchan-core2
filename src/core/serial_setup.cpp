@@ -73,7 +73,7 @@ static void handleSetupLine_(const char *line) {
       Serial.println("@OAITEST NG wifi_disconnected");
       return;
     }
-    const auto probe = openai_llm::probeConnection(8000);
+    const auto probe = openai_llm::probeConnection(MC_OPENAI_PROBE_TIMEOUT_MS);
     if (probe.ok_) {
       Serial.println("@OAITEST OK");
     } else {

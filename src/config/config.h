@@ -238,6 +238,52 @@
 #ifndef MC_BOOT_PROBE_BACKOFF_MS
   #define MC_BOOT_PROBE_BACKOFF_MS {5000, 10000, 30000} // app_runtime.cpp: probe retry backoff
 #endif
+#ifndef MC_OPENAI_PROBE_TIMEOUT_MS
+  #define MC_OPENAI_PROBE_TIMEOUT_MS 8000 // app_runtime.cpp/serial_setup.cpp: OpenAI probe timeout
+#endif
+#ifndef MC_BOOT_PROBE_TASK_STACK
+  #define MC_BOOT_PROBE_TASK_STACK 8192 // app_runtime.cpp: boot probe task stack
+#endif
+#ifndef MC_BOOT_PROBE_TASK_PRIO
+  #define MC_BOOT_PROBE_TASK_PRIO 1 // app_runtime.cpp: boot probe task priority
+#endif
+#ifndef MC_BOOT_PROBE_TASK_CORE
+  #define MC_BOOT_PROBE_TASK_CORE 1 // app_runtime.cpp: boot probe task core
+#endif
+#ifndef MC_APP_BTN_A_BEEP_FREQ
+  #define MC_APP_BTN_A_BEEP_FREQ 1500 // app_runtime.cpp: BtnA mode toggle beep frequency
+#endif
+#ifndef MC_APP_BTN_A_BEEP_MS
+  #define MC_APP_BTN_A_BEEP_MS 50 // app_runtime.cpp: BtnA mode toggle beep duration
+#endif
+#ifndef MC_APP_ATTENTION_BEEP_FREQ
+  #define MC_APP_ATTENTION_BEEP_FREQ 1800 // app_runtime.cpp: attention enter beep frequency
+#endif
+#ifndef MC_APP_ATTENTION_BEEP_MS
+  #define MC_APP_ATTENTION_BEEP_MS 30 // app_runtime.cpp: attention enter beep duration
+#endif
+#ifndef MC_BOOT_WIFI_STABILIZE_MS
+  #define MC_BOOT_WIFI_STABILIZE_MS 2000 // app_runtime.cpp: wait after WiFi connect before probes
+#endif
+#ifndef MC_TOUCH_POLL_INTERVAL_MS
+  #define MC_TOUCH_POLL_INTERVAL_MS 25 // app_runtime.cpp: touch poll interval
+#endif
+#ifndef MC_PRESENTER_HEARTBEAT_MS
+  #define MC_PRESENTER_HEARTBEAT_MS 10000 // app_runtime.cpp: presenter heartbeat interval
+#endif
+#ifndef MC_APP_UI_FRAME_INTERVAL_MS
+  #define MC_APP_UI_FRAME_INTERVAL_MS 100 // app_runtime.cpp: UI frame update interval
+#endif
+
+// ---------------------------------------------------------
+// ===== BEHAVIOR =====
+// ---------------------------------------------------------
+#ifndef MC_BEHAVIOR_INFO_PERIOD_MS
+  #define MC_BEHAVIOR_INFO_PERIOD_MS 15000 // stackchan_behavior.cpp: periodic info bubble interval
+#endif
+#ifndef MC_BEHAVIOR_IDLE_TICK_MS
+  #define MC_BEHAVIOR_IDLE_TICK_MS 30000 // stackchan_behavior.cpp: idle tick interval
+#endif
 
 // ---------------------------------------------------------
 // ===== AUDIO RECORDER =====
@@ -250,6 +296,43 @@
 #endif
 #ifndef MC_REC_MIC_IDLE_WAIT_MS
   #define MC_REC_MIC_IDLE_WAIT_MS 200 // audio_recorder.cpp: idle wait before mic end
+#endif
+#ifndef MC_REC_MIC_IDLE_WAIT_CANCEL_MS
+  #define MC_REC_MIC_IDLE_WAIT_CANCEL_MS 100 // audio_recorder.cpp: idle wait during cancel(idle)
+#endif
+#ifndef MC_REC_I2S_LOCK_TIMEOUT_MS
+  #define MC_REC_I2S_LOCK_TIMEOUT_MS 2000 // audio_recorder.cpp: I2S lock timeout for REC
+#endif
+#ifndef MC_REC_TASK_DONE_TIMEOUT_MS
+  #define MC_REC_TASK_DONE_TIMEOUT_MS 2000 // audio_recorder.cpp: wait timeout for recorder task stop
+#endif
+
+// ---------------------------------------------------------
+// ===== AZURE TTS =====
+// ---------------------------------------------------------
+#ifndef MC_AZURE_TTS_TASK_STACK
+  #define MC_AZURE_TTS_TASK_STACK 8192 // azure_tts.cpp: worker task stack
+#endif
+#ifndef MC_AZURE_TTS_TASK_PRIO
+  #define MC_AZURE_TTS_TASK_PRIO 1 // azure_tts.cpp: worker task priority
+#endif
+#ifndef MC_AZURE_TTS_TASK_CORE
+  #define MC_AZURE_TTS_TASK_CORE 1 // azure_tts.cpp: worker task core
+#endif
+#ifndef MC_AZURE_TTS_PLAY_LOCK_TIMEOUT_MS
+  #define MC_AZURE_TTS_PLAY_LOCK_TIMEOUT_MS 4000 // azure_tts.cpp: speaker lock timeout before play
+#endif
+#ifndef MC_AZURE_TTS_TOKEN_TIMEOUT_MS
+  #define MC_AZURE_TTS_TOKEN_TIMEOUT_MS 6000 // azure_tts.cpp: token HTTP timeout
+#endif
+#ifndef MC_AZURE_TTS_TOKEN_BODY_TIMEOUT_MS
+  #define MC_AZURE_TTS_TOKEN_BODY_TIMEOUT_MS 1500 // azure_tts.cpp: token body read timeout
+#endif
+#ifndef MC_AZURE_TTS_TOKEN_CACHE_MS
+  #define MC_AZURE_TTS_TOKEN_CACHE_MS (9 * 60 * 1000) // azure_tts.cpp: token cache duration
+#endif
+#ifndef MC_AZURE_TTS_DISABLE_KEEPALIVE_MS
+  #define MC_AZURE_TTS_DISABLE_KEEPALIVE_MS 5000 // azure_tts.cpp: keep-alive cooldown after error
 #endif
 // ---- Error messages (short, searchable; no codes) ----
 #ifndef MC_AI_ERR_TEMP_FAIL_TRY_AGAIN

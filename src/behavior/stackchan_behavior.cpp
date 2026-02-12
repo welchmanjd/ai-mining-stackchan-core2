@@ -48,12 +48,12 @@ void StackchanBehavior::update(const MiningPanelData& panel, uint32_t nowMs) {
     poolInit_ = true;
     lastPoolAlive_ = panel.poolAlive_;
     lastEventMs_ = nowMs;
-    nextInfoMs_ = nowMs + 15000;
+    nextInfoMs_ = nowMs + MC_BEHAVIOR_INFO_PERIOD_MS;
     infoIndex_  = 0;
   }
   if (!panel.miningEnabled_) {
     // AI mode: suppress periodic "mining off" chatter.
-    nextInfoMs_ = nowMs + 15000;
+    nextInfoMs_ = nowMs + MC_BEHAVIOR_INFO_PERIOD_MS;
     lastPoolAlive_ = panel.poolAlive_;
     return;
   }
@@ -77,7 +77,7 @@ void StackchanBehavior::update(const MiningPanelData& panel, uint32_t nowMs) {
   }
   lastPoolAlive_ = panel.poolAlive_;
   // ---- periodic bubble-only info rotation (15s): POOL -> PING -> HR -> SHR ----
-  const uint32_t infoPeriodMs = 15000;
+  const uint32_t infoPeriodMs = MC_BEHAVIOR_INFO_PERIOD_MS;
   if (nextInfoMs_ == 0) nextInfoMs_ = nowMs + infoPeriodMs;
   if ((int32_t)(nowMs - nextInfoMs_) >= 0) {
     StackchanEventType ev = StackchanEventType::InfoPool;
@@ -92,7 +92,7 @@ void StackchanBehavior::update(const MiningPanelData& panel, uint32_t nowMs) {
     nextInfoMs_ = nowMs + infoPeriodMs;
     triggerEvent(ev, nowMs);
   }
-  const uint32_t idleMs = 30000;
+  const uint32_t idleMs = MC_BEHAVIOR_IDLE_TICK_MS;
   if ((uint32_t)(nowMs - lastEventMs_) >= idleMs) {
     triggerEvent(StackchanEventType::IdleTick, nowMs);
   }

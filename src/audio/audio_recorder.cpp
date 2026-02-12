@@ -141,7 +141,8 @@ void AudioRecorder::endMic_() {
   // I2S lock is expected to be held by REC
   bool tempLock = false;
   if (!i2sLocked_) {
-    if (I2SManager::instance().lockForMic("REC.endMic", 2000)) {
+    if (I2SManager::instance().lockForMic("REC.endMic",
+                                          MC_REC_I2S_LOCK_TIMEOUT_MS)) {
       tempLock = true;
     } else {
       MC_LOGW("REC", "endMic: temp lockForMic failed (continue cleanup)");
@@ -208,7 +209,8 @@ bool AudioRecorder::start(uint32_t nowMs) {
   if (recording_) return false;
   // Acquire the I2S lock before touching mic/speaker.
   if (!i2sLocked_) {
-    if (!I2SManager::instance().lockForMic("REC.start", 2000)) {
+    if (!I2SManager::instance().lockForMic("REC.start",
+                                           MC_REC_I2S_LOCK_TIMEOUT_MS)) {
       I2SManager& m = I2SManager::instance();
       MC_EVT("REC", "start_fail reason=i2s_deny curOwner=%u depth=%lu curSite=%s",
              (unsigned)m.owner(),
@@ -309,7 +311,7 @@ bool AudioRecorder::stop(uint32_t nowMs) {
   if (!recording_) return false;
   MC_LOGD("REC", "stop req");
   requestStop_(false);
-  bool ok = waitTaskDone_(2000);
+  bool ok = waitTaskDone_(MC_REC_TASK_DONE_TIMEOUT_MS);
   stopMs_ = nowMs;
   waitMicIdle_(MC_REC_MIC_IDLE_WAIT_MS);
   MC_LOGD("REC", "stop finalize mic: rec=%d en=%d",
@@ -332,7 +334,7 @@ bool AudioRecorder::stop(uint32_t nowMs) {
 void AudioRecorder::cancel() {
   if (!recording_) {
     freeBuffer_();
-    waitMicIdle_(100);
+    waitMicIdle_(MC_REC_MIC_IDLE_WAIT_CANCEL_MS);
     endMic_();
     restoreSpeakerAfterRec_();
     if (i2sLocked_) {
@@ -345,7 +347,7 @@ void AudioRecorder::cancel() {
   }
   MC_LOGD("REC", "cancel req");
   requestStop_(true);
-  waitTaskDone_(2000);
+  waitTaskDone_(MC_REC_TASK_DONE_TIMEOUT_MS);
   freeBuffer_();
   waitMicIdle_(MC_REC_MIC_IDLE_WAIT_MS);
   MC_LOGD("REC", "cancel finalize mic: rec=%d en=%d",

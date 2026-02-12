@@ -602,8 +602,9 @@ bool AzureTts::speakAsync(const String &text, uint32_t speakId,
   portEXIT_CRITICAL(&cancelMux_);
   // state_ already set to Fetching above
   if (!task_) {
-    BaseType_t ok = xTaskCreatePinnedToCore(taskEntry, "azure_tts", 8192, this,
-                                            1, &task_, 1);
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        taskEntry, "azure_tts", MC_AZURE_TTS_TASK_STACK, this,
+        MC_AZURE_TTS_TASK_PRIO, &task_, MC_AZURE_TTS_TASK_CORE);
     if (ok != pdPASS) {
       task_ = nullptr;
       portENTER_CRITICAL(&stateMux_);
@@ -776,7 +777,8 @@ void AzureTts::poll() {
       return;
     // I2S owner: Speaker
     if (!i2sLocked_) {
-      if (!I2SManager::instance().lockForSpeaker("TTS.play", 4000)) {
+      if (!I2SManager::instance().lockForSpeaker(
+              "TTS.play", MC_AZURE_TTS_PLAY_LOCK_TIMEOUT_MS)) {
         I2SManager &m = I2SManager::instance();
         MC_EVT("TTS", "fail id=%lu reason=i2s_deny wav=%uB",
                (unsigned long)currentSpeakId_, (unsigned)wavLen);
@@ -907,7 +909,7 @@ bool AzureTts::fetchTokenOld_(String *outTok) {
     MC_LOGI("TTS_TOKEN", "skip: key empty");
     return false;
   }
-  constexpr uint32_t kTokenTimeoutMs = 6000;
+  constexpr uint32_t kTokenTimeoutMs = MC_AZURE_TTS_TOKEN_TIMEOUT_MS;
   auto tryUrl = [&](const String &url, const char *label) -> bool {
     MC_LOGI("TTS_TOKEN", "try %s url=%s", label ? label : "?", url.c_str());
     WiFiClientSecure c;
@@ -931,7 +933,7 @@ bool AzureTts::fetchTokenOld_(String *outTok) {
       int total = h.getSize(); // -1 if unknown (chunked)
       WiFiClient *s = h.getStreamPtr();
       const uint32_t t0 = millis();
-      const uint32_t kTimeoutMs = 1500;
+      const uint32_t kTimeoutMs = MC_AZURE_TTS_TOKEN_BODY_TIMEOUT_MS;
       const size_t kMaxTok = 2048;
       while (millis() - t0 < kTimeoutMs) {
         if (!s)
@@ -1002,7 +1004,7 @@ bool AzureTts::ensureToken_() {
   bool ok = fetchTokenOld_(&tok);
   if (ok && tok.length()) {
     token_ = tok;
-    tokenExpireMs_ = now + 9 * 60 * 1000; // 9min cache
+    tokenExpireMs_ = now + MC_AZURE_TTS_TOKEN_CACHE_MS;
     tokenFailCount_ = 0;
     MC_LOGI("TTS_TOKEN", "ok (cached 9min)");
     return true;
@@ -1108,7 +1110,7 @@ bool AzureTts::fetchWav_(const String &ssml, uint8_t **outBuf, size_t *outLen) {
     (void)body;
     MC_LOGD("TTS", "HTTP %d body_len=%u", code, (unsigned)bodyLen);
     https_.end();
-    disableKeepaliveUntilMs_ = millis() + 5000;
+    disableKeepaliveUntilMs_ = millis() + MC_AZURE_TTS_DISABLE_KEEPALIVE_MS;
     return false;
   }
   // read body (chunked or content-length)
