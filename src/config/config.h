@@ -286,6 +286,55 @@
 #endif
 
 // ---------------------------------------------------------
+// ===== SERVO (ROBO8080-compatible baseline) =====
+// ---------------------------------------------------------
+#ifndef MC_ENABLE_SERVO
+  #define MC_ENABLE_SERVO 1 // behavior/servo_driver.cpp: master enable
+#endif
+#ifndef MC_SERVO_PIN_X
+  #define MC_SERVO_PIN_X 33 // behavior/servo_driver.cpp: pan servo pin (Core2/ROBO8080 PORT A)
+#endif
+#ifndef MC_SERVO_PIN_Y
+  #define MC_SERVO_PIN_Y 32 // behavior/servo_driver.cpp: tilt servo pin (Core2/ROBO8080 PORT A)
+#endif
+#ifndef MC_SERVO_START_DEGREE_X
+  #define MC_SERVO_START_DEGREE_X 90 // behavior/servo_driver.cpp: pan home degree
+#endif
+#ifndef MC_SERVO_START_DEGREE_Y
+  #define MC_SERVO_START_DEGREE_Y 85 // behavior/servo_driver.cpp: tilt home degree
+#endif
+#ifndef MC_SERVO_MIN_DEGREE_X
+  #define MC_SERVO_MIN_DEGREE_X 10 // behavior/servo_driver.cpp: pan lower clamp
+#endif
+#ifndef MC_SERVO_MAX_DEGREE_X
+  #define MC_SERVO_MAX_DEGREE_X 170 // behavior/servo_driver.cpp: pan upper clamp
+#endif
+#ifndef MC_SERVO_MIN_DEGREE_Y
+  #define MC_SERVO_MIN_DEGREE_Y 65 // behavior/servo_driver.cpp: tilt lower clamp
+#endif
+#ifndef MC_SERVO_MAX_DEGREE_Y
+  #define MC_SERVO_MAX_DEGREE_Y 100 // behavior/servo_driver.cpp: tilt upper clamp
+#endif
+#ifndef MC_SERVO_GAIN_X
+  #define MC_SERVO_GAIN_X 15.0f // behavior/servo_driver.cpp: pan gain for gazeX
+#endif
+#ifndef MC_SERVO_GAIN_Y
+  #define MC_SERVO_GAIN_Y 10.0f // behavior/servo_driver.cpp: tilt gain for gazeY
+#endif
+#ifndef MC_SERVO_INVERT_X
+  #define MC_SERVO_INVERT_X 0 // behavior/servo_driver.cpp: 1 = invert gazeX sign
+#endif
+#ifndef MC_SERVO_INVERT_Y
+  #define MC_SERVO_INVERT_Y 0 // behavior/servo_driver.cpp: 1 = invert gazeY sign
+#endif
+#ifndef MC_SERVO_SPEED
+  #define MC_SERVO_SPEED 30 // behavior/servo_driver.cpp: ServoEasing speed
+#endif
+#ifndef MC_SERVO_UPDATE_INTERVAL_MS
+  #define MC_SERVO_UPDATE_INTERVAL_MS 50 // behavior/servo_driver.cpp: update period
+#endif
+
+// ---------------------------------------------------------
 // ===== AUDIO RECORDER =====
 // ---------------------------------------------------------
 #ifndef MC_REC_TASK_STACK_SIZE

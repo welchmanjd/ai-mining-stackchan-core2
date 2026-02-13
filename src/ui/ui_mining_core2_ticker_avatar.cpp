@@ -3,6 +3,7 @@
 
 #include <WiFi.h>
 
+#include "behavior/servo_driver.h"
 #include "config/config.h"
 #include "utils/logging.h"
 #include "utils/mining_status.h"
@@ -182,6 +183,8 @@ void UIMining::updateAvatarLiveliness() {
     uint32_t lastUpdateMs;
   };
   static State s_state;
+  float servoGazeX = 0.0f;
+  float servoGazeY = 0.0f;
   if (!s_state.initialized) {
     s_state.initialized       = true;
     s_state.saccadeInterval   = 1000;
@@ -196,6 +199,8 @@ void UIMining::updateAvatarLiveliness() {
   }
   if (bubbleActive) {
     avatar_.setGaze(0.0f, 0.0f);
+    servoGazeX = 0.0f;
+    servoGazeY = 0.0f;
   } else if (now - s_state.lastSaccadeMs > s_state.saccadeInterval) {
     s_state.vertical   = (((float)random(-1000, 1001)) / 1000.0f) * gazeAmp;
     s_state.horizontal = (((float)random(-1000, 1001)) / 1000.0f) * gazeAmp;
@@ -210,6 +215,10 @@ void UIMining::updateAvatarLiveliness() {
     else if (moodLevel_ == 0) s_state.saccadeInterval = 500 + 100 * (uint32_t)random(0, 20);
     else                       s_state.saccadeInterval = 900 + 150 * (uint32_t)random(0, 20);
     s_state.lastSaccadeMs  = now;
+  }
+  if (!bubbleActive) {
+    servoGazeX = s_state.horizontal;
+    servoGazeY = s_state.vertical;
   }
   if (now - s_state.lastBlinkMs > s_state.blinkInterval) {
     if (s_state.eyeOpen) {
@@ -264,5 +273,6 @@ void UIMining::updateAvatarLiveliness() {
     s_bodyState.py += (s_bodyState.ty - s_bodyState.py) * follow;
     avatar_.setPosition((int)s_bodyState.px, (int)s_bodyState.py);
   }
+  servoDriverUpdate(servoGazeX, servoGazeY, inStackchanMode_);
 }
 

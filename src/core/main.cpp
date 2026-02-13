@@ -21,6 +21,7 @@
 #include "ai/ai_talk_controller.h"
 #include "ai/azure_tts.h"
 #include "ai/mining_task.h"
+#include "behavior/servo_driver.h"
 #include "behavior/stackchan_behavior.h"
 #include "config/config.h"
 #include "core/orchestrator.h"
@@ -65,6 +66,7 @@ void setup() {
   mc_logf("[MAIN] call M5.begin()");
   M5.begin(cfgM5);
   mc_logf("[MAIN] M5.begin() done");
+  servoDriverBegin();
   M5.Speaker.setVolume(mcCfgSpkVolume());
   mc_logf("[MAIN] spk_volume=%u", (unsigned)mcCfgSpkVolume());
   const auto &cfg = appConfig();
