@@ -1,4 +1,4 @@
-﻿// src/main.cpp
+// src/main.cpp
 // Module implementation.
 // ===== Mining-chan Core2 ? main entry (UI + orchestrator) =====
 // Board   : M5Stack Core2

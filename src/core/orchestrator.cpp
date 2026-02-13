@@ -1,4 +1,4 @@
-﻿// Module implementation.
+// Module implementation.
 #include "core/orchestrator.h"
 #include "utils/logging.h"
 const char* Orchestrator::sourceToStr_(CancelSource s) {

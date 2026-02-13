@@ -1,4 +1,4 @@
-﻿// src/azure_tts.h
+// src/azure_tts.h
 // Module implementation.
 #pragma once
 #include <Arduino.h>

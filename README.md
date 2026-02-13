@@ -1,4 +1,4 @@
-﻿# AI Mining Stackchan Core2
+# AI Mining Stackchan Core2
 
 ESP32 (M5Stack Core2) mining dashboard + Stackchan avatar + AI speech.
 

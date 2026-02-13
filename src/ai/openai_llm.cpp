@@ -1,4 +1,4 @@
-﻿// Module implementation.
+// Module implementation.
 #include "ai/openai_llm.h"
 
 #include <ArduinoJson.h>

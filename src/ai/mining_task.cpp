@@ -1,4 +1,4 @@
-﻿// src/mining_task.cpp
+// src/mining_task.cpp
 // Module implementation.
 #include "ai/mining_task.h"
 

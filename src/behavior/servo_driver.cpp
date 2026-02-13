@@ -1,6 +1,8 @@
 // Module implementation.
 #include "behavior/servo_driver.h"
 
+#include <math.h>
+
 #include <ServoEasing.hpp>
 
 #include "config/config.h"
@@ -13,6 +15,8 @@ ServoEasing s_servoY;
 bool s_initialized = false;
 bool s_homed = false;
 uint32_t s_lastUpdateMs = 0;
+float s_cmdX = (float)MC_SERVO_START_DEGREE_X;
+float s_cmdY = (float)MC_SERVO_START_DEGREE_Y;
 
 int clampDegree_(int value, int low, int high) {
   if (value < low) return low;
@@ -23,14 +27,27 @@ int clampDegree_(int value, int low, int high) {
 int gazeToDegree_(float gaze, int startDeg, float gain, int invert, int minDeg,
                   int maxDeg) {
   const float sign = invert ? -1.0f : 1.0f;
-  const int target = startDeg + (int)(gain * (gaze * sign));
-  return clampDegree_(target, minDeg, maxDeg);
+  const float target = startDeg + (gain * (gaze * sign));
+  return clampDegree_((int)lroundf(target), minDeg, maxDeg);
 }
 
-void applyDegrees_(int degX, int degY) {
-  s_servoX.setEaseTo(degX);
-  s_servoY.setEaseTo(degY);
-  synchronizeAllServosStartAndWaitForAllServosToStop();
+void applyDegreesNonBlocking_(int degX, int degY, uint16_t moveMs) {
+  s_servoX.startEaseToD(degX, moveMs);
+  s_servoY.startEaseToD(degY, moveMs);
+}
+
+void setHome_(bool smooth) {
+  if (smooth) {
+    s_cmdX += ((float)MC_SERVO_START_DEGREE_X - s_cmdX) * MC_SERVO_SMOOTH_ALPHA;
+    s_cmdY += ((float)MC_SERVO_START_DEGREE_Y - s_cmdY) * MC_SERVO_SMOOTH_ALPHA;
+    applyDegreesNonBlocking_((int)lroundf(s_cmdX), (int)lroundf(s_cmdY),
+                             MC_SERVO_HOME_MOVE_TIME_MS);
+  } else {
+    s_cmdX = (float)MC_SERVO_START_DEGREE_X;
+    s_cmdY = (float)MC_SERVO_START_DEGREE_Y;
+    applyDegreesNonBlocking_(MC_SERVO_START_DEGREE_X, MC_SERVO_START_DEGREE_Y,
+                             MC_SERVO_HOME_MOVE_TIME_MS);
+  }
 }
 
 } // namespace
@@ -58,7 +75,7 @@ void servoDriverBegin() {
   s_servoY.setEasingType(EASE_QUADRATIC_IN_OUT);
   setSpeedForAllServos(MC_SERVO_SPEED);
 
-  applyDegrees_(MC_SERVO_START_DEGREE_X, MC_SERVO_START_DEGREE_Y);
+  setHome_(false);
   s_homed = true;
   MC_LOGI("SERVO", "begin pin_x=%d pin_y=%d home=(%d,%d) attach=(%u,%u)",
           MC_SERVO_PIN_X, MC_SERVO_PIN_Y, MC_SERVO_START_DEGREE_X,
@@ -69,7 +86,7 @@ void servoDriverBegin() {
 void servoDriverHome() {
 #if MC_ENABLE_SERVO
   if (!s_initialized) return;
-  applyDegrees_(MC_SERVO_START_DEGREE_X, MC_SERVO_START_DEGREE_Y);
+  setHome_(true);
   s_homed = true;
 #endif
 }
@@ -99,7 +116,10 @@ void servoDriverUpdate(float gazeX, float gazeY, bool active) {
   const int degY = gazeToDegree_(gazeY, MC_SERVO_START_DEGREE_Y, MC_SERVO_GAIN_Y,
                                  MC_SERVO_INVERT_Y, MC_SERVO_MIN_DEGREE_Y,
                                  MC_SERVO_MAX_DEGREE_Y);
-  applyDegrees_(degX, degY);
+  s_cmdX += ((float)degX - s_cmdX) * MC_SERVO_SMOOTH_ALPHA;
+  s_cmdY += ((float)degY - s_cmdY) * MC_SERVO_SMOOTH_ALPHA;
+  applyDegreesNonBlocking_((int)lroundf(s_cmdX), (int)lroundf(s_cmdY),
+                           MC_SERVO_MOVE_TIME_MS);
   s_homed = false;
 #endif
 }

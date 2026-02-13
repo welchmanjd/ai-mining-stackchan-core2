@@ -1,4 +1,4 @@
-﻿// src/app_presenter.h
+// src/app_presenter.h
 // Module implementation.
 #pragma once
 #include <Arduino.h>

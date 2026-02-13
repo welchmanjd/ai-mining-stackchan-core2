@@ -1,4 +1,4 @@
-﻿// src/stackchan_behavior.h
+// src/stackchan_behavior.h
 // Module implementation.
 #pragma once
 #include <Arduino.h>

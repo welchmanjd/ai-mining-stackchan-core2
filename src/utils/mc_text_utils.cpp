@@ -1,4 +1,4 @@
-﻿// Module implementation.
+// Module implementation.
 #include "utils/mc_text_utils.h"
 static size_t utf8SeqLen_(uint8_t c) {
   if (c < 0x80) return 1;

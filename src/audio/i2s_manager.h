@@ -1,4 +1,4 @@
-﻿// src/i2s_manager.h
+// src/i2s_manager.h
 // Module implementation.
 #pragma once
 #include <Arduino.h>

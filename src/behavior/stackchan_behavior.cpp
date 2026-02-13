@@ -1,4 +1,4 @@
-﻿// src/stackchan_behavior.cpp
+// src/stackchan_behavior.cpp
 // Module implementation.
 #include "behavior/stackchan_behavior.h"
 #include "utils/logging.h"

@@ -1,4 +1,4 @@
-﻿// Module implementation.
+// Module implementation.
 #pragma once
 // mc_text_utils: small, side-effect-free String helpers
 // - UTF-8 safe byte clamping (do not cut in the middle of a multi-byte sequence)

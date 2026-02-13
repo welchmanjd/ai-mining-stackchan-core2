@@ -1,4 +1,4 @@
-﻿// src/openai_llm.h
+// src/openai_llm.h
 // Module implementation.
 #pragma once
 #include <Arduino.h>

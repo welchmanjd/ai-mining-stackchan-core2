@@ -1,4 +1,4 @@
-﻿// === src/i2s_manager.cpp : replace whole file ===
+// === src/i2s_manager.cpp : replace whole file ===
 // Module implementation.
 #include "audio/i2s_manager.h"
 #include "utils/logging.h"

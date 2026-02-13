@@ -1,4 +1,4 @@
-﻿// src/azure_tts.cpp
+// src/azure_tts.cpp
 // Module implementation.
 #include "ai/azure_tts.h"
 

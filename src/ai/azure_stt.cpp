@@ -1,4 +1,4 @@
-﻿// Module implementation.
+// Module implementation.
 #include "ai/azure_stt.h"
 
 #include <ArduinoJson.h>

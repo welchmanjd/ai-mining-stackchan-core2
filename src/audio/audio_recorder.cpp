@@ -1,4 +1,4 @@
-﻿// === src/audio_recorder.cpp : replace whole file ===
+// === src/audio_recorder.cpp : replace whole file ===
 // Module implementation.
 #include "audio/audio_recorder.h"
 

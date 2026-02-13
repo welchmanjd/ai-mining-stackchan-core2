@@ -1,4 +1,4 @@
-﻿// Module implementation.
+// Module implementation.
 #include "ai/ai_talk_controller.h"
 
 #include <string.h>

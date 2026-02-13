@@ -1,4 +1,4 @@
-﻿// src/config.h
+// src/config.h
 // Module implementation.
 #pragma once
 #include <Arduino.h>
@@ -18,7 +18,7 @@
 // ---------------------------------------------------------
 // User-tunable defaults (override in user_config.h)
 #ifndef MC_DISPLAY_SLEEP_SECONDS
-  #define MC_DISPLAY_SLEEP_SECONDS 60 // app_runtime.cpp: 画面スリープ判定の初期値（NVS display_sleep_sで上書き可）
+  #define MC_DISPLAY_SLEEP_SECONDS 600 // app_runtime.cpp: 画面スリープ判定の初期値（NVS display_sleep_sで上書き可）
 #endif
 #ifndef MC_SPK_VOLUME
   #define MC_SPK_VOLUME 160 // main.cpp/AzureTts: 起動時のスピーカー音量の初期値
@@ -316,10 +316,10 @@
   #define MC_SERVO_MAX_DEGREE_Y 100 // behavior/servo_driver.cpp: tilt upper clamp
 #endif
 #ifndef MC_SERVO_GAIN_X
-  #define MC_SERVO_GAIN_X 15.0f // behavior/servo_driver.cpp: pan gain for gazeX
+  #define MC_SERVO_GAIN_X 25.0f // behavior/servo_driver.cpp: pan gain for gazeX
 #endif
 #ifndef MC_SERVO_GAIN_Y
-  #define MC_SERVO_GAIN_Y 10.0f // behavior/servo_driver.cpp: tilt gain for gazeY
+  #define MC_SERVO_GAIN_Y 18.0f // behavior/servo_driver.cpp: tilt gain for gazeY
 #endif
 #ifndef MC_SERVO_INVERT_X
   #define MC_SERVO_INVERT_X 0 // behavior/servo_driver.cpp: 1 = invert gazeX sign
@@ -328,10 +328,19 @@
   #define MC_SERVO_INVERT_Y 0 // behavior/servo_driver.cpp: 1 = invert gazeY sign
 #endif
 #ifndef MC_SERVO_SPEED
-  #define MC_SERVO_SPEED 30 // behavior/servo_driver.cpp: ServoEasing speed
+  #define MC_SERVO_SPEED 6 // behavior/servo_driver.cpp: ServoEasing speed (max-smooth baseline)
 #endif
 #ifndef MC_SERVO_UPDATE_INTERVAL_MS
-  #define MC_SERVO_UPDATE_INTERVAL_MS 50 // behavior/servo_driver.cpp: update period
+  #define MC_SERVO_UPDATE_INTERVAL_MS 20 // behavior/servo_driver.cpp: update period
+#endif
+#ifndef MC_SERVO_SMOOTH_ALPHA
+  #define MC_SERVO_SMOOTH_ALPHA 0.10f // behavior/servo_driver.cpp: low-pass smoothing ratio
+#endif
+#ifndef MC_SERVO_MOVE_TIME_MS
+  #define MC_SERVO_MOVE_TIME_MS 260 // behavior/servo_driver.cpp: time for one movement step
+#endif
+#ifndef MC_SERVO_HOME_MOVE_TIME_MS
+  #define MC_SERVO_HOME_MOVE_TIME_MS 340 // behavior/servo_driver.cpp: time for home movement
 #endif
 
 // ---------------------------------------------------------
