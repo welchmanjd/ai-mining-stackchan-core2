@@ -20,14 +20,14 @@ float s_cmdY = (float)MC_SERVO_START_DEGREE_Y;
 float s_targetGazeX = 0.0f;
 float s_targetGazeY = 0.0f;
 bool s_targetActive = false;
-bool s_isMoving = false;
 bool s_moveToHome = false;
 uint16_t s_moveDurationMs = MC_SERVO_MOVE_TIME_MS;
-uint32_t s_nextMoveAllowedMs = 0;
 float s_moveToX = (float)MC_SERVO_START_DEGREE_X;
 float s_moveToY = (float)MC_SERVO_START_DEGREE_Y;
+float s_filteredTargetX = (float)MC_SERVO_START_DEGREE_X;
+float s_filteredTargetY = (float)MC_SERVO_START_DEGREE_Y;
 
-constexpr float kMoveStartThresholdDeg = 0.8f;
+constexpr float kMoveStartThresholdDeg = 0.15f;
 float clampDegreeF_(float value, float low, float high) {
   if (value < low) return low;
   if (value > high) return high;
@@ -46,21 +46,23 @@ void beginMove_(float toX, float toY, uint16_t durationMs, bool toHome) {
   s_moveToY = toY;
   s_moveDurationMs = durationMs > 0 ? durationMs : 1;
 
-  s_servoX.setEaseToD(toX, s_moveDurationMs);
-  s_servoY.setEaseToD(toY, s_moveDurationMs);
+  if (toHome) {
+    s_servoX.setEaseToD(toX, s_moveDurationMs);
+    s_servoY.setEaseToD(toY, s_moveDurationMs);
+  } else {
+    s_servoX.setEaseTo(toX, MC_SERVO_TRACK_SPEED_DPS);
+    s_servoY.setEaseTo(toY, MC_SERVO_TRACK_SPEED_DPS);
+  }
   synchronizeAllServosAndStartInterrupt();
 
-  s_isMoving = true;
   s_moveToHome = toHome;
 }
 
 void updateMove_(uint32_t now) {
-  if (!s_isMoving) return;
+  (void)now;
   if (!areInterruptsActive()) {
-    s_isMoving = false;
     s_cmdX = s_moveToX;
     s_cmdY = s_moveToY;
-    s_nextMoveAllowedMs = now + MC_SERVO_IDLE_TIME_MS;
     if (s_moveToHome) s_homed = true;
   }
 }
@@ -79,10 +81,12 @@ void setHome_(bool smooth) {
     s_cmdX = (float)MC_SERVO_START_DEGREE_X;
     s_cmdY = (float)MC_SERVO_START_DEGREE_Y;
     writeDegrees_(s_cmdX, s_cmdY);
-    s_isMoving = false;
     s_moveToHome = false;
     s_homed = true;
-    s_nextMoveAllowedMs = millis() + MC_SERVO_IDLE_TIME_MS;
+    s_moveToX = s_cmdX;
+    s_moveToY = s_cmdY;
+    s_filteredTargetX = s_cmdX;
+    s_filteredTargetY = s_cmdY;
   }
 }
 
@@ -143,23 +147,18 @@ void servoDriverTick() {
 #else
   if (!s_initialized) return;
   const uint32_t now = millis();
+  updateMove_(now);
+
   if (MC_SERVO_UPDATE_INTERVAL_MS > 0 &&
       (uint32_t)(now - s_lastUpdateMs) < MC_SERVO_UPDATE_INTERVAL_MS) {
     return;
   }
   s_lastUpdateMs = now;
 
-  if (s_isMoving) {
-    updateMove_(now);
-    return;
-  }
-
-  if ((int32_t)(now - s_nextMoveAllowedMs) < 0) {
-    return;
-  }
-
   if (!s_targetActive) {
-    if (!s_homed) {
+    const bool homeRequested = fabsf(s_moveToX - (float)MC_SERVO_START_DEGREE_X) > kMoveStartThresholdDeg ||
+                               fabsf(s_moveToY - (float)MC_SERVO_START_DEGREE_Y) > kMoveStartThresholdDeg;
+    if (!s_homed && homeRequested) {
       servoDriverHome();
     }
     return;
@@ -171,12 +170,14 @@ void servoDriverTick() {
   const float degY = gazeToDegree_(s_targetGazeY, MC_SERVO_START_DEGREE_Y, MC_SERVO_GAIN_Y,
                                    MC_SERVO_INVERT_Y, MC_SERVO_MIN_DEGREE_Y,
                                    MC_SERVO_MAX_DEGREE_Y);
+  s_filteredTargetX += (degX - s_filteredTargetX) * MC_SERVO_SMOOTH_ALPHA;
+  s_filteredTargetY += (degY - s_filteredTargetY) * MC_SERVO_SMOOTH_ALPHA;
 
-  if (fabsf(degX - s_cmdX) < kMoveStartThresholdDeg &&
-      fabsf(degY - s_cmdY) < kMoveStartThresholdDeg) {
+  if (fabsf(s_filteredTargetX - s_moveToX) < kMoveStartThresholdDeg &&
+      fabsf(s_filteredTargetY - s_moveToY) < kMoveStartThresholdDeg) {
     return;
   }
-  beginMove_(degX, degY, MC_SERVO_MOVE_TIME_MS, false);
+  beginMove_(s_filteredTargetX, s_filteredTargetY, MC_SERVO_MOVE_TIME_MS, false);
   s_homed = false;
 #endif
 }
