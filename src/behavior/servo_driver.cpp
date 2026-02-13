@@ -22,11 +22,8 @@ float s_targetGazeY = 0.0f;
 bool s_targetActive = false;
 bool s_isMoving = false;
 bool s_moveToHome = false;
-uint32_t s_moveStartMs = 0;
 uint16_t s_moveDurationMs = MC_SERVO_MOVE_TIME_MS;
 uint32_t s_nextMoveAllowedMs = 0;
-float s_moveFromX = (float)MC_SERVO_START_DEGREE_X;
-float s_moveFromY = (float)MC_SERVO_START_DEGREE_Y;
 float s_moveToX = (float)MC_SERVO_START_DEGREE_X;
 float s_moveToY = (float)MC_SERVO_START_DEGREE_Y;
 
@@ -44,30 +41,25 @@ float gazeToDegree_(float gaze, int startDeg, float gain, int invert, int minDeg
   return clampDegreeF_(target, (float)minDeg, (float)maxDeg);
 }
 
-float lerp_(float a, float b, float t) { return a + (b - a) * t; }
-
 void beginMove_(float toX, float toY, uint16_t durationMs, bool toHome) {
-  s_moveFromX = s_cmdX;
-  s_moveFromY = s_cmdY;
   s_moveToX = toX;
   s_moveToY = toY;
   s_moveDurationMs = durationMs > 0 ? durationMs : 1;
-  s_moveStartMs = millis();
+
+  s_servoX.setEaseToD(toX, s_moveDurationMs);
+  s_servoY.setEaseToD(toY, s_moveDurationMs);
+  synchronizeAllServosAndStartInterrupt();
+
   s_isMoving = true;
   s_moveToHome = toHome;
 }
 
 void updateMove_(uint32_t now) {
   if (!s_isMoving) return;
-  const uint32_t elapsed = now - s_moveStartMs;
-  float t = (float)elapsed / (float)s_moveDurationMs;
-  if (t > 1.0f) t = 1.0f;
-  s_cmdX = lerp_(s_moveFromX, s_moveToX, t);
-  s_cmdY = lerp_(s_moveFromY, s_moveToY, t);
-  s_servoX.write(s_cmdX);
-  s_servoY.write(s_cmdY);
-  if (t >= 1.0f) {
+  if (!areInterruptsActive()) {
     s_isMoving = false;
+    s_cmdX = s_moveToX;
+    s_cmdY = s_moveToY;
     s_nextMoveAllowedMs = now + MC_SERVO_IDLE_TIME_MS;
     if (s_moveToHome) s_homed = true;
   }
@@ -130,7 +122,6 @@ void servoDriverHome() {
 #if MC_ENABLE_SERVO
   if (!s_initialized) return;
   setHome_(true);
-  s_homed = true;
 #endif
 }
 
