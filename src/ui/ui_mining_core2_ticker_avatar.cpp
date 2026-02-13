@@ -171,10 +171,14 @@ void UIMining::updateAvatarLiveliness() {
   else { /* -2 */            energy = 0.60f; eyeOpen = 0.75f; gazeAmp = 0.55f; }
   struct State {
     bool     initialized;
-    uint32_t saccadeInterval;
-    uint32_t lastSaccadeMs;
     float    vertical;
     float    horizontal;
+    float    driftV;
+    float    driftH;
+    float    phaseV;
+    float    phaseH;
+    uint32_t driftRetargetMs;
+    uint32_t lastDriftRetargetMs;
     uint32_t blinkInterval;
     uint32_t lastBlinkMs;
     bool     eyeOpen;
@@ -186,38 +190,65 @@ void UIMining::updateAvatarLiveliness() {
   float servoGazeY = 0.0f;
   if (!s_state.initialized) {
     s_state.initialized       = true;
-    s_state.saccadeInterval   = 1000;
-    s_state.lastSaccadeMs     = now;
     s_state.vertical          = 0.0f;
     s_state.horizontal        = 0.0f;
+    s_state.driftV            = 0.0f;
+    s_state.driftH            = 0.0f;
+    s_state.phaseV            = ((float)random(0, 6283)) / 1000.0f;
+    s_state.phaseH            = ((float)random(0, 6283)) / 1000.0f;
+    s_state.driftRetargetMs   = 900;
+    s_state.lastDriftRetargetMs = now;
     s_state.blinkInterval     = 2500;
     s_state.lastBlinkMs       = now;
     s_state.eyeOpen           = true;
     s_state.count             = 0;
     s_state.lastUpdateMs      = now;
   }
+  uint32_t dtMs = now - s_state.lastUpdateMs;
+  s_state.lastUpdateMs = now;
+  float dtSec = (float)dtMs / 1000.0f;
+  if (dtSec < 0.0f) dtSec = 0.0f;
+  if (dtSec > 0.10f) dtSec = 0.10f;
+
   if (bubbleActive) {
     avatar_.setGaze(0.0f, 0.0f);
     servoGazeX = 0.0f;
     servoGazeY = 0.0f;
-  } else if (now - s_state.lastSaccadeMs > s_state.saccadeInterval) {
-    s_state.vertical   = (((float)random(-1000, 1001)) / 1000.0f) * gazeAmp;
-    s_state.horizontal = (((float)random(-1000, 1001)) / 1000.0f) * gazeAmp;
-    // clamp
-    if (s_state.vertical > 1.0f) s_state.vertical = 1.0f;
-    if (s_state.vertical < -1.0f) s_state.vertical = -1.0f;
-    if (s_state.horizontal > 1.0f) s_state.horizontal = 1.0f;
-    if (s_state.horizontal < -1.0f) s_state.horizontal = -1.0f;
-    avatar_.setGaze(s_state.vertical, s_state.horizontal);
-    if (moodLevel_ >= 2)      s_state.saccadeInterval = 350 + 80  * (uint32_t)random(0, 15);
-    else if (moodLevel_ == 1) s_state.saccadeInterval = 450 + 90  * (uint32_t)random(0, 15);
-    else if (moodLevel_ == 0) s_state.saccadeInterval = 500 + 100 * (uint32_t)random(0, 20);
-    else                       s_state.saccadeInterval = 900 + 150 * (uint32_t)random(0, 20);
-    s_state.lastSaccadeMs  = now;
-  }
-  if (!bubbleActive) {
-    servoGazeX = s_state.horizontal;
-    servoGazeY = s_state.vertical;
+  } else {
+    if (now - s_state.lastDriftRetargetMs > s_state.driftRetargetMs) {
+      const float maxVel = 0.85f * gazeAmp;
+      s_state.driftV = (((float)random(-1000, 1001)) / 1000.0f) * maxVel;
+      s_state.driftH = (((float)random(-1000, 1001)) / 1000.0f) * maxVel;
+      if (moodLevel_ >= 2)      s_state.driftRetargetMs = 420 + 70  * (uint32_t)random(0, 10);
+      else if (moodLevel_ == 1) s_state.driftRetargetMs = 520 + 90  * (uint32_t)random(0, 10);
+      else if (moodLevel_ == 0) s_state.driftRetargetMs = 620 + 110 * (uint32_t)random(0, 10);
+      else                      s_state.driftRetargetMs = 900 + 140 * (uint32_t)random(0, 10);
+      s_state.lastDriftRetargetMs = now;
+    }
+
+    // Continuous gaze drift + tiny micro-sway (no jump target changes).
+    s_state.phaseV += dtSec * (1.2f + 0.2f * energy);
+    s_state.phaseH += dtSec * (1.0f + 0.2f * energy);
+    float microV = 0.12f * gazeAmp * sinf(s_state.phaseV);
+    float microH = 0.12f * gazeAmp * cosf(s_state.phaseH);
+    float nextV = s_state.vertical + s_state.driftV * dtSec;
+    float nextH = s_state.horizontal + s_state.driftH * dtSec;
+    const float lim = 1.0f * gazeAmp;
+    if (nextV > lim)  { nextV = lim;  s_state.driftV *= -0.55f; }
+    if (nextV < -lim) { nextV = -lim; s_state.driftV *= -0.55f; }
+    if (nextH > lim)  { nextH = lim;  s_state.driftH *= -0.55f; }
+    if (nextH < -lim) { nextH = -lim; s_state.driftH *= -0.55f; }
+    s_state.vertical = nextV;
+    s_state.horizontal = nextH;
+    float outV = s_state.vertical + microV;
+    float outH = s_state.horizontal + microH;
+    if (outV > 1.0f) outV = 1.0f;
+    if (outV < -1.0f) outV = -1.0f;
+    if (outH > 1.0f) outH = 1.0f;
+    if (outH < -1.0f) outH = -1.0f;
+    avatar_.setGaze(outV, outH);
+    servoGazeX = outH;
+    servoGazeY = outV;
   }
   if (now - s_state.lastBlinkMs > s_state.blinkInterval) {
     if (s_state.eyeOpen) {
@@ -230,9 +261,7 @@ void UIMining::updateAvatarLiveliness() {
     s_state.eyeOpen       = !s_state.eyeOpen;
     s_state.lastBlinkMs   = now;
   }
-  uint32_t dt   = now - s_state.lastUpdateMs;
-  s_state.lastUpdateMs = now;
-  int step = dt / 33;
+  int step = (int)(dtMs / 33);
   if (step < 1) step = 1;
   s_state.count = (s_state.count + step) % 100;
   float breath = sinf(s_state.count * 2.0f * PI / 100.0f);
