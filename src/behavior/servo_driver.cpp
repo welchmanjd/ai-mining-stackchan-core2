@@ -27,8 +27,8 @@ float s_moveToY = (float)MC_SERVO_START_DEGREE_Y;
 float s_filteredTargetX = (float)MC_SERVO_START_DEGREE_X;
 float s_filteredTargetY = (float)MC_SERVO_START_DEGREE_Y;
 
-constexpr float kMoveStartThresholdDeg = 0.10f;
-constexpr float kMoveUpdateThresholdDeg = 0.03f;
+constexpr float kMoveStartThresholdDeg = 0.05f;
+constexpr float kMoveUpdateThresholdDeg = 0.01f;
 float clampDegreeF_(float value, float low, float high) {
   if (value < low) return low;
   if (value > high) return high;

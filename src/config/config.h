@@ -272,7 +272,7 @@
   #define MC_PRESENTER_HEARTBEAT_MS 10000 // app_runtime.cpp: presenter heartbeat interval
 #endif
 #ifndef MC_APP_UI_FRAME_INTERVAL_MS
-  #define MC_APP_UI_FRAME_INTERVAL_MS 100 // app_runtime.cpp: UI frame update interval
+  #define MC_APP_UI_FRAME_INTERVAL_MS 33 // app_runtime.cpp: UI frame update interval (~30Hz)
 #endif
 
 // ---------------------------------------------------------
@@ -337,7 +337,7 @@
   #define MC_SERVO_SMOOTH_ALPHA 0.35f // behavior/servo_driver.cpp: low-pass smoothing ratio
 #endif
 #ifndef MC_SERVO_TRACK_SPEED_DPS
-  #define MC_SERVO_TRACK_SPEED_DPS 16 // behavior/servo_driver.cpp: tracking speed (deg/sec)
+  #define MC_SERVO_TRACK_SPEED_DPS 22 // behavior/servo_driver.cpp: tracking speed (deg/sec)
 #endif
 #ifndef MC_SERVO_MOVE_TIME_MS
   #define MC_SERVO_MOVE_TIME_MS 2000 // behavior/servo_driver.cpp: time for one movement step
