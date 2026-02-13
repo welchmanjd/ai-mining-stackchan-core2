@@ -56,6 +56,7 @@ public:
     int y_ = 0;
   };
   void setTouchSnapshot(const TouchSnapshot &s);
+  void getServoDriveTarget(float* gazeX, float* gazeY, bool* active) const;
   void drawSplash(const String &wifiText, uint16_t wifiCol,
                   const String &miningText, uint16_t miningCol,
                   const String &openAiText, uint16_t openAiCol,
@@ -173,6 +174,9 @@ private:
   int8_t moodLevel_ = 0;
   uint32_t moodLastCalcMs_ = 0;
   uint32_t moodLastReportMs_ = 0;
+  float servoDriveGazeX_ = 0.0f;
+  float servoDriveGazeY_ = 0.0f;
+  bool servoDriveActive_ = false;
   // ---------- Static frame ----------
   void drawStaticFrame();
   // ---------- Page input ----------

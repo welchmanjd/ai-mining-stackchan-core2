@@ -3,7 +3,6 @@
 
 #include <WiFi.h>
 
-#include "behavior/servo_driver.h"
 #include "config/config.h"
 #include "utils/logging.h"
 #include "utils/mining_status.h"
@@ -273,6 +272,8 @@ void UIMining::updateAvatarLiveliness() {
     s_bodyState.py += (s_bodyState.ty - s_bodyState.py) * follow;
     avatar_.setPosition((int)s_bodyState.px, (int)s_bodyState.py);
   }
-  servoDriverUpdate(servoGazeX, servoGazeY, inStackchanMode_);
+  // Publish gaze target only; actual servo stepping runs in core tick.
+  servoDriveGazeX_ = servoGazeX;
+  servoDriveGazeY_ = servoGazeY;
+  servoDriveActive_ = inStackchanMode_;
 }
-

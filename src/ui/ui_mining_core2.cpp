@@ -78,6 +78,11 @@ void UIMining::begin(const char *appName, const char *appVer) {
   tick_.pushSprite(0, Y_LOG);
 }
 void UIMining::setTouchSnapshot(const TouchSnapshot &s) { touch_ = s; }
+void UIMining::getServoDriveTarget(float* gazeX, float* gazeY, bool* active) const {
+  if (gazeX) *gazeX = servoDriveGazeX_;
+  if (gazeY) *gazeY = servoDriveGazeY_;
+  if (active) *active = servoDriveActive_;
+}
 String UIMining::shortFwString() const { return String("r25-12-06"); }
 uint32_t UIMining::uptimeSeconds() const {
   return static_cast<uint32_t>(millis() / 1000);

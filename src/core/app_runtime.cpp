@@ -20,6 +20,7 @@
 #include "ai/azure_tts.h"
 #include "ai/mining_task.h"
 #include "ai/openai_llm.h"
+#include "behavior/servo_driver.h"
 #include "behavior/stackchan_behavior.h"
 #include "config/config.h"
 #include "config/mc_config_store.h"
@@ -1178,6 +1179,12 @@ void appRuntimeTick(uint32_t now) {
   UIMining &ui = UIMining::instance();
   handleButtonAndTouch_(now, runtimeFeatures, in, ui);
   handleNetworkUiAndSleep_(now, runtimeFeatures, ui);
+  float servoGazeX = 0.0f;
+  float servoGazeY = 0.0f;
+  bool servoActive = false;
+  ui.getServoDriveTarget(&servoGazeX, &servoGazeY, &servoActive);
+  servoDriverSetTarget(servoGazeX, servoGazeY, servoActive);
+  servoDriverTick();
 }
 
 void appRuntimeNotifySerialActivity() {

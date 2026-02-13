@@ -331,16 +331,19 @@
   #define MC_SERVO_SPEED 6 // behavior/servo_driver.cpp: ServoEasing speed (max-smooth baseline)
 #endif
 #ifndef MC_SERVO_UPDATE_INTERVAL_MS
-  #define MC_SERVO_UPDATE_INTERVAL_MS 20 // behavior/servo_driver.cpp: update period
+  #define MC_SERVO_UPDATE_INTERVAL_MS 33 // behavior/servo_driver.cpp: update period (~30Hz)
 #endif
 #ifndef MC_SERVO_SMOOTH_ALPHA
-  #define MC_SERVO_SMOOTH_ALPHA 0.10f // behavior/servo_driver.cpp: low-pass smoothing ratio
+  #define MC_SERVO_SMOOTH_ALPHA 0.35f // behavior/servo_driver.cpp: low-pass smoothing ratio
 #endif
 #ifndef MC_SERVO_MOVE_TIME_MS
-  #define MC_SERVO_MOVE_TIME_MS 260 // behavior/servo_driver.cpp: time for one movement step
+  #define MC_SERVO_MOVE_TIME_MS 2000 // behavior/servo_driver.cpp: time for one movement step
 #endif
 #ifndef MC_SERVO_HOME_MOVE_TIME_MS
-  #define MC_SERVO_HOME_MOVE_TIME_MS 340 // behavior/servo_driver.cpp: time for home movement
+  #define MC_SERVO_HOME_MOVE_TIME_MS 2000 // behavior/servo_driver.cpp: time for home movement
+#endif
+#ifndef MC_SERVO_IDLE_TIME_MS
+  #define MC_SERVO_IDLE_TIME_MS 2000 // behavior/servo_driver.cpp: dwell after one movement
 #endif
 
 // ---------------------------------------------------------

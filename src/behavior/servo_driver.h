@@ -4,5 +4,6 @@
 #include <Arduino.h>
 
 void servoDriverBegin();
-void servoDriverUpdate(float gazeX, float gazeY, bool active);
+void servoDriverSetTarget(float gazeX, float gazeY, bool active);
+void servoDriverTick();
 void servoDriverHome();
