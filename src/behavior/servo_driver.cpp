@@ -27,7 +27,8 @@ float s_moveToY = (float)MC_SERVO_START_DEGREE_Y;
 float s_filteredTargetX = (float)MC_SERVO_START_DEGREE_X;
 float s_filteredTargetY = (float)MC_SERVO_START_DEGREE_Y;
 
-constexpr float kMoveStartThresholdDeg = 0.15f;
+constexpr float kMoveStartThresholdDeg = 0.10f;
+constexpr float kMoveUpdateThresholdDeg = 0.03f;
 float clampDegreeF_(float value, float low, float high) {
   if (value < low) return low;
   if (value > high) return high;
@@ -53,7 +54,9 @@ void beginMove_(float toX, float toY, uint16_t durationMs, bool toHome) {
     s_servoX.setEaseTo(toX, MC_SERVO_TRACK_SPEED_DPS);
     s_servoY.setEaseTo(toY, MC_SERVO_TRACK_SPEED_DPS);
   }
-  synchronizeAllServosAndStartInterrupt();
+  if (!areInterruptsActive()) {
+    synchronizeAllServosAndStartInterrupt();
+  }
 
   s_moveToHome = toHome;
 }
@@ -173,8 +176,11 @@ void servoDriverTick() {
   s_filteredTargetX += (degX - s_filteredTargetX) * MC_SERVO_SMOOTH_ALPHA;
   s_filteredTargetY += (degY - s_filteredTargetY) * MC_SERVO_SMOOTH_ALPHA;
 
-  if (fabsf(s_filteredTargetX - s_moveToX) < kMoveStartThresholdDeg &&
-      fabsf(s_filteredTargetY - s_moveToY) < kMoveStartThresholdDeg) {
+  const bool currentlyMoving = areInterruptsActive();
+  const float threshold = currentlyMoving ? kMoveUpdateThresholdDeg
+                                          : kMoveStartThresholdDeg;
+  if (fabsf(s_filteredTargetX - s_moveToX) < threshold &&
+      fabsf(s_filteredTargetY - s_moveToY) < threshold) {
     return;
   }
   beginMove_(s_filteredTargetX, s_filteredTargetY, MC_SERVO_MOVE_TIME_MS, false);
