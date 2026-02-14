@@ -26,6 +26,8 @@ float s_moveToX = (float)MC_SERVO_START_DEGREE_X;
 float s_moveToY = (float)MC_SERVO_START_DEGREE_Y;
 float s_filteredTargetX = (float)MC_SERVO_START_DEGREE_X;
 float s_filteredTargetY = (float)MC_SERVO_START_DEGREE_Y;
+float s_prevRawTargetX = (float)MC_SERVO_START_DEGREE_X;
+float s_prevRawTargetY = (float)MC_SERVO_START_DEGREE_Y;
 
 constexpr float kMoveStartThresholdDeg = 0.05f;
 constexpr float kMoveUpdateThresholdDeg = 0.01f;
@@ -35,11 +37,54 @@ float clampDegreeF_(float value, float low, float high) {
   return value;
 }
 
+float clamp01_(float value) {
+  if (value < 0.0f) return 0.0f;
+  if (value > 1.0f) return 1.0f;
+  return value;
+}
+
 float gazeToDegree_(float gaze, int startDeg, float gain, int invert, int minDeg,
                     int maxDeg) {
   const float sign = invert ? -1.0f : 1.0f;
   const float target = startDeg + (gain * (gaze * sign));
   return clampDegreeF_(target, (float)minDeg, (float)maxDeg);
+}
+
+float computeAdaptiveAlpha_(float rawTargetX, float rawTargetY, float dtSec) {
+#if MC_SERVO_DYNAMIC_ALPHA_ENABLE
+  float alphaMin = MC_SERVO_SMOOTH_ALPHA_MIN;
+  float alphaMax = MC_SERVO_SMOOTH_ALPHA_MAX;
+  if (alphaMin > alphaMax) {
+    const float tmp = alphaMin;
+    alphaMin = alphaMax;
+    alphaMax = tmp;
+  }
+
+  const float safeDt = dtSec > 0.0005f ? dtSec : 0.02f;
+  const float errX = fabsf(rawTargetX - s_filteredTargetX);
+  const float errY = fabsf(rawTargetY - s_filteredTargetY);
+  const float errDeg = errX > errY ? errX : errY;
+  const float dRawX = fabsf(rawTargetX - s_prevRawTargetX);
+  const float dRawY = fabsf(rawTargetY - s_prevRawTargetY);
+  const float velDegPerSec = (dRawX > dRawY ? dRawX : dRawY) / safeDt;
+
+  float errNorm = 0.0f;
+  if (MC_SERVO_ALPHA_ERR_REF_DEG > 0.0f) {
+    errNorm = clamp01_(errDeg / MC_SERVO_ALPHA_ERR_REF_DEG);
+  }
+  float velNorm = 0.0f;
+  if (MC_SERVO_ALPHA_VEL_REF_DPS > 0.0f) {
+    velNorm = clamp01_(velDegPerSec / MC_SERVO_ALPHA_VEL_REF_DPS);
+  }
+
+  const float drive = clamp01_(errNorm * 0.7f + velNorm * 0.3f);
+  return alphaMin + (alphaMax - alphaMin) * drive;
+#else
+  (void)rawTargetX;
+  (void)rawTargetY;
+  (void)dtSec;
+  return MC_SERVO_SMOOTH_ALPHA;
+#endif
 }
 
 void beginMove_(float toX, float toY, uint16_t durationMs, bool toHome) {
@@ -90,6 +135,8 @@ void setHome_(bool smooth) {
     s_moveToY = s_cmdY;
     s_filteredTargetX = s_cmdX;
     s_filteredTargetY = s_cmdY;
+    s_prevRawTargetX = s_cmdX;
+    s_prevRawTargetY = s_cmdY;
   }
 }
 
@@ -156,6 +203,8 @@ void servoDriverTick() {
       (uint32_t)(now - s_lastUpdateMs) < MC_SERVO_UPDATE_INTERVAL_MS) {
     return;
   }
+  const float dtSec = s_lastUpdateMs == 0 ? 0.02f
+                                          : (float)(now - s_lastUpdateMs) / 1000.0f;
   s_lastUpdateMs = now;
 
   if (!s_targetActive) {
@@ -173,8 +222,11 @@ void servoDriverTick() {
   const float degY = gazeToDegree_(s_targetGazeY, MC_SERVO_START_DEGREE_Y, MC_SERVO_GAIN_Y,
                                    MC_SERVO_INVERT_Y, MC_SERVO_MIN_DEGREE_Y,
                                    MC_SERVO_MAX_DEGREE_Y);
-  s_filteredTargetX += (degX - s_filteredTargetX) * MC_SERVO_SMOOTH_ALPHA;
-  s_filteredTargetY += (degY - s_filteredTargetY) * MC_SERVO_SMOOTH_ALPHA;
+  const float alpha = computeAdaptiveAlpha_(degX, degY, dtSec);
+  s_filteredTargetX += (degX - s_filteredTargetX) * alpha;
+  s_filteredTargetY += (degY - s_filteredTargetY) * alpha;
+  s_prevRawTargetX = degX;
+  s_prevRawTargetY = degY;
 
   const bool currentlyMoving = areInterruptsActive();
   const float threshold = currentlyMoving ? kMoveUpdateThresholdDeg

@@ -336,6 +336,36 @@
 #ifndef MC_SERVO_SMOOTH_ALPHA
   #define MC_SERVO_SMOOTH_ALPHA 0.35f // behavior/servo_driver.cpp: low-pass smoothing ratio
 #endif
+#ifndef MC_SERVO_DYNAMIC_ALPHA_ENABLE
+  #define MC_SERVO_DYNAMIC_ALPHA_ENABLE 1 // behavior/servo_driver.cpp: 1=adaptive alpha by error/velocity
+#endif
+#ifndef MC_SERVO_SMOOTH_ALPHA_MIN
+  #define MC_SERVO_SMOOTH_ALPHA_MIN 0.20f // behavior/servo_driver.cpp: alpha at tiny motion
+#endif
+#ifndef MC_SERVO_SMOOTH_ALPHA_MAX
+  #define MC_SERVO_SMOOTH_ALPHA_MAX 0.62f // behavior/servo_driver.cpp: alpha at large/fast motion
+#endif
+#ifndef MC_SERVO_ALPHA_ERR_REF_DEG
+  #define MC_SERVO_ALPHA_ERR_REF_DEG 2.0f // behavior/servo_driver.cpp: error(deg) where alpha nears max
+#endif
+#ifndef MC_SERVO_ALPHA_VEL_REF_DPS
+  #define MC_SERVO_ALPHA_VEL_REF_DPS 10.0f // behavior/servo_driver.cpp: target velocity(deg/s) where alpha nears max
+#endif
+#ifndef MC_SERVO_DIAG_SWEEP_ENABLE
+  #define MC_SERVO_DIAG_SWEEP_ENABLE 0 // behavior/servo_driver.cpp: 1=ignore gaze and run deterministic sweep
+#endif
+#ifndef MC_SERVO_DIAG_SWEEP_PERIOD_MS
+  #define MC_SERVO_DIAG_SWEEP_PERIOD_MS 2000 // behavior/servo_driver.cpp: half-cycle period for sweep test
+#endif
+#ifndef MC_SERVO_DIAG_SWEEP_AMPLITUDE_DEG
+  #define MC_SERVO_DIAG_SWEEP_AMPLITUDE_DEG 12.0f // behavior/servo_driver.cpp: +/- degree from home in sweep test
+#endif
+#ifndef MC_SERVO_DIAG_POWER_LOG_ENABLE
+  #define MC_SERVO_DIAG_POWER_LOG_ENABLE 0 // core/app_runtime.cpp: 1=periodic battery diagnostics while servo active
+#endif
+#ifndef MC_SERVO_DIAG_POWER_LOG_INTERVAL_MS
+  #define MC_SERVO_DIAG_POWER_LOG_INTERVAL_MS 1000 // core/app_runtime.cpp: interval for power diagnostics
+#endif
 #ifndef MC_SERVO_TRACK_SPEED_DPS
   #define MC_SERVO_TRACK_SPEED_DPS 22 // behavior/servo_driver.cpp: tracking speed (deg/sec)
 #endif
