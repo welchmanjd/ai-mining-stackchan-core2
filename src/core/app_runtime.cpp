@@ -1185,6 +1185,17 @@ void appRuntimeTick(uint32_t now) {
   ui.getServoDriveTarget(&servoGazeX, &servoGazeY, &servoActive);
   servoDriverSetTarget(servoGazeX, servoGazeY, servoActive);
   servoDriverTick();
+#if MC_SERVO_DIAG_POWER_LOG_ENABLE
+  if (servoActive) {
+    const int battMv = (int)M5.Power.getBatteryVoltage();
+    const int battMa = (int)M5.Power.getBatteryCurrent();
+    const int charging = (int)M5.Power.isCharging();
+    MC_LOGI_RL("servo_power_diag", MC_SERVO_DIAG_POWER_LOG_INTERVAL_MS,
+               "SERVO_PWR",
+               "gaze=(%.3f,%.3f) batt=%dmV curr=%dmA chg=%d",
+               (double)servoGazeX, (double)servoGazeY, battMv, battMa, charging);
+  }
+#endif
 }
 
 void appRuntimeNotifySerialActivity() {

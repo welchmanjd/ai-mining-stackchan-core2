@@ -28,6 +28,13 @@ float s_filteredTargetX = (float)MC_SERVO_START_DEGREE_X;
 float s_filteredTargetY = (float)MC_SERVO_START_DEGREE_Y;
 float s_prevRawTargetX = (float)MC_SERVO_START_DEGREE_X;
 float s_prevRawTargetY = (float)MC_SERVO_START_DEGREE_Y;
+float s_trackSpeedCmdDps = (float)MC_SERVO_TRACK_SPEED_DPS;
+float s_deadbandResidualX = 0.0f;
+float s_deadbandResidualY = 0.0f;
+float s_prevFilteredX = (float)MC_SERVO_START_DEGREE_X;
+float s_prevFilteredY = (float)MC_SERVO_START_DEGREE_Y;
+int8_t s_prevErrSignX = 0;
+int8_t s_prevErrSignY = 0;
 
 constexpr float kMoveStartThresholdDeg = 0.05f;
 constexpr float kMoveUpdateThresholdDeg = 0.01f;
@@ -41,6 +48,18 @@ float clamp01_(float value) {
   if (value < 0.0f) return 0.0f;
   if (value > 1.0f) return 1.0f;
   return value;
+}
+
+float clampF_(float value, float low, float high) {
+  if (value < low) return low;
+  if (value > high) return high;
+  return value;
+}
+
+int8_t signWithDeadzone_(float value, float deadzone) {
+  if (value > deadzone) return 1;
+  if (value < -deadzone) return -1;
+  return 0;
 }
 
 float gazeToDegree_(float gaze, int startDeg, float gain, int invert, int minDeg,
@@ -87,7 +106,102 @@ float computeAdaptiveAlpha_(float rawTargetX, float rawTargetY, float dtSec) {
 #endif
 }
 
-void beginMove_(float toX, float toY, uint16_t durationMs, bool toHome) {
+void computeDiagSweepTargets_(uint32_t now, float* outX, float* outY) {
+  const uint32_t halfPeriodMs =
+      (MC_SERVO_DIAG_SWEEP_PERIOD_MS >= 200) ? MC_SERVO_DIAG_SWEEP_PERIOD_MS
+                                             : 200;
+  const bool positive = ((now / halfPeriodMs) & 1U) != 0U;
+  const float sign = positive ? 1.0f : -1.0f;
+  const float amp = fabsf(MC_SERVO_DIAG_SWEEP_AMPLITUDE_DEG);
+  const float x = clampDegreeF_((float)MC_SERVO_START_DEGREE_X + (sign * amp),
+                                (float)MC_SERVO_MIN_DEGREE_X,
+                                (float)MC_SERVO_MAX_DEGREE_X);
+  const float y = clampDegreeF_((float)MC_SERVO_START_DEGREE_Y + (sign * amp),
+                                (float)MC_SERVO_MIN_DEGREE_Y,
+                                (float)MC_SERVO_MAX_DEGREE_Y);
+  if (outX) *outX = x;
+  if (outY) *outY = y;
+}
+
+float computeTrackSpeedCommand_(float toX, float toY, float dtSec) {
+#if MC_SERVO_TRACK_ACCEL_LIMIT_ENABLE
+  float minSpeed = MC_SERVO_TRACK_MIN_SPEED_DPS;
+  float maxSpeed = (float)MC_SERVO_TRACK_SPEED_DPS;
+  if (minSpeed > maxSpeed) {
+    const float tmp = minSpeed;
+    minSpeed = maxSpeed;
+    maxSpeed = tmp;
+  }
+
+  const float safeDt = dtSec > 0.0005f ? dtSec : 0.02f;
+  const float stepX = fabsf(toX - s_moveToX);
+  const float stepY = fabsf(toY - s_moveToY);
+  const float stepDeg = stepX > stepY ? stepX : stepY;
+
+  float desired = stepDeg / safeDt;
+  desired = clampF_(desired, minSpeed, maxSpeed);
+
+  const float accel = MC_SERVO_TRACK_ACCEL_DPS2 > 1.0f ? MC_SERVO_TRACK_ACCEL_DPS2
+                                                        : 1.0f;
+  const float maxDelta = accel * safeDt;
+  float delta = desired - s_trackSpeedCmdDps;
+  if (delta > maxDelta) delta = maxDelta;
+  if (delta < -maxDelta) delta = -maxDelta;
+  s_trackSpeedCmdDps += delta;
+  s_trackSpeedCmdDps = clampF_(s_trackSpeedCmdDps, minSpeed, maxSpeed);
+  return s_trackSpeedCmdDps;
+#else
+  (void)toX;
+  (void)toY;
+  (void)dtSec;
+  return (float)MC_SERVO_TRACK_SPEED_DPS;
+#endif
+}
+
+float applyDeadbandCompensation_(float filtered, float moveTo, float minDeg,
+                                 float maxDeg, float* residual,
+                                 float* prevFiltered, int8_t* prevErrSign) {
+#if MC_SERVO_DEADBAND_COMP_ENABLE
+  const float inputDelta = filtered - *prevFiltered;
+  *prevFiltered = filtered;
+  *residual += inputDelta;
+
+  const float err = filtered - moveTo;
+  const int8_t errSign = signWithDeadzone_(err, 0.001f);
+  if (errSign != 0 && *prevErrSign != 0 && errSign != *prevErrSign) {
+    const float damp = clampF_(MC_SERVO_DEADBAND_COMP_REVERSE_DAMP, 0.0f, 1.0f);
+    *residual *= damp;
+  }
+  if (errSign != 0) {
+    *prevErrSign = errSign;
+  }
+
+  if (fabsf(err) > MC_SERVO_DEADBAND_COMP_RANGE_DEG) {
+    *residual = 0.0f;
+    return clampDegreeF_(filtered, minDeg, maxDeg);
+  }
+
+  if (fabsf(*residual) >= MC_SERVO_DEADBAND_COMP_DEG) {
+    const float kick = (*residual > 0.0f) ? MC_SERVO_DEADBAND_COMP_KICK_DEG
+                                          : -MC_SERVO_DEADBAND_COMP_KICK_DEG;
+    filtered += kick;
+    *residual -= (*residual > 0.0f) ? MC_SERVO_DEADBAND_COMP_DEG
+                                    : -MC_SERVO_DEADBAND_COMP_DEG;
+  }
+  return clampDegreeF_(filtered, minDeg, maxDeg);
+#else
+  (void)moveTo;
+  (void)minDeg;
+  (void)maxDeg;
+  (void)residual;
+  (void)prevFiltered;
+  (void)prevErrSign;
+  return filtered;
+#endif
+}
+
+void beginMove_(float toX, float toY, uint16_t durationMs, bool toHome,
+                float trackSpeedDps) {
   s_moveToX = toX;
   s_moveToY = toY;
   s_moveDurationMs = durationMs > 0 ? durationMs : 1;
@@ -96,8 +210,8 @@ void beginMove_(float toX, float toY, uint16_t durationMs, bool toHome) {
     s_servoX.setEaseToD(toX, s_moveDurationMs);
     s_servoY.setEaseToD(toY, s_moveDurationMs);
   } else {
-    s_servoX.setEaseTo(toX, MC_SERVO_TRACK_SPEED_DPS);
-    s_servoY.setEaseTo(toY, MC_SERVO_TRACK_SPEED_DPS);
+    s_servoX.setEaseTo(toX, trackSpeedDps);
+    s_servoY.setEaseTo(toY, trackSpeedDps);
   }
   if (!areInterruptsActive()) {
     synchronizeAllServosAndStartInterrupt();
@@ -123,7 +237,7 @@ void writeDegrees_(float degX, float degY) {
 void setHome_(bool smooth) {
   if (smooth) {
     beginMove_((float)MC_SERVO_START_DEGREE_X, (float)MC_SERVO_START_DEGREE_Y,
-               MC_SERVO_HOME_MOVE_TIME_MS, true);
+               MC_SERVO_HOME_MOVE_TIME_MS, true, (float)MC_SERVO_TRACK_SPEED_DPS);
     s_homed = false;
   } else {
     s_cmdX = (float)MC_SERVO_START_DEGREE_X;
@@ -137,6 +251,13 @@ void setHome_(bool smooth) {
     s_filteredTargetY = s_cmdY;
     s_prevRawTargetX = s_cmdX;
     s_prevRawTargetY = s_cmdY;
+    s_trackSpeedCmdDps = (float)MC_SERVO_TRACK_SPEED_DPS;
+    s_deadbandResidualX = 0.0f;
+    s_deadbandResidualY = 0.0f;
+    s_prevFilteredX = s_cmdX;
+    s_prevFilteredY = s_cmdY;
+    s_prevErrSignX = 0;
+    s_prevErrSignY = 0;
   }
 }
 
@@ -207,6 +328,29 @@ void servoDriverTick() {
                                           : (float)(now - s_lastUpdateMs) / 1000.0f;
   s_lastUpdateMs = now;
 
+#if MC_SERVO_DIAG_SWEEP_ENABLE
+  {
+    float diagTargetX = (float)MC_SERVO_START_DEGREE_X;
+    float diagTargetY = (float)MC_SERVO_START_DEGREE_Y;
+    computeDiagSweepTargets_(now, &diagTargetX, &diagTargetY);
+
+    const bool currentlyMoving = areInterruptsActive();
+    const float threshold = currentlyMoving ? kMoveUpdateThresholdDeg
+                                            : kMoveStartThresholdDeg;
+    if (fabsf(diagTargetX - s_moveToX) >= threshold ||
+        fabsf(diagTargetY - s_moveToY) >= threshold) {
+      beginMove_(diagTargetX, diagTargetY, MC_SERVO_MOVE_TIME_MS, false,
+                 (float)MC_SERVO_TRACK_SPEED_DPS);
+      s_homed = false;
+    }
+    s_filteredTargetX = diagTargetX;
+    s_filteredTargetY = diagTargetY;
+    s_prevRawTargetX = diagTargetX;
+    s_prevRawTargetY = diagTargetY;
+  }
+  return;
+#endif
+
   if (!s_targetActive) {
     const bool homeRequested = fabsf(s_moveToX - (float)MC_SERVO_START_DEGREE_X) > kMoveStartThresholdDeg ||
                                fabsf(s_moveToY - (float)MC_SERVO_START_DEGREE_Y) > kMoveStartThresholdDeg;
@@ -227,6 +371,20 @@ void servoDriverTick() {
   s_filteredTargetY += (degY - s_filteredTargetY) * alpha;
   s_prevRawTargetX = degX;
   s_prevRawTargetY = degY;
+  const float compensatedTargetX =
+      applyDeadbandCompensation_(s_filteredTargetX, s_moveToX,
+                                 (float)MC_SERVO_MIN_DEGREE_X,
+                                 (float)MC_SERVO_MAX_DEGREE_X,
+                                 &s_deadbandResidualX, &s_prevFilteredX,
+                                 &s_prevErrSignX);
+  const float compensatedTargetY =
+      applyDeadbandCompensation_(s_filteredTargetY, s_moveToY,
+                                 (float)MC_SERVO_MIN_DEGREE_Y,
+                                 (float)MC_SERVO_MAX_DEGREE_Y,
+                                 &s_deadbandResidualY, &s_prevFilteredY,
+                                 &s_prevErrSignY);
+  s_filteredTargetX = compensatedTargetX;
+  s_filteredTargetY = compensatedTargetY;
 
   const bool currentlyMoving = areInterruptsActive();
   const float threshold = currentlyMoving ? kMoveUpdateThresholdDeg
@@ -235,7 +393,10 @@ void servoDriverTick() {
       fabsf(s_filteredTargetY - s_moveToY) < threshold) {
     return;
   }
-  beginMove_(s_filteredTargetX, s_filteredTargetY, MC_SERVO_MOVE_TIME_MS, false);
+  const float trackSpeedDps =
+      computeTrackSpeedCommand_(s_filteredTargetX, s_filteredTargetY, dtSec);
+  beginMove_(s_filteredTargetX, s_filteredTargetY, MC_SERVO_MOVE_TIME_MS, false,
+             trackSpeedDps);
   s_homed = false;
 #endif
 }

@@ -369,6 +369,30 @@
 #ifndef MC_SERVO_TRACK_SPEED_DPS
   #define MC_SERVO_TRACK_SPEED_DPS 22 // behavior/servo_driver.cpp: tracking speed (deg/sec)
 #endif
+#ifndef MC_SERVO_TRACK_ACCEL_LIMIT_ENABLE
+  #define MC_SERVO_TRACK_ACCEL_LIMIT_ENABLE 1 // behavior/servo_driver.cpp: 1=slew-limit tracking speed command
+#endif
+#ifndef MC_SERVO_TRACK_MIN_SPEED_DPS
+  #define MC_SERVO_TRACK_MIN_SPEED_DPS 8.0f // behavior/servo_driver.cpp: minimum tracking speed in accel-limited mode
+#endif
+#ifndef MC_SERVO_TRACK_ACCEL_DPS2
+  #define MC_SERVO_TRACK_ACCEL_DPS2 90.0f // behavior/servo_driver.cpp: max speed change rate (deg/s^2)
+#endif
+#ifndef MC_SERVO_DEADBAND_COMP_ENABLE
+  #define MC_SERVO_DEADBAND_COMP_ENABLE 1 // behavior/servo_driver.cpp: 1=conservative residual deadband compensation
+#endif
+#ifndef MC_SERVO_DEADBAND_COMP_DEG
+  #define MC_SERVO_DEADBAND_COMP_DEG 0.35f // behavior/servo_driver.cpp: residual threshold to trigger compensation
+#endif
+#ifndef MC_SERVO_DEADBAND_COMP_KICK_DEG
+  #define MC_SERVO_DEADBAND_COMP_KICK_DEG 0.18f // behavior/servo_driver.cpp: compensation kick amount
+#endif
+#ifndef MC_SERVO_DEADBAND_COMP_RANGE_DEG
+  #define MC_SERVO_DEADBAND_COMP_RANGE_DEG 1.2f // behavior/servo_driver.cpp: apply compensation only near target
+#endif
+#ifndef MC_SERVO_DEADBAND_COMP_REVERSE_DAMP
+  #define MC_SERVO_DEADBAND_COMP_REVERSE_DAMP 0.45f // behavior/servo_driver.cpp: residual damping on direction reversal
+#endif
 #ifndef MC_SERVO_MOVE_TIME_MS
   #define MC_SERVO_MOVE_TIME_MS 2000 // behavior/servo_driver.cpp: time for one movement step
 #endif

@@ -5,6 +5,10 @@
 // user_config.h
 // - Override only what you want to change from config.h defaults.
 // - Leave unused items commented to avoid redundant definitions.
+
+// ---- Servo diagnostics (temporary; keep OFF for normal behavior tests) ----
+#define MC_SERVO_DIAG_SWEEP_ENABLE 0
+#define MC_SERVO_DIAG_POWER_LOG_ENABLE 0
 // ---- Display sleep (seconds) ----
 // #define MC_DISPLAY_SLEEP_SECONDS 60 // 無操作で画面OFFになるまでの秒数（NVSのdisplay_sleep_sで上書き可）
 // ---- Speaker volume (0-255) ----
