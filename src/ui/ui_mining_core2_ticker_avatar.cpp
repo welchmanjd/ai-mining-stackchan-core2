@@ -184,6 +184,12 @@ void UIMining::updateAvatarLiveliness() {
     bool     eyeOpen;
     int      count;
     uint32_t lastUpdateMs;
+    bool     gazeMovePhase;
+    uint32_t gazePhaseStartMs;
+    uint32_t gazePhaseDurMs;
+    float    servoTargetX;
+    float    servoTargetY;
+    uint32_t moveActiveMs;
   };
   static State s_state;
   float servoGazeX = 0.0f;
@@ -203,6 +209,12 @@ void UIMining::updateAvatarLiveliness() {
     s_state.eyeOpen           = true;
     s_state.count             = 0;
     s_state.lastUpdateMs      = now;
+    s_state.gazeMovePhase     = true;
+    s_state.gazePhaseStartMs  = now;
+    s_state.gazePhaseDurMs    = MC_UI_GAZE_MOVE_PHASE_INIT_MS;
+    s_state.servoTargetX      = 0.0f;
+    s_state.servoTargetY      = 0.0f;
+    s_state.moveActiveMs      = 0;
   }
   uint32_t dtMs = now - s_state.lastUpdateMs;
   s_state.lastUpdateMs = now;
@@ -212,9 +224,49 @@ void UIMining::updateAvatarLiveliness() {
 
   if (bubbleActive) {
     avatar_.setGaze(0.0f, 0.0f);
-    servoGazeX = 0.0f;
-    servoGazeY = 0.0f;
+    s_state.servoTargetX = 0.0f;
+    s_state.servoTargetY = 0.0f;
+    servoGazeX = s_state.servoTargetX;
+    servoGazeY = s_state.servoTargetY;
   } else {
+    if ((uint32_t)(now - s_state.gazePhaseStartMs) >= s_state.gazePhaseDurMs) {
+      const bool wasMovePhase = s_state.gazeMovePhase;
+      s_state.gazeMovePhase = !s_state.gazeMovePhase;
+      s_state.gazePhaseStartMs = now;
+      if (s_state.gazeMovePhase) {
+        s_state.moveActiveMs = 0;
+        if (moodLevel_ >= 1) {
+          s_state.gazePhaseDurMs =
+              MC_UI_GAZE_MOVE_HIGH_BASE_MS +
+              MC_UI_GAZE_MOVE_HIGH_JITTER_MS * (uint32_t)random(0, 10);
+        } else if (moodLevel_ == 0) {
+          s_state.gazePhaseDurMs =
+              MC_UI_GAZE_MOVE_NEUTRAL_BASE_MS +
+              MC_UI_GAZE_MOVE_NEUTRAL_JITTER_MS * (uint32_t)random(0, 10);
+        } else {
+          s_state.gazePhaseDurMs =
+              MC_UI_GAZE_MOVE_LOW_BASE_MS +
+              MC_UI_GAZE_MOVE_LOW_JITTER_MS * (uint32_t)random(0, 10);
+        }
+      } else {
+        // Hold duration is derived from measured move-active time.
+        uint32_t holdMs = MC_UI_GAZE_HOLD_TIME_MIN_MS;
+        if (wasMovePhase) {
+          const float ratio = MC_UI_GAZE_HOLD_PER_MOVE_RATIO > 0.0f
+                                  ? MC_UI_GAZE_HOLD_PER_MOVE_RATIO
+                                  : 1.0f;
+          holdMs = (uint32_t)((float)s_state.moveActiveMs * ratio);
+        }
+        if (holdMs < MC_UI_GAZE_HOLD_TIME_MIN_MS) {
+          holdMs = MC_UI_GAZE_HOLD_TIME_MIN_MS;
+        }
+        if (holdMs > MC_UI_GAZE_HOLD_TIME_MAX_MS) {
+          holdMs = MC_UI_GAZE_HOLD_TIME_MAX_MS;
+        }
+        s_state.gazePhaseDurMs = holdMs;
+      }
+    }
+
     if (now - s_state.lastDriftRetargetMs > s_state.driftRetargetMs) {
       const float maxVel = 0.85f * gazeAmp;
       s_state.driftV = (((float)random(-1000, 1001)) / 1000.0f) * maxVel;
@@ -229,10 +281,20 @@ void UIMining::updateAvatarLiveliness() {
     // Continuous gaze drift + tiny micro-sway (no jump target changes).
     s_state.phaseV += dtSec * (1.2f + 0.2f * energy);
     s_state.phaseH += dtSec * (1.0f + 0.2f * energy);
-    float microV = 0.12f * gazeAmp * sinf(s_state.phaseV);
-    float microH = 0.12f * gazeAmp * cosf(s_state.phaseH);
-    float nextV = s_state.vertical + s_state.driftV * dtSec;
-    float nextH = s_state.horizontal + s_state.driftH * dtSec;
+    const float microScale =
+        s_state.gazeMovePhase ? 1.0f : MC_UI_GAZE_HOLD_MICRO_SCALE;
+    float microV = 0.12f * gazeAmp * microScale * sinf(s_state.phaseV);
+    float microH = 0.12f * gazeAmp * microScale * cosf(s_state.phaseH);
+    float nextV = s_state.vertical;
+    float nextH = s_state.horizontal;
+    if (s_state.gazeMovePhase) {
+      nextV += s_state.driftV * dtSec;
+      nextH += s_state.driftH * dtSec;
+    } else {
+      // Hold phase: keep target nearly fixed and gradually bleed drift speed.
+      s_state.driftV *= 0.90f;
+      s_state.driftH *= 0.90f;
+    }
     const float lim = 1.0f * gazeAmp;
     if (nextV > lim)  { nextV = lim;  s_state.driftV *= -0.55f; }
     if (nextV < -lim) { nextV = -lim; s_state.driftV *= -0.55f; }
@@ -247,8 +309,46 @@ void UIMining::updateAvatarLiveliness() {
     if (outH > 1.0f) outH = 1.0f;
     if (outH < -1.0f) outH = -1.0f;
     avatar_.setGaze(outV, outH);
-    servoGazeX = outH;
-    servoGazeY = outV;
+    const float desiredServoX = outH;
+    const float desiredServoY = outV;
+#if MC_UI_GAZE_SERVO_HOLD_FREEZE
+    if (!s_state.gazeMovePhase) {
+      servoGazeX = s_state.servoTargetX;
+      servoGazeY = s_state.servoTargetY;
+    } else
+#endif
+    {
+      float errX = fabsf(desiredServoX - s_state.servoTargetX);
+      float errY = fabsf(desiredServoY - s_state.servoTargetY);
+      float err = errX > errY ? errX : errY;
+      float adaptiveStepPerSec =
+          MC_UI_GAZE_SERVO_MAX_STEP_PER_SEC + (MC_UI_GAZE_SERVO_ERR_GAIN_PER_SEC * err);
+      if (adaptiveStepPerSec > MC_UI_GAZE_SERVO_MAX_STEP_MAX_PER_SEC) {
+        adaptiveStepPerSec = MC_UI_GAZE_SERVO_MAX_STEP_MAX_PER_SEC;
+      }
+      float maxStep = adaptiveStepPerSec * dtSec;
+      if (maxStep < 0.001f) maxStep = 0.001f;
+      float dx = desiredServoX - s_state.servoTargetX;
+      float dy = desiredServoY - s_state.servoTargetY;
+      if (dx > maxStep) dx = maxStep;
+      if (dx < -maxStep) dx = -maxStep;
+      if (dy > maxStep) dy = maxStep;
+      if (dy < -maxStep) dy = -maxStep;
+      s_state.servoTargetX += dx;
+      s_state.servoTargetY += dy;
+      if (s_state.servoTargetX > 1.0f) s_state.servoTargetX = 1.0f;
+      if (s_state.servoTargetX < -1.0f) s_state.servoTargetX = -1.0f;
+      if (s_state.servoTargetY > 1.0f) s_state.servoTargetY = 1.0f;
+      if (s_state.servoTargetY < -1.0f) s_state.servoTargetY = -1.0f;
+      servoGazeX = s_state.servoTargetX;
+      servoGazeY = s_state.servoTargetY;
+
+      if (s_state.gazeMovePhase &&
+          (fabsf(dx) > MC_UI_GAZE_MOVE_ACTIVE_EPS ||
+           fabsf(dy) > MC_UI_GAZE_MOVE_ACTIVE_EPS)) {
+        s_state.moveActiveMs += dtMs;
+      }
+    }
   }
   if (now - s_state.lastBlinkMs > s_state.blinkInterval) {
     if (s_state.eyeOpen) {

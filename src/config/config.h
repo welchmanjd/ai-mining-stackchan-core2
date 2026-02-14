@@ -284,6 +284,72 @@
 #ifndef MC_BEHAVIOR_IDLE_TICK_MS
   #define MC_BEHAVIOR_IDLE_TICK_MS 30000 // stackchan_behavior.cpp: idle tick interval
 #endif
+#ifndef MC_UI_GAZE_MOVE_PHASE_INIT_MS
+  #define MC_UI_GAZE_MOVE_PHASE_INIT_MS 450 // ui_mining_core2_ticker_avatar.cpp: initial move phase duration
+#endif
+#ifndef MC_UI_GAZE_MOVE_HIGH_BASE_MS
+  #define MC_UI_GAZE_MOVE_HIGH_BASE_MS 225 // ui_mining_core2_ticker_avatar.cpp: move phase base when mood >= 1
+#endif
+#ifndef MC_UI_GAZE_MOVE_HIGH_JITTER_MS
+  #define MC_UI_GAZE_MOVE_HIGH_JITTER_MS 15 // ui_mining_core2_ticker_avatar.cpp: move phase jitter step when mood >= 1
+#endif
+#ifndef MC_UI_GAZE_MOVE_NEUTRAL_BASE_MS
+  #define MC_UI_GAZE_MOVE_NEUTRAL_BASE_MS 275 // ui_mining_core2_ticker_avatar.cpp: move phase base when mood == 0
+#endif
+#ifndef MC_UI_GAZE_MOVE_NEUTRAL_JITTER_MS
+  #define MC_UI_GAZE_MOVE_NEUTRAL_JITTER_MS 20 // ui_mining_core2_ticker_avatar.cpp: move phase jitter step when mood == 0
+#endif
+#ifndef MC_UI_GAZE_MOVE_LOW_BASE_MS
+  #define MC_UI_GAZE_MOVE_LOW_BASE_MS 325 // ui_mining_core2_ticker_avatar.cpp: move phase base when mood < 0
+#endif
+#ifndef MC_UI_GAZE_MOVE_LOW_JITTER_MS
+  #define MC_UI_GAZE_MOVE_LOW_JITTER_MS 25 // ui_mining_core2_ticker_avatar.cpp: move phase jitter step when mood < 0
+#endif
+#ifndef MC_UI_GAZE_HOLD_HIGH_BASE_MS
+  #define MC_UI_GAZE_HOLD_HIGH_BASE_MS 2200 // ui_mining_core2_ticker_avatar.cpp: hold phase base when mood >= 1
+#endif
+#ifndef MC_UI_GAZE_HOLD_HIGH_JITTER_MS
+  #define MC_UI_GAZE_HOLD_HIGH_JITTER_MS 120 // ui_mining_core2_ticker_avatar.cpp: hold phase jitter step when mood >= 1
+#endif
+#ifndef MC_UI_GAZE_HOLD_NEUTRAL_BASE_MS
+  #define MC_UI_GAZE_HOLD_NEUTRAL_BASE_MS 2600 // ui_mining_core2_ticker_avatar.cpp: hold phase base when mood == 0
+#endif
+#ifndef MC_UI_GAZE_HOLD_NEUTRAL_JITTER_MS
+  #define MC_UI_GAZE_HOLD_NEUTRAL_JITTER_MS 140 // ui_mining_core2_ticker_avatar.cpp: hold phase jitter step when mood == 0
+#endif
+#ifndef MC_UI_GAZE_HOLD_LOW_BASE_MS
+  #define MC_UI_GAZE_HOLD_LOW_BASE_MS 3000 // ui_mining_core2_ticker_avatar.cpp: hold phase base when mood < 0
+#endif
+#ifndef MC_UI_GAZE_HOLD_LOW_JITTER_MS
+  #define MC_UI_GAZE_HOLD_LOW_JITTER_MS 160 // ui_mining_core2_ticker_avatar.cpp: hold phase jitter step when mood < 0
+#endif
+#ifndef MC_UI_GAZE_HOLD_MICRO_SCALE
+  #define MC_UI_GAZE_HOLD_MICRO_SCALE 0.35f // ui_mining_core2_ticker_avatar.cpp: micro sway scale in hold phase
+#endif
+#ifndef MC_UI_GAZE_SERVO_HOLD_FREEZE
+  #define MC_UI_GAZE_SERVO_HOLD_FREEZE 1 // ui_mining_core2_ticker_avatar.cpp: 1=freeze servo target during hold phase
+#endif
+#ifndef MC_UI_GAZE_SERVO_MAX_STEP_PER_SEC
+  #define MC_UI_GAZE_SERVO_MAX_STEP_PER_SEC 0.35f // ui_mining_core2_ticker_avatar.cpp: max servo gaze target delta per second in move phase
+#endif
+#ifndef MC_UI_GAZE_SERVO_MAX_STEP_MAX_PER_SEC
+  #define MC_UI_GAZE_SERVO_MAX_STEP_MAX_PER_SEC 1.40f // ui_mining_core2_ticker_avatar.cpp: upper cap for adaptive max step
+#endif
+#ifndef MC_UI_GAZE_SERVO_ERR_GAIN_PER_SEC
+  #define MC_UI_GAZE_SERVO_ERR_GAIN_PER_SEC 1.10f // ui_mining_core2_ticker_avatar.cpp: extra step speed per unit target error
+#endif
+#ifndef MC_UI_GAZE_MOVE_ACTIVE_EPS
+  #define MC_UI_GAZE_MOVE_ACTIVE_EPS 0.003f // ui_mining_core2_ticker_avatar.cpp: movement threshold for active-time accounting
+#endif
+#ifndef MC_UI_GAZE_HOLD_PER_MOVE_RATIO
+  #define MC_UI_GAZE_HOLD_PER_MOVE_RATIO 1.0f // ui_mining_core2_ticker_avatar.cpp: hold duration ratio against measured move-active time
+#endif
+#ifndef MC_UI_GAZE_HOLD_TIME_MIN_MS
+  #define MC_UI_GAZE_HOLD_TIME_MIN_MS 1200 // ui_mining_core2_ticker_avatar.cpp: lower bound for hold duration
+#endif
+#ifndef MC_UI_GAZE_HOLD_TIME_MAX_MS
+  #define MC_UI_GAZE_HOLD_TIME_MAX_MS 5000 // ui_mining_core2_ticker_avatar.cpp: upper bound for hold duration
+#endif
 
 // ---------------------------------------------------------
 // ===== SERVO (ROBO8080-compatible baseline) =====
