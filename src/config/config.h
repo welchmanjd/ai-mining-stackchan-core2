@@ -329,20 +329,23 @@
 #ifndef MC_UI_GAZE_SERVO_HOLD_FREEZE
   #define MC_UI_GAZE_SERVO_HOLD_FREEZE 1 // ui_mining_core2_ticker_avatar.cpp: 1=freeze servo target during hold phase
 #endif
-#ifndef MC_UI_GAZE_SERVO_MAX_STEP_PER_SEC
-  #define MC_UI_GAZE_SERVO_MAX_STEP_PER_SEC 0.35f // ui_mining_core2_ticker_avatar.cpp: max servo gaze target delta per second in move phase
+#ifndef MC_UI_GAZE_DT_MAX_SEC
+  #define MC_UI_GAZE_DT_MAX_SEC 0.10f // ui_mining_core2_ticker_avatar.cpp: max dt used for gaze integration
 #endif
-#ifndef MC_UI_GAZE_SERVO_MAX_STEP_MAX_PER_SEC
-  #define MC_UI_GAZE_SERVO_MAX_STEP_MAX_PER_SEC 1.40f // ui_mining_core2_ticker_avatar.cpp: upper cap for adaptive max step
+#ifndef MC_UI_GAZE_PHASE_SEED_MAX_MRAD
+  #define MC_UI_GAZE_PHASE_SEED_MAX_MRAD 6283 // ui_mining_core2_ticker_avatar.cpp: random phase seed upper bound (mrad)
 #endif
-#ifndef MC_UI_GAZE_SERVO_ERR_GAIN_PER_SEC
-  #define MC_UI_GAZE_SERVO_ERR_GAIN_PER_SEC 1.10f // ui_mining_core2_ticker_avatar.cpp: extra step speed per unit target error
+#ifndef MC_UI_GAZE_DRIFT_MAX_VEL_BASE
+  #define MC_UI_GAZE_DRIFT_MAX_VEL_BASE 0.85f // ui_mining_core2_ticker_avatar.cpp: drift velocity scale in move phase
 #endif
-#ifndef MC_UI_GAZE_MOVE_ACTIVE_EPS
-  #define MC_UI_GAZE_MOVE_ACTIVE_EPS 0.003f // ui_mining_core2_ticker_avatar.cpp: movement threshold for active-time accounting
+#ifndef MC_UI_GAZE_MICRO_SWAY_AMPLITUDE
+  #define MC_UI_GAZE_MICRO_SWAY_AMPLITUDE 0.12f // ui_mining_core2_ticker_avatar.cpp: micro sway amplitude
 #endif
-#ifndef MC_UI_GAZE_HOLD_PER_MOVE_RATIO
-  #define MC_UI_GAZE_HOLD_PER_MOVE_RATIO 1.0f // ui_mining_core2_ticker_avatar.cpp: hold duration ratio against measured move-active time
+#ifndef MC_UI_GAZE_RANDOM_STEPS
+  #define MC_UI_GAZE_RANDOM_STEPS 10 // ui_mining_core2_ticker_avatar.cpp: random step count for jittered timings
+#endif
+#ifndef MC_UI_GAZE_UNIT_LIMIT
+  #define MC_UI_GAZE_UNIT_LIMIT 1.0f // ui_mining_core2_ticker_avatar.cpp: clamp limit for gaze/servo normalized range
 #endif
 #ifndef MC_UI_GAZE_HOLD_TIME_MIN_MS
   #define MC_UI_GAZE_HOLD_TIME_MIN_MS 1200 // ui_mining_core2_ticker_avatar.cpp: lower bound for hold duration
@@ -417,6 +420,24 @@
 #ifndef MC_SERVO_ALPHA_VEL_REF_DPS
   #define MC_SERVO_ALPHA_VEL_REF_DPS 10.0f // behavior/servo_driver.cpp: target velocity(deg/s) where alpha nears max
 #endif
+#ifndef MC_SERVO_DT_MIN_SEC
+  #define MC_SERVO_DT_MIN_SEC 0.0005f // behavior/servo_driver.cpp: lower bound for dt safety checks
+#endif
+#ifndef MC_SERVO_DT_FALLBACK_SEC
+  #define MC_SERVO_DT_FALLBACK_SEC 0.02f // behavior/servo_driver.cpp: fallback dt when elapsed time is too small
+#endif
+#ifndef MC_SERVO_ALPHA_ERR_WEIGHT
+  #define MC_SERVO_ALPHA_ERR_WEIGHT 0.7f // behavior/servo_driver.cpp: adaptive alpha weight for error term
+#endif
+#ifndef MC_SERVO_ALPHA_VEL_WEIGHT
+  #define MC_SERVO_ALPHA_VEL_WEIGHT 0.3f // behavior/servo_driver.cpp: adaptive alpha weight for velocity term
+#endif
+#ifndef MC_SERVO_DIAG_SWEEP_MIN_PERIOD_MS
+  #define MC_SERVO_DIAG_SWEEP_MIN_PERIOD_MS 200 // behavior/servo_driver.cpp: lower bound for diagnostic sweep half-period
+#endif
+#ifndef MC_SERVO_ERR_SIGN_DEADZONE_DEG
+  #define MC_SERVO_ERR_SIGN_DEADZONE_DEG 0.001f // behavior/servo_driver.cpp: deadzone for deadband sign detection
+#endif
 #ifndef MC_SERVO_DIAG_SWEEP_ENABLE
   #define MC_SERVO_DIAG_SWEEP_ENABLE 0 // behavior/servo_driver.cpp: 1=ignore gaze and run deterministic sweep
 #endif
@@ -464,9 +485,6 @@
 #endif
 #ifndef MC_SERVO_HOME_MOVE_TIME_MS
   #define MC_SERVO_HOME_MOVE_TIME_MS 2000 // behavior/servo_driver.cpp: time for home movement
-#endif
-#ifndef MC_SERVO_IDLE_TIME_MS
-  #define MC_SERVO_IDLE_TIME_MS 0 // behavior/servo_driver.cpp: dwell after one movement
 #endif
 
 // ---------------------------------------------------------

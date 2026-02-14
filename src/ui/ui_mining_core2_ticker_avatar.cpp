@@ -17,6 +17,50 @@ static bool isAiStatusBubbleText_(const String& rawText) {
   if (t == String(MC_AI_TEXT_THINKING)) return true;
   return false;
 }
+
+static float clampGazeUnit_(float value) {
+  if (value > MC_UI_GAZE_UNIT_LIMIT) return MC_UI_GAZE_UNIT_LIMIT;
+  if (value < -MC_UI_GAZE_UNIT_LIMIT) return -MC_UI_GAZE_UNIT_LIMIT;
+  return value;
+}
+
+static uint32_t randomJitterMs_(uint32_t stepMs) {
+  return stepMs * (uint32_t)random(0, MC_UI_GAZE_RANDOM_STEPS);
+}
+
+static uint32_t computeMovePhaseDurationMs_(int8_t moodLevel) {
+  if (moodLevel >= 1) {
+    return MC_UI_GAZE_MOVE_HIGH_BASE_MS +
+           randomJitterMs_(MC_UI_GAZE_MOVE_HIGH_JITTER_MS);
+  }
+  if (moodLevel == 0) {
+    return MC_UI_GAZE_MOVE_NEUTRAL_BASE_MS +
+           randomJitterMs_(MC_UI_GAZE_MOVE_NEUTRAL_JITTER_MS);
+  }
+  return MC_UI_GAZE_MOVE_LOW_BASE_MS +
+         randomJitterMs_(MC_UI_GAZE_MOVE_LOW_JITTER_MS);
+}
+
+static uint32_t computeHoldPhaseDurationMs_(int8_t moodLevel) {
+  uint32_t holdMs = MC_UI_GAZE_HOLD_NEUTRAL_BASE_MS;
+  if (moodLevel >= 1) {
+    holdMs = MC_UI_GAZE_HOLD_HIGH_BASE_MS +
+             randomJitterMs_(MC_UI_GAZE_HOLD_HIGH_JITTER_MS);
+  } else if (moodLevel == 0) {
+    holdMs = MC_UI_GAZE_HOLD_NEUTRAL_BASE_MS +
+             randomJitterMs_(MC_UI_GAZE_HOLD_NEUTRAL_JITTER_MS);
+  } else {
+    holdMs = MC_UI_GAZE_HOLD_LOW_BASE_MS +
+             randomJitterMs_(MC_UI_GAZE_HOLD_LOW_JITTER_MS);
+  }
+  if (holdMs < MC_UI_GAZE_HOLD_TIME_MIN_MS) {
+    holdMs = MC_UI_GAZE_HOLD_TIME_MIN_MS;
+  }
+  if (holdMs > MC_UI_GAZE_HOLD_TIME_MAX_MS) {
+    holdMs = MC_UI_GAZE_HOLD_TIME_MAX_MS;
+  }
+  return holdMs;
+}
 // ===== Ticker =====
 void UIMining::drawTicker(const String& text) {
   String incoming = text;
@@ -187,9 +231,8 @@ void UIMining::updateAvatarLiveliness() {
     bool     gazeMovePhase;
     uint32_t gazePhaseStartMs;
     uint32_t gazePhaseDurMs;
-    float    servoTargetX;
-    float    servoTargetY;
-    uint32_t moveActiveMs;
+    float    servoPublishedX;
+    float    servoPublishedY;
   };
   static State s_state;
   float servoGazeX = 0.0f;
@@ -200,8 +243,8 @@ void UIMining::updateAvatarLiveliness() {
     s_state.horizontal        = 0.0f;
     s_state.driftV            = 0.0f;
     s_state.driftH            = 0.0f;
-    s_state.phaseV            = ((float)random(0, 6283)) / 1000.0f;
-    s_state.phaseH            = ((float)random(0, 6283)) / 1000.0f;
+    s_state.phaseV            = ((float)random(0, MC_UI_GAZE_PHASE_SEED_MAX_MRAD)) / 1000.0f;
+    s_state.phaseH            = ((float)random(0, MC_UI_GAZE_PHASE_SEED_MAX_MRAD)) / 1000.0f;
     s_state.driftRetargetMs   = 900;
     s_state.lastDriftRetargetMs = now;
     s_state.blinkInterval     = 2500;
@@ -212,69 +255,40 @@ void UIMining::updateAvatarLiveliness() {
     s_state.gazeMovePhase     = true;
     s_state.gazePhaseStartMs  = now;
     s_state.gazePhaseDurMs    = MC_UI_GAZE_MOVE_PHASE_INIT_MS;
-    s_state.servoTargetX      = 0.0f;
-    s_state.servoTargetY      = 0.0f;
-    s_state.moveActiveMs      = 0;
+    s_state.servoPublishedX   = 0.0f;
+    s_state.servoPublishedY   = 0.0f;
   }
   uint32_t dtMs = now - s_state.lastUpdateMs;
   s_state.lastUpdateMs = now;
   float dtSec = (float)dtMs / 1000.0f;
   if (dtSec < 0.0f) dtSec = 0.0f;
-  if (dtSec > 0.10f) dtSec = 0.10f;
+  if (dtSec > MC_UI_GAZE_DT_MAX_SEC) dtSec = MC_UI_GAZE_DT_MAX_SEC;
 
   if (bubbleActive) {
     avatar_.setGaze(0.0f, 0.0f);
-    s_state.servoTargetX = 0.0f;
-    s_state.servoTargetY = 0.0f;
-    servoGazeX = s_state.servoTargetX;
-    servoGazeY = s_state.servoTargetY;
+    s_state.servoPublishedX = 0.0f;
+    s_state.servoPublishedY = 0.0f;
+    servoGazeX = 0.0f;
+    servoGazeY = 0.0f;
   } else {
     if ((uint32_t)(now - s_state.gazePhaseStartMs) >= s_state.gazePhaseDurMs) {
-      const bool wasMovePhase = s_state.gazeMovePhase;
       s_state.gazeMovePhase = !s_state.gazeMovePhase;
       s_state.gazePhaseStartMs = now;
       if (s_state.gazeMovePhase) {
-        s_state.moveActiveMs = 0;
-        if (moodLevel_ >= 1) {
-          s_state.gazePhaseDurMs =
-              MC_UI_GAZE_MOVE_HIGH_BASE_MS +
-              MC_UI_GAZE_MOVE_HIGH_JITTER_MS * (uint32_t)random(0, 10);
-        } else if (moodLevel_ == 0) {
-          s_state.gazePhaseDurMs =
-              MC_UI_GAZE_MOVE_NEUTRAL_BASE_MS +
-              MC_UI_GAZE_MOVE_NEUTRAL_JITTER_MS * (uint32_t)random(0, 10);
-        } else {
-          s_state.gazePhaseDurMs =
-              MC_UI_GAZE_MOVE_LOW_BASE_MS +
-              MC_UI_GAZE_MOVE_LOW_JITTER_MS * (uint32_t)random(0, 10);
-        }
+        s_state.gazePhaseDurMs = computeMovePhaseDurationMs_(moodLevel_);
       } else {
-        // Hold duration is derived from measured move-active time.
-        uint32_t holdMs = MC_UI_GAZE_HOLD_TIME_MIN_MS;
-        if (wasMovePhase) {
-          const float ratio = MC_UI_GAZE_HOLD_PER_MOVE_RATIO > 0.0f
-                                  ? MC_UI_GAZE_HOLD_PER_MOVE_RATIO
-                                  : 1.0f;
-          holdMs = (uint32_t)((float)s_state.moveActiveMs * ratio);
-        }
-        if (holdMs < MC_UI_GAZE_HOLD_TIME_MIN_MS) {
-          holdMs = MC_UI_GAZE_HOLD_TIME_MIN_MS;
-        }
-        if (holdMs > MC_UI_GAZE_HOLD_TIME_MAX_MS) {
-          holdMs = MC_UI_GAZE_HOLD_TIME_MAX_MS;
-        }
-        s_state.gazePhaseDurMs = holdMs;
+        s_state.gazePhaseDurMs = computeHoldPhaseDurationMs_(moodLevel_);
       }
     }
 
     if (now - s_state.lastDriftRetargetMs > s_state.driftRetargetMs) {
-      const float maxVel = 0.85f * gazeAmp;
+      const float maxVel = MC_UI_GAZE_DRIFT_MAX_VEL_BASE * gazeAmp;
       s_state.driftV = (((float)random(-1000, 1001)) / 1000.0f) * maxVel;
       s_state.driftH = (((float)random(-1000, 1001)) / 1000.0f) * maxVel;
-      if (moodLevel_ >= 2)      s_state.driftRetargetMs = 420 + 70  * (uint32_t)random(0, 10);
-      else if (moodLevel_ == 1) s_state.driftRetargetMs = 520 + 90  * (uint32_t)random(0, 10);
-      else if (moodLevel_ == 0) s_state.driftRetargetMs = 620 + 110 * (uint32_t)random(0, 10);
-      else                      s_state.driftRetargetMs = 900 + 140 * (uint32_t)random(0, 10);
+      if (moodLevel_ >= 2)      s_state.driftRetargetMs = 420 + 70  * (uint32_t)random(0, MC_UI_GAZE_RANDOM_STEPS);
+      else if (moodLevel_ == 1) s_state.driftRetargetMs = 520 + 90  * (uint32_t)random(0, MC_UI_GAZE_RANDOM_STEPS);
+      else if (moodLevel_ == 0) s_state.driftRetargetMs = 620 + 110 * (uint32_t)random(0, MC_UI_GAZE_RANDOM_STEPS);
+      else                      s_state.driftRetargetMs = 900 + 140 * (uint32_t)random(0, MC_UI_GAZE_RANDOM_STEPS);
       s_state.lastDriftRetargetMs = now;
     }
 
@@ -283,8 +297,8 @@ void UIMining::updateAvatarLiveliness() {
     s_state.phaseH += dtSec * (1.0f + 0.2f * energy);
     const float microScale =
         s_state.gazeMovePhase ? 1.0f : MC_UI_GAZE_HOLD_MICRO_SCALE;
-    float microV = 0.12f * gazeAmp * microScale * sinf(s_state.phaseV);
-    float microH = 0.12f * gazeAmp * microScale * cosf(s_state.phaseH);
+    float microV = MC_UI_GAZE_MICRO_SWAY_AMPLITUDE * gazeAmp * microScale * sinf(s_state.phaseV);
+    float microH = MC_UI_GAZE_MICRO_SWAY_AMPLITUDE * gazeAmp * microScale * cosf(s_state.phaseH);
     float nextV = s_state.vertical;
     float nextH = s_state.horizontal;
     if (s_state.gazeMovePhase) {
@@ -304,50 +318,22 @@ void UIMining::updateAvatarLiveliness() {
     s_state.horizontal = nextH;
     float outV = s_state.vertical + microV;
     float outH = s_state.horizontal + microH;
-    if (outV > 1.0f) outV = 1.0f;
-    if (outV < -1.0f) outV = -1.0f;
-    if (outH > 1.0f) outH = 1.0f;
-    if (outH < -1.0f) outH = -1.0f;
+    outV = clampGazeUnit_(outV);
+    outH = clampGazeUnit_(outH);
     avatar_.setGaze(outV, outH);
     const float desiredServoX = outH;
     const float desiredServoY = outV;
 #if MC_UI_GAZE_SERVO_HOLD_FREEZE
     if (!s_state.gazeMovePhase) {
-      servoGazeX = s_state.servoTargetX;
-      servoGazeY = s_state.servoTargetY;
+      servoGazeX = s_state.servoPublishedX;
+      servoGazeY = s_state.servoPublishedY;
     } else
 #endif
     {
-      float errX = fabsf(desiredServoX - s_state.servoTargetX);
-      float errY = fabsf(desiredServoY - s_state.servoTargetY);
-      float err = errX > errY ? errX : errY;
-      float adaptiveStepPerSec =
-          MC_UI_GAZE_SERVO_MAX_STEP_PER_SEC + (MC_UI_GAZE_SERVO_ERR_GAIN_PER_SEC * err);
-      if (adaptiveStepPerSec > MC_UI_GAZE_SERVO_MAX_STEP_MAX_PER_SEC) {
-        adaptiveStepPerSec = MC_UI_GAZE_SERVO_MAX_STEP_MAX_PER_SEC;
-      }
-      float maxStep = adaptiveStepPerSec * dtSec;
-      if (maxStep < 0.001f) maxStep = 0.001f;
-      float dx = desiredServoX - s_state.servoTargetX;
-      float dy = desiredServoY - s_state.servoTargetY;
-      if (dx > maxStep) dx = maxStep;
-      if (dx < -maxStep) dx = -maxStep;
-      if (dy > maxStep) dy = maxStep;
-      if (dy < -maxStep) dy = -maxStep;
-      s_state.servoTargetX += dx;
-      s_state.servoTargetY += dy;
-      if (s_state.servoTargetX > 1.0f) s_state.servoTargetX = 1.0f;
-      if (s_state.servoTargetX < -1.0f) s_state.servoTargetX = -1.0f;
-      if (s_state.servoTargetY > 1.0f) s_state.servoTargetY = 1.0f;
-      if (s_state.servoTargetY < -1.0f) s_state.servoTargetY = -1.0f;
-      servoGazeX = s_state.servoTargetX;
-      servoGazeY = s_state.servoTargetY;
-
-      if (s_state.gazeMovePhase &&
-          (fabsf(dx) > MC_UI_GAZE_MOVE_ACTIVE_EPS ||
-           fabsf(dy) > MC_UI_GAZE_MOVE_ACTIVE_EPS)) {
-        s_state.moveActiveMs += dtMs;
-      }
+      s_state.servoPublishedX = desiredServoX;
+      s_state.servoPublishedY = desiredServoY;
+      servoGazeX = s_state.servoPublishedX;
+      servoGazeY = s_state.servoPublishedY;
     }
   }
   if (now - s_state.lastBlinkMs > s_state.blinkInterval) {

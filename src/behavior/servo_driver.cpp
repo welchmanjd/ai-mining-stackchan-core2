@@ -79,7 +79,7 @@ float computeAdaptiveAlpha_(float rawTargetX, float rawTargetY, float dtSec) {
     alphaMax = tmp;
   }
 
-  const float safeDt = dtSec > 0.0005f ? dtSec : 0.02f;
+  const float safeDt = dtSec > MC_SERVO_DT_MIN_SEC ? dtSec : MC_SERVO_DT_FALLBACK_SEC;
   const float errX = fabsf(rawTargetX - s_filteredTargetX);
   const float errY = fabsf(rawTargetY - s_filteredTargetY);
   const float errDeg = errX > errY ? errX : errY;
@@ -96,7 +96,8 @@ float computeAdaptiveAlpha_(float rawTargetX, float rawTargetY, float dtSec) {
     velNorm = clamp01_(velDegPerSec / MC_SERVO_ALPHA_VEL_REF_DPS);
   }
 
-  const float drive = clamp01_(errNorm * 0.7f + velNorm * 0.3f);
+  const float drive = clamp01_(errNorm * MC_SERVO_ALPHA_ERR_WEIGHT +
+                               velNorm * MC_SERVO_ALPHA_VEL_WEIGHT);
   return alphaMin + (alphaMax - alphaMin) * drive;
 #else
   (void)rawTargetX;
@@ -108,8 +109,9 @@ float computeAdaptiveAlpha_(float rawTargetX, float rawTargetY, float dtSec) {
 
 void computeDiagSweepTargets_(uint32_t now, float* outX, float* outY) {
   const uint32_t halfPeriodMs =
-      (MC_SERVO_DIAG_SWEEP_PERIOD_MS >= 200) ? MC_SERVO_DIAG_SWEEP_PERIOD_MS
-                                             : 200;
+      (MC_SERVO_DIAG_SWEEP_PERIOD_MS >= MC_SERVO_DIAG_SWEEP_MIN_PERIOD_MS)
+          ? MC_SERVO_DIAG_SWEEP_PERIOD_MS
+          : MC_SERVO_DIAG_SWEEP_MIN_PERIOD_MS;
   const bool positive = ((now / halfPeriodMs) & 1U) != 0U;
   const float sign = positive ? 1.0f : -1.0f;
   const float amp = fabsf(MC_SERVO_DIAG_SWEEP_AMPLITUDE_DEG);
@@ -133,7 +135,7 @@ float computeTrackSpeedCommand_(float toX, float toY, float dtSec) {
     maxSpeed = tmp;
   }
 
-  const float safeDt = dtSec > 0.0005f ? dtSec : 0.02f;
+  const float safeDt = dtSec > MC_SERVO_DT_MIN_SEC ? dtSec : MC_SERVO_DT_FALLBACK_SEC;
   const float stepX = fabsf(toX - s_moveToX);
   const float stepY = fabsf(toY - s_moveToY);
   const float stepDeg = stepX > stepY ? stepX : stepY;
@@ -167,7 +169,7 @@ float applyDeadbandCompensation_(float filtered, float moveTo, float minDeg,
   *residual += inputDelta;
 
   const float err = filtered - moveTo;
-  const int8_t errSign = signWithDeadzone_(err, 0.001f);
+  const int8_t errSign = signWithDeadzone_(err, MC_SERVO_ERR_SIGN_DEADZONE_DEG);
   if (errSign != 0 && *prevErrSign != 0 && errSign != *prevErrSign) {
     const float damp = clampF_(MC_SERVO_DEADBAND_COMP_REVERSE_DAMP, 0.0f, 1.0f);
     *residual *= damp;
@@ -324,7 +326,7 @@ void servoDriverTick() {
       (uint32_t)(now - s_lastUpdateMs) < MC_SERVO_UPDATE_INTERVAL_MS) {
     return;
   }
-  const float dtSec = s_lastUpdateMs == 0 ? 0.02f
+  const float dtSec = s_lastUpdateMs == 0 ? MC_SERVO_DT_FALLBACK_SEC
                                           : (float)(now - s_lastUpdateMs) / 1000.0f;
   s_lastUpdateMs = now;
 
