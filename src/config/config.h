@@ -336,7 +336,7 @@
   #define MC_UI_GAZE_PHASE_SEED_MAX_MRAD 6283 // ui_mining_core2_ticker_avatar.cpp: random phase seed upper bound (mrad)
 #endif
 #ifndef MC_UI_GAZE_DRIFT_MAX_VEL_BASE
-  #define MC_UI_GAZE_DRIFT_MAX_VEL_BASE 0.85f // ui_mining_core2_ticker_avatar.cpp: drift velocity scale in move phase
+  #define MC_UI_GAZE_DRIFT_MAX_VEL_BASE 0.45f // ui_mining_core2_ticker_avatar.cpp: drift velocity scale in move phase
 #endif
 #ifndef MC_UI_GAZE_CENTER_PULL_PER_SEC
   #define MC_UI_GAZE_CENTER_PULL_PER_SEC 0.08f // ui_mining_core2_ticker_avatar.cpp: weak recenter pull strength per second (0=disable)
@@ -407,6 +407,9 @@
 #endif
 #ifndef MC_SERVO_UPDATE_INTERVAL_MS
   #define MC_SERVO_UPDATE_INTERVAL_MS 20 // behavior/servo_driver.cpp: update period (~50Hz)
+#endif
+#ifndef MC_SERVO_MOVE_TRIGGER_DIVIDER
+  #define MC_SERVO_MOVE_TRIGGER_DIVIDER 100 // behavior/servo_driver.cpp: issue 1 move command per N eligible triggers (1=disable decimation)
 #endif
 #ifndef MC_SERVO_SMOOTH_ALPHA
   #define MC_SERVO_SMOOTH_ALPHA 0.35f // behavior/servo_driver.cpp: low-pass smoothing ratio

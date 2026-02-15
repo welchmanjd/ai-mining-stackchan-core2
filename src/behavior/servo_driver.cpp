@@ -36,6 +36,7 @@ float s_prevFilteredY = (float)MC_SERVO_START_DEGREE_Y;
 int8_t s_prevErrSignX = 0;
 int8_t s_prevErrSignY = 0;
 uint8_t s_nonHomeMoveCount = 0;
+uint8_t s_moveTriggerPhase = 0;
 
 constexpr float kMoveStartThresholdDeg = 0.05f;
 constexpr float kMoveUpdateThresholdDeg = 0.01f;
@@ -224,6 +225,18 @@ void beginMove_(float toX, float toY, uint16_t durationMs, bool toHome,
   s_moveToHome = toHome;
 }
 
+bool shouldIssueMoveByTriggerDecimation_() {
+  if (MC_SERVO_MOVE_TRIGGER_DIVIDER <= 1) {
+    return true;
+  }
+  ++s_moveTriggerPhase;
+  if (s_moveTriggerPhase < MC_SERVO_MOVE_TRIGGER_DIVIDER) {
+    return false;
+  }
+  s_moveTriggerPhase = 0;
+  return true;
+}
+
 void updateMove_(uint32_t now) {
   (void)now;
   if (!areInterruptsActive()) {
@@ -263,6 +276,7 @@ void setHome_(bool smooth) {
     s_prevErrSignX = 0;
     s_prevErrSignY = 0;
     s_nonHomeMoveCount = 0;
+    s_moveTriggerPhase = 0;
   }
 }
 
@@ -357,6 +371,7 @@ void servoDriverTick() {
 #endif
 
   if (!s_targetActive) {
+    s_moveTriggerPhase = 0;
     const bool homeRequested = fabsf(s_moveToX - (float)MC_SERVO_START_DEGREE_X) > kMoveStartThresholdDeg ||
                                fabsf(s_moveToY - (float)MC_SERVO_START_DEGREE_Y) > kMoveStartThresholdDeg;
     if (!s_homed && homeRequested) {
@@ -405,6 +420,9 @@ void servoDriverTick() {
                                           : kMoveStartThresholdDeg;
   if (fabsf(s_filteredTargetX - s_moveToX) < threshold &&
       fabsf(s_filteredTargetY - s_moveToY) < threshold) {
+    return;
+  }
+  if (!shouldIssueMoveByTriggerDecimation_()) {
     return;
   }
   const float trackSpeedDps =
