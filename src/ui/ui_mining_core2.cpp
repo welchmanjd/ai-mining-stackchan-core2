@@ -337,21 +337,27 @@ void UIMining::drawStackchanScreen(const PanelData &p) {
     d.fillScreen(BLACK);
     stackchanNeedsClear_ = false;
   }
-  avatar_.setScale(MC_UI_AVATAR_SCALE_FULL);
+  // Keep a small safety margin so the speech balloon does not hug screen
+  // edges, which can leave visible stale pixels on some frames.
+  constexpr float kStackchanScaleInset = 0.94f;
+  constexpr int kStackchanTopInset = 6;
+  constexpr int kStackchanLeftInset = 6;
+  constexpr int kStackchanBottomInset = 6;
+  avatar_.setScale(MC_UI_AVATAR_SCALE_FULL * kStackchanScaleInset);
   int bubbleLines = 1;
   for (int i = 0; i < stackchanBubbleText_.length(); ++i) {
     if (stackchanBubbleText_.charAt(i) == '\n')
       bubbleLines++;
   }
   const int bubbleHeight = 32 + bubbleLines * 16;
-  int offsetY = 0;
+  int offsetY = kStackchanTopInset;
   const int margin = 4;
-  const int availableH = H;
+  const int availableH = H - kStackchanTopInset - kStackchanBottomInset;
   int overflow = (bubbleHeight + margin) - availableH;
   if (overflow > 0) {
-    offsetY = -overflow;
+    offsetY -= overflow;
   }
-  avatar_.setPosition(offsetY, 0);
+  avatar_.setPosition(offsetY, kStackchanLeftInset);
   // ---- UI heartbeat (log meaning: "UI draw loop alive") ----
   // Log only on attention state changes and with low-rate heartbeat.
   static uint32_t s_lastUiHbMs = 0;
