@@ -338,6 +338,9 @@
 #ifndef MC_UI_GAZE_DRIFT_MAX_VEL_BASE
   #define MC_UI_GAZE_DRIFT_MAX_VEL_BASE 0.85f // ui_mining_core2_ticker_avatar.cpp: drift velocity scale in move phase
 #endif
+#ifndef MC_UI_GAZE_CENTER_PULL_PER_SEC
+  #define MC_UI_GAZE_CENTER_PULL_PER_SEC 0.08f // ui_mining_core2_ticker_avatar.cpp: weak recenter pull strength per second (0=disable)
+#endif
 #ifndef MC_UI_GAZE_MICRO_SWAY_AMPLITUDE
   #define MC_UI_GAZE_MICRO_SWAY_AMPLITUDE 0.12f // ui_mining_core2_ticker_avatar.cpp: micro sway amplitude
 #endif
@@ -389,6 +392,9 @@
 #endif
 #ifndef MC_SERVO_GAIN_Y
   #define MC_SERVO_GAIN_Y 18.0f // behavior/servo_driver.cpp: tilt gain for gazeY
+#endif
+#ifndef MC_SERVO_RANGE_SCALE
+  #define MC_SERVO_RANGE_SCALE 2.0f // behavior/servo_driver.cpp: movement range multiplier for gaze-to-degree mapping
 #endif
 #ifndef MC_SERVO_INVERT_X
   #define MC_SERVO_INVERT_X 0 // behavior/servo_driver.cpp: 1 = invert gazeX sign
@@ -485,6 +491,9 @@
 #endif
 #ifndef MC_SERVO_HOME_MOVE_TIME_MS
   #define MC_SERVO_HOME_MOVE_TIME_MS 2000 // behavior/servo_driver.cpp: time for home movement
+#endif
+#ifndef MC_SERVO_RECENTER_INTERVAL_MOVES
+  #define MC_SERVO_RECENTER_INTERVAL_MOVES 10 // behavior/servo_driver.cpp: recenter to home after N non-home moves (0=disable)
 #endif
 
 // ---------------------------------------------------------

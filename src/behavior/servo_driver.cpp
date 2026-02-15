@@ -35,6 +35,7 @@ float s_prevFilteredX = (float)MC_SERVO_START_DEGREE_X;
 float s_prevFilteredY = (float)MC_SERVO_START_DEGREE_Y;
 int8_t s_prevErrSignX = 0;
 int8_t s_prevErrSignY = 0;
+uint8_t s_nonHomeMoveCount = 0;
 
 constexpr float kMoveStartThresholdDeg = 0.05f;
 constexpr float kMoveUpdateThresholdDeg = 0.01f;
@@ -65,7 +66,8 @@ int8_t signWithDeadzone_(float value, float deadzone) {
 float gazeToDegree_(float gaze, int startDeg, float gain, int invert, int minDeg,
                     int maxDeg) {
   const float sign = invert ? -1.0f : 1.0f;
-  const float target = startDeg + (gain * (gaze * sign));
+  const float target =
+      startDeg + ((gain * MC_SERVO_RANGE_SCALE) * (gaze * sign));
   return clampDegreeF_(target, (float)minDeg, (float)maxDeg);
 }
 
@@ -260,6 +262,7 @@ void setHome_(bool smooth) {
     s_prevFilteredY = s_cmdY;
     s_prevErrSignX = 0;
     s_prevErrSignY = 0;
+    s_nonHomeMoveCount = 0;
   }
 }
 
@@ -385,8 +388,17 @@ void servoDriverTick() {
                                  (float)MC_SERVO_MAX_DEGREE_Y,
                                  &s_deadbandResidualY, &s_prevFilteredY,
                                  &s_prevErrSignY);
-  s_filteredTargetX = compensatedTargetX;
-  s_filteredTargetY = compensatedTargetY;
+  float nextTargetX = compensatedTargetX;
+  float nextTargetY = compensatedTargetY;
+
+  if (MC_SERVO_RECENTER_INTERVAL_MOVES > 0 &&
+      s_nonHomeMoveCount >= MC_SERVO_RECENTER_INTERVAL_MOVES) {
+    nextTargetX = (float)MC_SERVO_START_DEGREE_X;
+    nextTargetY = (float)MC_SERVO_START_DEGREE_Y;
+    s_nonHomeMoveCount = 0;
+  }
+  s_filteredTargetX = nextTargetX;
+  s_filteredTargetY = nextTargetY;
 
   const bool currentlyMoving = areInterruptsActive();
   const float threshold = currentlyMoving ? kMoveUpdateThresholdDeg
@@ -399,6 +411,15 @@ void servoDriverTick() {
       computeTrackSpeedCommand_(s_filteredTargetX, s_filteredTargetY, dtSec);
   beginMove_(s_filteredTargetX, s_filteredTargetY, MC_SERVO_MOVE_TIME_MS, false,
              trackSpeedDps);
+  if (MC_SERVO_RECENTER_INTERVAL_MOVES > 0 &&
+      !(fabsf(s_filteredTargetX - (float)MC_SERVO_START_DEGREE_X) <=
+            kMoveStartThresholdDeg &&
+        fabsf(s_filteredTargetY - (float)MC_SERVO_START_DEGREE_Y) <=
+            kMoveStartThresholdDeg)) {
+    if (s_nonHomeMoveCount < 255) {
+      ++s_nonHomeMoveCount;
+    }
+  }
   s_homed = false;
 #endif
 }

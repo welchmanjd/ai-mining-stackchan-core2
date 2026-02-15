@@ -24,6 +24,12 @@ static float clampGazeUnit_(float value) {
   return value;
 }
 
+static float clamp01_(float value) {
+  if (value < 0.0f) return 0.0f;
+  if (value > 1.0f) return 1.0f;
+  return value;
+}
+
 static uint32_t randomJitterMs_(uint32_t stepMs) {
   return stepMs * (uint32_t)random(0, MC_UI_GAZE_RANDOM_STEPS);
 }
@@ -345,6 +351,10 @@ void updateGazeAndServoTarget_(m5avatar::Avatar* avatar, AvatarLivelinessState* 
     s_state->driftV *= 0.90f;
     s_state->driftH *= 0.90f;
   }
+  const float centerPull =
+      clamp01_(MC_UI_GAZE_CENTER_PULL_PER_SEC * dtSec);
+  nextV += (0.0f - nextV) * centerPull;
+  nextH += (0.0f - nextH) * centerPull;
 
   const float limit = 1.0f * gazeAmp;
   if (nextV > limit) {
