@@ -339,10 +339,10 @@ void UIMining::drawStackchanScreen(const PanelData &p) {
   }
   // Keep a small safety margin so the speech balloon does not hug screen
   // edges, which can leave visible stale pixels on some frames.
-  constexpr float kStackchanScaleInset = 0.94f;
-  constexpr int kStackchanTopInset = 6;
-  constexpr int kStackchanLeftInset = 6;
-  constexpr int kStackchanBottomInset = 6;
+  constexpr float kStackchanScaleInset = 0.90f;
+  constexpr int kStackchanTopInset = 12;
+  constexpr int kStackchanLeftInset = 12;
+  constexpr int kStackchanBottomInset = 12;
   avatar_.setScale(MC_UI_AVATAR_SCALE_FULL * kStackchanScaleInset);
   int bubbleLines = 1;
   for (int i = 0; i < stackchanBubbleText_.length(); ++i) {
@@ -351,7 +351,7 @@ void UIMining::drawStackchanScreen(const PanelData &p) {
   }
   const int bubbleHeight = 32 + bubbleLines * 16;
   int offsetY = kStackchanTopInset;
-  const int margin = 4;
+  const int margin = 8;
   const int availableH = H - kStackchanTopInset - kStackchanBottomInset;
   int overflow = (bubbleHeight + margin) - availableH;
   if (overflow > 0) {
