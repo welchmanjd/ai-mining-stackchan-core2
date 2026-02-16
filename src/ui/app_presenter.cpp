@@ -1,4 +1,3 @@
-// src/app_presenter.cpp
 // Module implementation.
 #include "ui/app_presenter.h"
 

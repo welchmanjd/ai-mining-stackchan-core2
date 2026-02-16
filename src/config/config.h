@@ -1,4 +1,3 @@
-// src/config.h
 // Module implementation.
 #pragma once
 #include <Arduino.h>

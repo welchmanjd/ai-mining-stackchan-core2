@@ -1,4 +1,3 @@
-// src/mc_config_store.h
 // Module implementation.
 #pragma once
 #include <Arduino.h>

@@ -1,5 +1,5 @@
-// UI for Mining stackchan avatar ticker.
 // Module implementation.
+// UI for Mining stackchan avatar ticker.
 // Uses M5Stack-Avatar library for Stack-chan style face rendering.
 // https://github.com/meganetaaan/m5stack-avatar
 #include "ui/ui_mining_core2.h"

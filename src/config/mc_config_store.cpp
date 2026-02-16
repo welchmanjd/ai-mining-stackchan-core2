@@ -1,4 +1,3 @@
-// src/mc_config_store.cpp
 // Module implementation.
 #include "mc_config_store.h"
 

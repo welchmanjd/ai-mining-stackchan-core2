@@ -1,4 +1,3 @@
-// src/user_config.h
 // Module implementation.
 #pragma once
 // =========================================================

@@ -1,4 +1,3 @@
-// src/azure_stt.h
 // Module implementation.
 #pragma once
 #include <stdint.h>

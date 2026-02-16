@@ -1,3 +1,4 @@
+// Module implementation.
 #pragma once
 #include <Arduino.h>
 

@@ -1,4 +1,3 @@
-// src/audio_recorder.h
 // Module implementation.
 #pragma once
 #include <stddef.h>

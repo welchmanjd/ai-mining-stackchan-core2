@@ -1,4 +1,3 @@
-// === src/audio_recorder.cpp : replace whole file ===
 // Module implementation.
 #include "audio/audio_recorder.h"
 
@@ -135,7 +134,6 @@ bool AudioRecorder::ensureMicBegun_() {
   }
   return ok;
 }
-// === src/audio_recorder.cpp : replace whole function AudioRecorder::endMic_() ===
 void AudioRecorder::endMic_() {
   if (!micBegun_) return;
   // I2S lock is expected to be held by REC

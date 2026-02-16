@@ -1,4 +1,3 @@
-// src/azure_tts.cpp
 // Module implementation.
 #include "ai/azure_tts.h"
 
@@ -314,7 +313,6 @@ static String tokenSnippet_(const String &s) {
   out += s.substring(n - 8);
   return out;
 }
-// === src/azure_tts.cpp : replace whole function ===
 static void salvageChunkedLeakIfNeeded_(uint8_t **pBuf, size_t *pLen) {
   // Fix up cases where chunk framing leaked into the response body.
   if (!pBuf || !pLen)
@@ -432,7 +430,6 @@ static bool parseWavPcm_(const uint8_t *buf, size_t len, WavPcmInfo_ *out) {
   out->bitsPerSample_ = bitsPerSample;
   return true;
 }
-// === src/azure_tts.cpp : replace whole function ===
 static void logHeadBytes_(const uint8_t *buf, size_t len) {
   if (!buf || len == 0)
     return;

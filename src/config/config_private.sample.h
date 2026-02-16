@@ -1,4 +1,3 @@
-// src/config_private.sample.h
 // Module implementation.
 #pragma once
 // =========================================================

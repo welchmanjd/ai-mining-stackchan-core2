@@ -11,7 +11,8 @@
 
 ## Coding conventions
 - Keep headers minimal: prefer forward declarations and move heavy includes to `.cpp`.
-- Use existing log macros (`MC_LOG*`, `LOG_EVT_*`) instead of raw `Serial`.
+- For diagnostics/logging, use existing log macros (`MC_LOG*`, `LOG_EVT_*`) instead of raw `Serial`.
+- Raw `Serial` output is allowed only for host-facing serial protocol responses (for example `@OK/@ERR/@CFG` in `core/serial_setup.cpp`), and must not be used as a general logging path.
 - Avoid dynamic allocation in hot paths; prefer fixed buffers where practical.
 - Include order:
   - `.cpp`: corresponding header first, then C/C++ standard headers, then external/platform headers, then project headers.

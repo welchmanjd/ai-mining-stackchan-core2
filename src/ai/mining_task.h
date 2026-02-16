@@ -1,4 +1,3 @@
-// src/mining_task.h
 // Module implementation.
 #pragma once
 #include <Arduino.h>

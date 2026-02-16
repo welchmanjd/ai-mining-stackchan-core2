@@ -121,8 +121,6 @@ void UIMining::drawTicker(const String& text) {
   tick_.pushSprite(0, Y_LOG);
 }
 // ===== Avatar mood =====
-// === src/ui_mining_core2_ticker_avatar.cpp : replace whole function ===
-// ===== Avatar mood =====
 void UIMining::updateAvatarMood(const PanelData& p) {
   uint32_t now = millis();
   const uint32_t moodPeriodicLogMs = 60 * 1000;

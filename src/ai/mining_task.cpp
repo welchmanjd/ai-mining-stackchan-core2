@@ -1,4 +1,3 @@
-// src/mining_task.cpp
 // Module implementation.
 #include "ai/mining_task.h"
 
@@ -77,7 +76,6 @@ static inline uint16_t normalizePow2_(uint16_t v) {
 }
 // Solver abort marker (distinct from "not found")
 static const uint32_t kDucoAborted = UINT32_MAX - 1;
-// === src/mining_task.cpp : replace whole function ===
 // Helper: thread-safe set for g_status
 static void setStatus_(const char *s) {
   portENTER_CRITICAL(&g_statsMux);
@@ -224,7 +222,6 @@ static uint32_t ducoSolveDucoS1_(const String &seed,
   }
   return UINT32_MAX;
 }
-// === src/mining_task.cpp : replace whole function ===
 static void ducoTask_(void *pv) {
   int idx = (int)(intptr_t)pv;
   if (idx < 0 || idx >= kDucoMinerThreads)

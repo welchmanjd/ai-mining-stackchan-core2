@@ -1,4 +1,3 @@
-// src/ui_mining_core2.cpp
 // Module implementation.
 #include "ui/ui_mining_core2.h"
 

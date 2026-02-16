@@ -1,4 +1,3 @@
-// src/mc_log_limiter.cpp
 // Module implementation.
 #include "utils/mc_log_limiter.h"
 
