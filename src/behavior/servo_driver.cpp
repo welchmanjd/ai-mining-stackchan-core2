@@ -288,27 +288,41 @@ void servoDriverBegin() {
   return;
 #else
   if (s_initialized) return;
-  s_initialized = true;
 
-  const uint8_t errX = s_servoX.attach(MC_SERVO_PIN_X, MC_SERVO_START_DEGREE_X,
-                                       DEFAULT_MICROSECONDS_FOR_0_DEGREE,
-                                       DEFAULT_MICROSECONDS_FOR_180_DEGREE);
-  const uint8_t errY = s_servoY.attach(MC_SERVO_PIN_Y, MC_SERVO_START_DEGREE_Y,
-                                       DEFAULT_MICROSECONDS_FOR_0_DEGREE,
-                                       DEFAULT_MICROSECONDS_FOR_180_DEGREE);
-  if (errX || errY) {
-    MC_LOGE("SERVO", "attach failed err_x=%u err_y=%u pin_x=%d pin_y=%d",
-            (unsigned)errX, (unsigned)errY, MC_SERVO_PIN_X, MC_SERVO_PIN_Y);
+  const uint8_t attachRetX =
+      s_servoX.attach(MC_SERVO_PIN_X, MC_SERVO_START_DEGREE_X,
+                      DEFAULT_MICROSECONDS_FOR_0_DEGREE,
+                      DEFAULT_MICROSECONDS_FOR_180_DEGREE);
+  const uint8_t attachRetY =
+      s_servoY.attach(MC_SERVO_PIN_Y, MC_SERVO_START_DEGREE_Y,
+                      DEFAULT_MICROSECONDS_FOR_0_DEGREE,
+                      DEFAULT_MICROSECONDS_FOR_180_DEGREE);
+  const bool attachedX = s_servoX.attached();
+  const bool attachedY = s_servoY.attached();
+
+  if (!attachedX || !attachedY) {
+    MC_LOGE("SERVO",
+            "attach failed attached_x=%d attached_y=%d ret_x=%u ret_y=%u "
+            "pin_x=%d pin_y=%d",
+            attachedX ? 1 : 0, attachedY ? 1 : 0, (unsigned)attachRetX,
+            (unsigned)attachRetY, MC_SERVO_PIN_X, MC_SERVO_PIN_Y);
+    if (!attachedX && !attachedY) {
+      return;
+    }
   }
+
+  s_initialized = true;
 
   s_servoX.setEasingType(EASE_QUADRATIC_IN_OUT);
   s_servoY.setEasingType(EASE_QUADRATIC_IN_OUT);
   setSpeedForAllServos(MC_SERVO_SPEED);
 
   setHome_(false);
-  MC_LOGI("SERVO", "begin pin_x=%d pin_y=%d home=(%d,%d) attach=(%u,%u)",
+  MC_LOGI("SERVO",
+          "begin pin_x=%d pin_y=%d home=(%d,%d) attached=(%d,%d) ret=(%u,%u)",
           MC_SERVO_PIN_X, MC_SERVO_PIN_Y, MC_SERVO_START_DEGREE_X,
-          MC_SERVO_START_DEGREE_Y, (unsigned)errX, (unsigned)errY);
+          MC_SERVO_START_DEGREE_Y, attachedX ? 1 : 0, attachedY ? 1 : 0,
+          (unsigned)attachRetX, (unsigned)attachRetY);
 #endif
 }
 
