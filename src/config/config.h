@@ -547,6 +547,9 @@
 #ifndef MC_AZURE_TTS_DISABLE_KEEPALIVE_MS
   #define MC_AZURE_TTS_DISABLE_KEEPALIVE_MS 5000 // azure_tts.cpp: keep-alive cooldown after error
 #endif
+#ifndef MC_AZURE_TTS_TAILING_EXACT_MS
+  #define MC_AZURE_TTS_TAILING_EXACT_MS 120 // azure_tts.cpp: SSML mstts:silence tailing-exact
+#endif
 // ---- Error messages (short, searchable; no codes) ----
 #ifndef MC_AI_ERR_TEMP_FAIL_TRY_AGAIN
   #define MC_AI_ERR_TEMP_FAIL_TRY_AGAIN "一時的に失敗。もう一回" // ai_talk_controller.cpp: STT失敗の代替文言

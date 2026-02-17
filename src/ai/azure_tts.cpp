@@ -588,6 +588,10 @@ bool AzureTts::speakAsync(const String &text, uint32_t speakId,
   MC_EVT("TTS", "accepted id=%lu text_bytes=%u", (unsigned long)speakId,
          (unsigned)text.length());
   currentSpeakId_ = speakId;
+  playStarted_ = false;
+  playStartMs_ = 0;
+  playExpectedDurMs_ = 0;
+  playExpectedEndMs_ = 0;
   // clear DONE state (for previous id)
   doneSpeakId_ = 0;
   doneOk_ = false;
@@ -725,6 +729,10 @@ void AzureTts::poll() {
       doneReason_[0] = 0;
     }
     doneSpeakId_ = currentSpeakId_;
+    playStarted_ = false;
+    playStartMs_ = 0;
+    playExpectedDurMs_ = 0;
+    playExpectedEndMs_ = 0;
   };
   auto setLastDrop = [&](const char *reason) {
     last_.ok = false;
@@ -810,6 +818,19 @@ void AzureTts::poll() {
         M5.Speaker.setVolume(defaultVolume_);
       }
     }
+    WavPcmInfo_ wavInfo;
+    uint32_t expectedPlayMs = 0;
+    if (parseWavPcm_(wavPtr, wavLen, &wavInfo) &&
+        wavInfo.sampleRate_ > 0 && wavInfo.channels_ > 0 &&
+        wavInfo.bitsPerSample_ > 0) {
+      const uint32_t bytesPerFrame =
+          (uint32_t)wavInfo.channels_ * ((uint32_t)wavInfo.bitsPerSample_ / 8u);
+      if (bytesPerFrame > 0) {
+        const uint64_t frames = (uint64_t)wavInfo.pcmBytes_ / (uint64_t)bytesPerFrame;
+        expectedPlayMs = (uint32_t)((frames * 1000ULL + wavInfo.sampleRate_ - 1) /
+                                    wavInfo.sampleRate_);
+      }
+    }
     bool okPlay = M5.Speaker.playWav(wavPtr, wavLen);
     if (!okPlay) {
       MC_EVT("TTS", "fail id=%lu reason=play_fail wav=%uB",
@@ -828,8 +849,13 @@ void AzureTts::poll() {
       setDone(false, "play_fail");
       return;
     }
-    MC_EVT("TTS", "play start id=%lu bytes=%u", (unsigned long)currentSpeakId_,
-           (unsigned)wavLen);
+    playStarted_ = false;
+    playStartMs_ = 0;
+    playExpectedDurMs_ = expectedPlayMs;
+    playExpectedEndMs_ = 0;
+    MC_EVT("TTS", "play start id=%lu bytes=%u expect_ms=%lu",
+           (unsigned long)currentSpeakId_, (unsigned)wavLen,
+           (unsigned long)expectedPlayMs);
     setState(Playing);
     return;
   }
@@ -856,7 +882,29 @@ void AzureTts::poll() {
       clearCancel();
       return;
     }
-    if (!M5.Speaker.isPlaying()) {
+    const bool playingNow = M5.Speaker.isPlaying();
+    const uint32_t nowMs = millis();
+    if (!playStarted_ && playingNow) {
+      playStarted_ = true;
+      playStartMs_ = nowMs;
+      playExpectedEndMs_ = playStartMs_ + playExpectedDurMs_;
+      MC_EVT("TTS", "play armed id=%lu start_ms=%lu end_ms=%lu expect_ms=%lu",
+             (unsigned long)currentSpeakId_,
+             (unsigned long)playStartMs_,
+             (unsigned long)playExpectedEndMs_,
+             (unsigned long)playExpectedDurMs_);
+    }
+
+    bool doneNow = false;
+    if (playStarted_) {
+      doneNow = (playExpectedDurMs_ == 0) ||
+                ((int32_t)(nowMs - playExpectedEndMs_) >= 0);
+    } else {
+      // Fallback only when speaker never entered playing state.
+      doneNow = !playingNow && (playExpectedDurMs_ == 0);
+    }
+
+    if (doneNow) {
       uint8_t *drop = detachWav(nullptr);
       if (drop) {
         free(drop);
@@ -1045,13 +1093,20 @@ static String AzureTts_xmlEscape_(const String &s) {
 String AzureTts::xmlEscape_(const String &s) { return AzureTts_xmlEscape_(s); }
 String AzureTts::buildSsml_(const String &text, const String &voice) const {
   String v = voice.length() ? voice : defaultVoice_;
+  char tailingExact[20] = {0};
+  snprintf(tailingExact, sizeof(tailingExact), "%lums",
+           (unsigned long)MC_AZURE_TTS_TAILING_EXACT_MS);
   String ssml;
-  ssml.reserve(text.length() + v.length() + 128);
+  ssml.reserve(text.length() + v.length() + 196);
   ssml += "<speak version='1.0' xml:lang='ja-JP' "
-          "xmlns='http://www.w3.org/2001/10/synthesis'>";
+          "xmlns='http://www.w3.org/2001/10/synthesis' "
+          "xmlns:mstts='http://www.w3.org/2001/mstts'>";
   ssml += "<voice name='";
   ssml += v;
   ssml += "'>";
+  ssml += "<mstts:silence type='Tailing-exact' value='";
+  ssml += tailingExact;
+  ssml += "'/>";
   ssml += xmlEscape_(text);
   ssml += "</voice></speak>";
   return ssml;

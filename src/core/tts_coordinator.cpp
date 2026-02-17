@@ -266,3 +266,31 @@ void ttsCoordinatorMaybeSpeak(const OrchestratorApi::SpeakStartCmd& cmd, int evT
                  modeValue_(), attentionValue_());
   }
 }
+
+bool ttsCoordinatorTrySpeakNow(const String& text, OrchestratorApi::OrchKind kind) {
+  if (!contextReady_()) return false;
+  const RuntimeFeatures features = getRuntimeFeatures();
+  if (!features.ttsEnabled_) return false;
+  if (!text.length()) return false;
+  const bool ttsBusyNow = g_ctx.tts_->isBusy();
+  const bool canSpeakNow = (!ttsBusyNow) && (g_ttsInflightId == 0);
+  if (!canSpeakNow) return false;
+
+  auto cmd = g_ctx.orch_->makeSpeakStartCmd(0, text, OrchPrio::Normal, kind);
+  if (!cmd.valid_) return false;
+
+  const bool speakOk = g_ctx.tts_->speakAsync(cmd.text_, cmd.ttsId_);
+  if (!speakOk) return false;
+
+  g_ttsInflightId = cmd.ttsId_;
+  g_ttsInflightRid = cmd.rid_;
+  g_ttsInflightSpeechText = cmd.text_;
+  g_ttsInflightSpeechId = cmd.ttsId_;
+  g_ctx.orch_->setExpectedSpeak(cmd.ttsId_, cmd.rid_, cmd.kind_);
+  LOG_EVT_INFO("EVT_PRESENT_TTS_START",
+               "rid=%lu tts_id=%lu type=direct prio=%d busy=%d mode=%d attn=%d",
+               (unsigned long)cmd.rid_, (unsigned long)cmd.ttsId_,
+               (int)cmd.prio_, ttsBusyNow ? 1 : 0,
+               modeValue_(), attentionValue_());
+  return true;
+}

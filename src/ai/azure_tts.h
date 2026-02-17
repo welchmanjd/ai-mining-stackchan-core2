@@ -106,6 +106,10 @@ private:
   LastResult last_;
   bool i2sLocked_ = false;
   uint8_t defaultVolume_ = MC_SPK_VOLUME;
+  bool playStarted_ = false;
+  uint32_t playStartMs_ = 0;
+  uint32_t playExpectedDurMs_ = 0;
+  uint32_t playExpectedEndMs_ = 0;
   // speakAsync() reject suppression (INFO wallpaper guard)
   uint32_t rejectFirstMs_ = 0;
   uint32_t rejectLastMs_ = 0;

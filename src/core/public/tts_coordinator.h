@@ -24,4 +24,6 @@ void ttsCoordinatorInit(const TtsCoordinatorContext& ctx);
 void ttsCoordinatorTick(uint32_t now);
 bool ttsCoordinatorIsBusy();
 void ttsCoordinatorMaybeSpeak(const OrchestratorApi::SpeakStartCmd& cmd, int evType);
+bool ttsCoordinatorTrySpeakNow(const String& text,
+                               OrchestratorApi::OrchKind kind = OrchestratorApi::OrchKind::BehaviorSpeak);
 void ttsCoordinatorClearInflight();

@@ -832,20 +832,20 @@ static void handleButtonAndTouch_(uint32_t now,
                                   const RuntimeInputState &in, UIMining &ui) {
   if (in.btnB_) {
     const char *text = appConfig().helloText_;
-    if (runtimeFeatures.ttsEnabled_ && g_ctx.tts_) {
+    if (runtimeFeatures.ttsEnabled_) {
       static uint32_t s_ttsFailLastLogMs = 0;
       static uint32_t s_ttsFailSuppressed = 0;
-      if (!g_ctx.tts_->speakAsync(text, (uint32_t)0, nullptr)) {
+      if (!ttsCoordinatorTrySpeakNow(String(text))) {
         s_ttsFailSuppressed++;
         const uint32_t kFailLogIntervalMs = 3000;
         if (s_ttsFailLastLogMs == 0 ||
             (now - s_ttsFailLastLogMs) >= kFailLogIntervalMs) {
           if (s_ttsFailSuppressed > 1) {
-            mc_logf("[TTS] speakAsync failed (busy / wifi / config?) "
+            mc_logf("[TTS] BtnB speak rejected (busy / wifi / config?) "
                     "(suppressed x%lu)",
                     (unsigned long)(s_ttsFailSuppressed - 1));
           } else {
-            mc_logf("[TTS] speakAsync failed (busy / wifi / config?)");
+            mc_logf("[TTS] BtnB speak rejected (busy / wifi / config?)");
           }
           s_ttsFailSuppressed = 0;
           s_ttsFailLastLogMs = now;
@@ -853,8 +853,6 @@ static void handleButtonAndTouch_(uint32_t now,
       } else {
         s_ttsFailSuppressed = 0;
       }
-    } else {
-      bubbleShow_(String(text), now, 0, 0, 0, BubbleSource::System);
     }
   }
 
@@ -917,7 +915,9 @@ static void handleButtonAndTouch_(uint32_t now,
   }
 
   if (!aiConsumedTap && g_mode == Stackchan && in.touchDown_) {
-    if (g_attentionActive) {
+    if (in.btnB_) {
+      MC_LOGT("ATTN", "suppressed (btnB=1)");
+    } else if (g_attentionActive) {
     } else if (g_ctx.ai_->isBusy()) {
       MC_LOGT("ATTN", "suppressed (aiBusy=1)");
     } else {
