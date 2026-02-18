@@ -313,8 +313,8 @@ void servoDriverBegin() {
 
   s_initialized = true;
 
-  s_servoX.setEasingType(EASE_QUADRATIC_IN_OUT);
-  s_servoY.setEasingType(EASE_QUADRATIC_IN_OUT);
+  s_servoX.setEasingType(EASE_SINE_IN_OUT);
+  s_servoY.setEasingType(EASE_SINE_IN_OUT);
   setSpeedForAllServos(MC_SERVO_SPEED);
 
   setHome_(false);

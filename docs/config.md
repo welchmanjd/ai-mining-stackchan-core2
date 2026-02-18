@@ -53,3 +53,19 @@ Typical keys:
 
 Some keys apply immediately (`display_sleep_s`, `attention_text`, `spk_volume`, `cpu_mhz`).
 Others are used on subsequent feature checks and/or after reboot. See `docs/serial_setup.md`.
+
+## Suggested split of responsibility
+- `src/config/config_private.h`: secrets only (Wi-Fi passwords, API keys, personal keys)
+- `src/config/user_config.h`: user-editable non-secret defaults (same domain as setup keys)
+- `src/config/config.h`: fallback defaults and internal constants
+
+Setup key to compile-time default mapping (recommended in `user_config.h`):
+- `display_sleep_s` -> `MC_DISPLAY_SLEEP_SECONDS`
+- `spk_volume` -> `MC_SPK_VOLUME`
+- `attention_text` -> `MC_ATTENTION_TEXT`
+- `share_accepted_text` -> `MC_SPEECH_SHARE_ACCEPTED`
+- `hello_text` -> `MC_SPEECH_HELLO`
+- `az_tts_voice` -> `MC_AZ_TTS_VOICE`
+- `openai_model` -> `MC_OPENAI_MODEL`
+- `openai_instructions` -> `MC_OPENAI_INSTRUCTIONS`
+- `cpu_mhz` -> `MC_CPU_FREQ_MHZ`

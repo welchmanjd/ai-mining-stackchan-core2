@@ -33,3 +33,35 @@
 //     "あなたはスタックチャンの会話AIです。日本語で短く答えてください。" \
 //     "返答は120文字以内。箇条書き禁止。1〜2文。" \
 //     "相手が『聞こえる？』等の確認なら、明るく短く返してください。" // OpenAI instructions
+
+// ---- Servo smoothing (jitter reduction) ----
+// Most important: disable move command thinning (default 100 = once per 2s -> 1 = every cycle)
+#define MC_SERVO_MOVE_TRIGGER_DIVIDER 1
+// Disable periodic recentering (stop auto-centering every 10 moves)
+#define MC_SERVO_RECENTER_INTERVAL_MOVES 0
+// Lower tracking speed (SG90 is smoother at lower speed)
+#define MC_SERVO_TRACK_SPEED_DPS 8.0f
+// Lower LPF alpha values (make target changes more gradual)
+#define MC_SERVO_SMOOTH_ALPHA_MIN 0.10f
+#define MC_SERVO_SMOOTH_ALPHA_MAX 0.35f
+// UI side: shorten hold phase for better continuity
+#define MC_UI_GAZE_SERVO_HOLD_FREEZE 0
+#define MC_UI_GAZE_HOLD_NEUTRAL_BASE_MS 2600
+#define MC_UI_GAZE_HOLD_HIGH_BASE_MS 2200
+#define MC_UI_GAZE_HOLD_LOW_BASE_MS 3000
+// Deadband compensation (set to 0 if SG90 feels kicky)
+// #define MC_SERVO_DEADBAND_COMP_ENABLE 0
+
+// ---- Setup-managed user defaults (non-secret) ----
+// These are compile-time defaults. Runtime SET/SAVE values in /mc_config.json
+// override them after first save from ai-mining-stackchan-setup.
+//
+// #define MC_DISPLAY_SLEEP_SECONDS 90
+// #define MC_SPK_VOLUME 120
+// #define MC_ATTENTION_TEXT "Hi"
+// #define MC_SPEECH_SHARE_ACCEPTED "Share accepted!"
+// #define MC_SPEECH_HELLO "Hello"
+// #define MC_AZ_TTS_VOICE "ja-JP-AoiNeural"
+// #define MC_OPENAI_MODEL "gpt-5-nano"
+// #define MC_OPENAI_INSTRUCTIONS "Please answer briefly in Japanese."
+// #define MC_CPU_FREQ_MHZ 240

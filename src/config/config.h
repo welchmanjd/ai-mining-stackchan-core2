@@ -4,6 +4,9 @@
 
 // =========================================================
 // config.h
+// - Includes user_config.h first for user-tunable defaults.
+// - Includes config_private.h for secrets (if present).
+// - Defines fallback defaults for all MC_* values.
 // =========================================================
 #if __has_include("user_config.h")
   #include "user_config.h"
