@@ -321,7 +321,7 @@ bool mcConfigSetKV(const String& key, const String& value, String& err) {
 bool mcConfigSave(String& err) {
   loadOnce_();
   err = "";
-  if (!LittleFS.begin(true)) {
+  if (!LittleFS.begin(false)) {
     err = "fs_begin_failed";
     return false;
   }
