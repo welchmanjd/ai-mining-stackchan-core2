@@ -9,13 +9,13 @@ ESP32 (M5Stack Core2) mining dashboard + Stackchan avatar + AI speech.
 This repository contains firmware source code for developers.  
 If you want to set up and use Stackchan as an end user, start with the setup tool:
 
-- Quickstart (Japanese): `ai-mining-stackchan-setup/docs/quickstart-ja.md`
-- Latest setup release: `ai-mining-stackchan-setup/releases/latest`
+- Quickstart (Japanese): [ai-mining-stackchan-setup/docs/quickstart-ja.md](https://github.com/welchmanjd/ai-mining-stackchan-setup/blob/main/docs/quickstart-ja.md)
+- Latest setup release: [ai-mining-stackchan-setup/releases/latest](https://github.com/welchmanjd/ai-mining-stackchan-setup/releases/latest)
 
 このリポジトリは開発者向けのソースコードです。利用者向けセットアップは下記から開始してください。
 
-- 超かんたん設定ガイド: `ai-mining-stackchan-setup/docs/quickstart-ja.md`
-- 最新リリース: `ai-mining-stackchan-setup/releases/latest`
+- 超かんたん設定ガイド: [ai-mining-stackchan-setup/docs/quickstart-ja.md](https://github.com/welchmanjd/ai-mining-stackchan-setup/blob/main/docs/quickstart-ja.md)
+- 最新リリース: [ai-mining-stackchan-setup/releases/latest](https://github.com/welchmanjd/ai-mining-stackchan-setup/releases/latest)
 
 The sections below are for development. 以下は開発者向け情報です。
 
