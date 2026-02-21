@@ -2,25 +2,27 @@
 
 ESP32 (M5Stack Core2) mining dashboard + Stackchan avatar + AI speech.
 
+---
+
 ## Beginner Start Here / はじめての方へ（Windows）
-This repository contains firmware source code for developers.
+
+This repository contains firmware source code for developers.  
 If you want to set up and use Stackchan as an end user, start with the setup tool:
 
-- Quickstart (Japanese): https://github.com/welchmanjd/ai-mining-stackchan-setup/blob/main/docs/quickstart-ja.md
-- Latest setup release: https://github.com/welchmanjd/ai-mining-stackchan-setup/releases/latest
+- Quickstart (Japanese): `ai-mining-stackchan-setup/docs/quickstart-ja.md`
+- Latest setup release: `ai-mining-stackchan-setup/releases/latest`
 
-このリポジトリは開発者向けのソースコードです。
-利用者向けセットアップは下記から開始してください。
+このリポジトリは開発者向けのソースコードです。利用者向けセットアップは下記から開始してください。
 
-- 超かんたん設定ガイド: https://github.com/welchmanjd/ai-mining-stackchan-setup/blob/main/docs/quickstart-ja.md
-- 最新リリース: https://github.com/welchmanjd/ai-mining-stackchan-setup/releases/latest
+- 超かんたん設定ガイド: `ai-mining-stackchan-setup/docs/quickstart-ja.md`
+- 最新リリース: `ai-mining-stackchan-setup/releases/latest`
 
-The sections below are for development.
-以下は開発者向け情報です。
+The sections below are for development. 以下は開発者向け情報です。
 
-ESP32（M5Stack Core2）向けのマイニングダッシュボード。スタックチャン表示とAI音声つき。
+---
 
 ## Quick Start / クイックスタート
+
 - Copy `src/config/config_private.sample.h` to `src/config/config_private.h` and fill secrets.
 - Build: `pio run -e m5stack-core2`
 - Upload: `pio run -t upload -e m5stack-core2`
@@ -31,12 +33,18 @@ ESP32（M5Stack Core2）向けのマイニングダッシュボード。スタ�
 - 書き込み: `pio run -t upload -e m5stack-core2`
 - モニタ: `pio device monitor -b 115200`
 
+---
+
 ## Docs / ドキュメント
+
 - `architecture.md` : module layout + dependency direction / モジュール構成と依存関係
 - `docs/config.md` : config macros and runtime settings / 設定とランタイム設定
 - `docs/serial_setup.md` : serial setup protocol / シリアル設定の手順
 
+---
+
 ## Repository Layout / 構成
+
 - `src/core` : startup + orchestration / 起動処理と制御
 - `src/ai` : LLM / STT / TTS / dialogue / 対話・音声AI
 - `src/audio` : I2S + recording / 音声入出力
@@ -46,7 +54,10 @@ ESP32（M5Stack Core2）向けのマイニングダッシュボード。スタ�
 - `src/utils` : small helpers / 小さな補助関数
 - `src/utils/app_types.h` : app-level shared types / アプリ共通の型定義
 
+---
+
 ## Configuration / 設定
+
 - Secrets live in `src/config/config_private.h` (not committed).
 - Optional overrides: `src/config/user_config.h`.
 - Runtime key/value store: `src/config/mc_config_store.*`.
@@ -55,9 +66,18 @@ ESP32（M5Stack Core2）向けのマイニングダッシュボード。スタ�
 - 変更したい設定は `src/config/user_config.h` に書きます。
 - ランタイム設定の保存は `src/config/mc_config_store.*` で行います。
 
+---
+
 ## Build Environment / ビルド環境
+
 - PlatformIO + Arduino
 - Default env: `m5stack-core2`
 
 - PlatformIO + Arduino
 - 既定環境: `m5stack-core2`
+
+---
+
+## Credits / クレジット
+
+クレジットと謝辞の全文は `CREDITS.md` を参照してください。
